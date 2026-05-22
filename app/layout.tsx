@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils";
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: "Zero Calendar | AI-Powered Scheduling",
+  title: "Zero · nopilot",
   description:
-    "Transform your time management with AI. Zero Calendar learns your patterns, optimizes your schedule, and gives you back what matters most.",
+    "Transform your time management with AI. Zero learns your patterns, optimizes your schedule, and gives you back what matters most. A nopilot product.",
 };
 
 export default function RootLayout({

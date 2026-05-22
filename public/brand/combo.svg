@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 88" role="img" aria-label="nopilot combination mark">
+  <title>nopilot combination mark</title>
+  <defs>
+    <mask id="nopilot-combo-mask">
+      <rect x="0" y="0" width="72" height="72" rx="14" fill="white"/>
+      <text x="36" y="54" font-family="Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif" font-weight="800" font-size="50" fill="black" text-anchor="middle">n</text>
+    </mask>
+  </defs>
+  <rect x="0" y="8" width="72" height="72" rx="14" fill="currentColor" mask="url(#nopilot-combo-mask)"/>
+  <text x="92" y="64" font-family="Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif" font-weight="700" font-size="58" letter-spacing="-2" fill="currentColor">nopılot</text>
+</svg>

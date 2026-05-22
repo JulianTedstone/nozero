@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="nopilot favicon">
+  <title>nopilot favicon</title>
+  <defs>
+    <mask id="nopilot-favicon-mask">
+      <rect width="32" height="32" rx="6" fill="white"/>
+      <text x="16" y="24" font-family="Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif" font-weight="800" font-size="22" fill="black" text-anchor="middle">n</text>
+    </mask>
+  </defs>
+  <rect width="32" height="32" rx="6" fill="currentColor" mask="url(#nopilot-favicon-mask)"/>
+</svg>
