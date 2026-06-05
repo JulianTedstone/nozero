@@ -3,7 +3,7 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL || "Zero Calendar <noreply@zerocalendar.app>";
+  process.env.RESEND_FROM_EMAIL || "nozero <noreply@zerocalendar.app>";
 
 interface SendInviteParams {
   acceptUrl: string;
@@ -78,7 +78,7 @@ export async function sendInviteEmail(params: SendInviteParams) {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="font-size:13px;font-weight:500;color:#71717a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-                    Zero Calendar
+                    nozero
                   </td>
                 </tr>
               </table>
@@ -163,7 +163,7 @@ export async function sendInviteEmail(params: SendInviteParams) {
           <tr>
             <td style="padding-top:24px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
               <p style="margin:0;font-size:12px;color:#52525b;line-height:1.5;">
-                Sent via Zero Calendar on behalf of ${organizerName}
+                Sent via nozero on behalf of ${organizerName}
               </p>
             </td>
           </tr>

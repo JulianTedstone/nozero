@@ -42,7 +42,7 @@ export default function PrivacyPolicy() {
 
             <h2 className="mt-8 mb-4 font-bold text-2xl">Introduction</h2>
             <p>
-              Zero Calendar ("we", "our", or "us") is committed to protecting
+              nozero ("we", "our", or "us") is committed to protecting
               your privacy. This Privacy Policy explains how we collect, use,
               disclose, and safeguard your information when you use our calendar
               application and website (collectively, the "Service").
@@ -99,7 +99,7 @@ export default function PrivacyPolicy() {
               Data Storage and Security
             </h2>
             <p>
-              As an open-source application, Zero Calendar can be self-hosted,
+              As an open-source application, nozero can be self-hosted,
               which means your data may be stored on your own servers or with a
               hosting provider of your choice. For our hosted version, we use
               industry-standard security measures to protect your data.
@@ -115,7 +115,7 @@ export default function PrivacyPolicy() {
               Third-Party Services
             </h2>
             <p>
-              Zero Calendar may integrate with third-party services, such as
+              nozero may integrate with third-party services, such as
               Google Calendar. When you connect these services, you may be
               allowing us to access information from those services. The
               information we receive depends on the settings and privacy
@@ -135,7 +135,7 @@ export default function PrivacyPolicy() {
               <li>Choose whether to connect third-party services</li>
             </ul>
             <p>
-              If you're hosting Zero Calendar yourself, you have complete
+              If you're hosting nozero yourself, you have complete
               control over your data and can manage it according to your own
               policies.
             </p>
@@ -175,7 +175,7 @@ export default function PrivacyPolicy() {
       <footer className="relative z-10 border-white/10 border-t py-6">
         <div className="container mx-auto px-4 md:px-6">
           <div className="text-center text-gray-500 text-sm">
-            &copy; {new Date().getFullYear()} Zero Calendar. Open Source under
+            &copy; {new Date().getFullYear()} nozero. Open Source under
             MIT License.
           </div>
         </div>

@@ -121,7 +121,7 @@ export default function InvitePage() {
         <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#111114]">
           <div className="border-white/[0.06] border-b px-6 py-5">
             <p className="font-medium text-[13px] text-white/50 tracking-tight">
-              Zero Calendar
+              nozero
             </p>
           </div>
 
@@ -245,7 +245,7 @@ export default function InvitePage() {
         </div>
 
         <p className="mt-4 text-center text-[11px] text-white/20">
-          Powered by Zero Calendar
+          Powered by nozero
         </p>
       </div>
     </div>

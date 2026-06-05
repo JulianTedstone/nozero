@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Zero Calendar** is an AI-powered scheduling application built with Next.js 16 (App Router), React 19, and Convex as the backend. It features Google Calendar bi-directional sync, natural-language event creation via AI chat, conflict detection, analytics, and event invitations via email.
+**nozero** is an AI-powered scheduling application built with Next.js 16 (App Router), React 19, and Convex as the backend. It features Google Calendar bi-directional sync, natural-language event creation via AI chat, conflict detection, analytics, and event invitations via email.
 
 ## Tech Stack
 

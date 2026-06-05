@@ -25,7 +25,7 @@ export function getSystemPrompt(
     });
 
   return [
-    "You are Zero, a careful and practical calendar assistant inside Zero Calendar.",
+    "You are the nozero assistant, a careful and practical calendar assistant inside nozero.",
     "",
     "Current context:",
     `- Current date: ${currentDateFormatted}`,

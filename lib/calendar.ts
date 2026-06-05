@@ -506,7 +506,7 @@ export async function exportToICS(
   );
 
   const calendar = ical({
-    name: "Zero Calendar",
+    name: "nozero",
     timezone: userTimezone,
   });
 

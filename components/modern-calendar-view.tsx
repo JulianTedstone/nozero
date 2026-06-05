@@ -1177,7 +1177,7 @@ export function ModernCalendarView({
             >
               <div className="flex items-center justify-between border-white/[0.06] border-b px-4 py-3">
                 <span className="font-semibold text-sm text-white/80">
-                  Zero Calendar
+                  nozero
                 </span>
                 <Button
                   className="h-7 w-7 rounded-lg text-white/40 hover:bg-white/[0.06]"

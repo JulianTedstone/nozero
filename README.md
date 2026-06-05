@@ -1,8 +1,8 @@
-# Zero Calendar
+# nozero
 
 AI-powered scheduling with natural language event creation, Google Calendar sync, invite emails, and analytics built on Next.js, Convex, and Better Auth.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/x1xhlol/zero-calendar&project-name=zero-calendar&repository-name=zero-calendar)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/JulianTedstone/nozero&project-name=nozero&repository-name=nozero)
 
 ## Features
 
@@ -52,7 +52,7 @@ OPENROUTER_API_KEY=
 OPENROUTER_MODEL=x-ai/grok-4.1-fast
 
 RESEND_API_KEY=
-RESEND_FROM_EMAIL="Zero Calendar <email@here.com>"
+RESEND_FROM_EMAIL="nozero <email@here.com>"
 ```
 
 ### 3. Start Convex

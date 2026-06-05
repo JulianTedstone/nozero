@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils";
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: "Zero · nopilot",
+  title: "nozero",
   description:
-    "Transform your time management with AI. Zero learns your patterns, optimizes your schedule, and gives you back what matters most. A nopilot product.",
+    "Transform your time management with AI. nozero learns your patterns, optimizes your schedule, and gives you back what matters most. A nopilot product.",
 };
 
 export default function RootLayout({

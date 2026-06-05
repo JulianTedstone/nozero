@@ -44,7 +44,7 @@ export default function TermsOfService() {
               1. Acceptance of Terms
             </h2>
             <p>
-              By accessing or using Zero Calendar ("the Service"), you agree to
+              By accessing or using nozero ("the Service"), you agree to
               be bound by these Terms of Service ("Terms"). If you disagree with
               any part of the terms, you may not access the Service.
             </p>
@@ -53,7 +53,7 @@ export default function TermsOfService() {
               2. Description of Service
             </h2>
             <p>
-              Zero Calendar is an open-source AI-powered calendar application
+              nozero is an open-source AI-powered calendar application
               that allows users to manage their schedules, create events, and
               integrate with third-party calendar services.
             </p>
@@ -75,7 +75,7 @@ export default function TermsOfService() {
               4. Open Source License
             </h2>
             <p>
-              Zero Calendar is released under the MIT License. This means you
+              nozero is released under the MIT License. This means you
               are free to use, copy, modify, merge, publish, distribute,
               sublicense, and/or sell copies of the software, subject to the
               conditions of the MIT License.
@@ -109,7 +109,7 @@ export default function TermsOfService() {
             <p>
               The Service and its original content (excluding Content provided
               by users), features, and functionality are and will remain the
-              exclusive property of Zero Calendar and its licensors. The Service
+              exclusive property of nozero and its licensors. The Service
               is protected by copyright, trademark, and other laws of both the
               United States and foreign countries.
             </p>
@@ -136,7 +136,7 @@ export default function TermsOfService() {
               8. Limitation of Liability
             </h2>
             <p>
-              In no event shall Zero Calendar, nor its directors, employees,
+              In no event shall nozero, nor its directors, employees,
               partners, agents, suppliers, or affiliates, be liable for any
               indirect, incidental, special, consequential or punitive damages,
               including without limitation, loss of profits, data, use,
@@ -207,7 +207,7 @@ export default function TermsOfService() {
       <footer className="relative z-10 border-white/10 border-t py-6">
         <div className="container mx-auto px-4 md:px-6">
           <div className="text-center text-gray-500 text-sm">
-            &copy; {new Date().getFullYear()} Zero Calendar. Open Source under
+            &copy; {new Date().getFullYear()} nozero. Open Source under
             MIT License.
           </div>
         </div>
