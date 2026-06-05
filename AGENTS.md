@@ -88,8 +88,26 @@ Several lint categories have rules explicitly relaxed in `biome.jsonc` (a11y, co
 - **Icons:** Use `@hugeicons/react` (configured as the icon library in `components.json`)
 - **Styling:** Tailwind CSS v4 utility classes with CSS variables for theming; use `cn()` from `@/lib/utils` for conditional class merging (clsx + tailwind-merge)
 - **Forms:** Use react-hook-form with Zod schemas for validation
-- **State:** Server state via Supabase server client in API routes / RSC; local React state for UI state. Supabase Realtime subscriptions are available for `nozero.{profiles,events,categories,invitations}` (publication populated; hook layer is a follow-up).
+- **State:** Server state via Supabase server client in API routes / RSC; local React state for UI state. Supabase Realtime subscriptions are available for `nozero.{profiles,events,categories,invitations}` via hooks in `hooks/use-realtime-*.ts` (see below).
 - **Server vs Client:** Next.js App Router conventions — components are server components by default; add `"use client"` directive only when needed
+
+## Realtime
+
+User-scoped row subscriptions for any of the four `nozero` tables:
+
+```tsx
+"use client";
+import { useState } from "react";
+import { useRealtimeUserEvents } from "@/hooks/use-realtime-nozero";
+
+export function EventsList() {
+  const [tick, setTick] = useState(0);
+  useRealtimeUserEvents(() => setTick((n) => n + 1)); // bump on INSERT/UPDATE/DELETE
+  // re-fetch (TanStack Query, SWR, or plain useEffect) keyed on `tick`...
+}
+```
+
+`hooks/use-realtime-table.ts` is the generic primitive; `hooks/use-realtime-nozero.ts` adds session-scoped filters (`user_id=eq.<auth.uid()>`, `organizer_user_id=eq.<auth.uid()>`, etc.). The filter pushes work to the server — clients only get rows they're entitled to under RLS.
 
 ## Supabase Backend
 
