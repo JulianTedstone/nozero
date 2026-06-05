@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { api } from "@/convex/_generated/api";
-import { fetchAuthMutation, getCurrentAuthUser } from "@/lib/auth-server";
+import { getCurrentAuthUser } from "@/lib/auth-server";
 import { getGoogleCalendars } from "@/lib/google-calendar";
+import { getGoogleTokens } from "@/lib/google-tokens";
 
 export async function GET(_req: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const tokens = await fetchAuthMutation(api.auth.getGoogleAccessToken, {});
+    const tokens = await getGoogleTokens(user.id);
 
     if (!tokens?.accessToken) {
       return NextResponse.json({ connected: false, calendars: [] });

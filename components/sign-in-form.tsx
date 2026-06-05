@@ -4,25 +4,41 @@ import { motion } from "framer-motion";
 import { CalendarIcon } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { authClient } from "@/lib/auth-client";
+import { useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
 
 const spring = { type: "spring", stiffness: 260, damping: 28 } as const;
+const GOOGLE_SCOPES = [
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/calendar.events",
+  "email",
+  "profile",
+  "openid",
+].join(" ");
 
 export default function SignInForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/calendar";
+  const supabase = useMemo(() => createClient(), []);
 
   const handleGoogleSignIn = async () => {
     try {
       setError(null);
       setIsLoading(true);
-      await authClient.signIn.social({
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const next = encodeURIComponent(callbackUrl);
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        callbackURL: callbackUrl,
+        options: {
+          redirectTo: `${origin}/auth/callback?next=${next}`,
+          scopes: GOOGLE_SCOPES,
+          queryParams: { access_type: "offline", prompt: "consent" },
+        },
       });
+      if (oauthError) throw oauthError;
     } catch {
       setError("Failed to sign in. Please try again.");
       setIsLoading(false);
@@ -52,7 +68,7 @@ export default function SignInForm() {
             <CalendarIcon className="size-6 text-white/90" strokeWidth={1.8} />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Sign in to Zero
+            Sign in to nozero
           </h1>
           <p className="mt-1.5 text-sm text-white/40">
             AI-powered calendar, built for focus

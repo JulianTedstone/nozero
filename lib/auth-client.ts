@@ -1,9 +1,19 @@
 "use client";
 
-import { convexClient } from "@convex-dev/better-auth/client/plugins";
-import { createAuthClient } from "better-auth/react";
+import { createClient } from "@/lib/supabase/browser";
 
-export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-  plugins: [convexClient()],
-});
+export { createClient as createAuthBrowserClient };
+
+/**
+ * Minimal compat shim for components that still call `authClient.signOut()`.
+ * Mirrors the Better Auth client surface to avoid a wider component diff.
+ */
+export const authClient = {
+  signOut: async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    if (typeof window !== "undefined") {
+      window.location.href = "/auth/signin";
+    }
+  },
+};

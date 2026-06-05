@@ -1,6 +1,6 @@
 # nozero
 
-AI-powered scheduling with natural language event creation, Google Calendar sync, invite emails, and analytics built on Next.js, Convex, and Better Auth.
+AI-powered scheduling with natural language event creation, Google Calendar sync, invite emails, and analytics built on Next.js and Supabase.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/JulianTedstone/nozero&project-name=nozero&repository-name=nozero)
 
@@ -10,7 +10,7 @@ AI-powered scheduling with natural language event creation, Google Calendar sync
 - Google Calendar sync and webhook-based updates
 - Invite flows with email delivery through Resend
 - Calendar analytics, conflict detection, and free-time discovery
-- Better Auth + Convex-backed authentication and user data
+- Supabase Auth (Google provider) with `nozero` schema + RLS
 - Modern Next.js App Router UI
 
 ## Stack
@@ -18,8 +18,7 @@ AI-powered scheduling with natural language event creation, Google Calendar sync
 - Next.js 16
 - React 19
 - Bun
-- Convex
-- Better Auth
+- Supabase (Postgres, Auth, Realtime) — `nozero` schema
 - OpenRouter AI SDK
 - Resend
 
@@ -36,17 +35,13 @@ bun install
 Create `.env.local` and set the values your deployment needs:
 
 ```bash
-BETTER_AUTH_SECRET=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_DB_URL=                  # postgres://… (session pooler) — used by `bun run types:gen`
+
 SITE_URL=http://localhost:3000
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-
-NEXT_PUBLIC_CONVEX_URL=
-CONVEX_URL=
-CONVEX_SITE_URL=
-NEXT_PUBLIC_CONVEX_SITE_URL=
-
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
 
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=x-ai/grok-4.1-fast
@@ -55,15 +50,21 @@ RESEND_API_KEY=
 RESEND_FROM_EMAIL="nozero <email@here.com>"
 ```
 
-### 3. Start Convex
+Google OAuth is configured in the Supabase dashboard (Auth → Providers → Google), not in the app env. The Supabase redirect URI is `https://<project>.supabase.co/auth/v1/callback`. The app's `/auth/callback` route exchanges the code for a session and captures `provider_token` + `provider_refresh_token` into `nozero.profiles`.
 
-If you need to regenerate Convex types or run the backend locally:
+### 3. Apply the schema
 
 ```bash
-bunx convex dev
+psql "$SUPABASE_DB_URL" -f supabase/migrations/20260605000001_init_nozero_schema.sql
 ```
 
-### 4. Start the app
+### 4. Generate TypeScript types
+
+```bash
+bun run types:gen
+```
+
+### 5. Start the app
 
 ```bash
 bun dev
@@ -75,15 +76,12 @@ Open http://localhost:3000.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `BETTER_AUTH_SECRET` | Yes | Shared secret used by Better Auth and server-side Convex access control. Set the same strong random value in both your Next.js and Convex environments. |
-| `SITE_URL` | Yes | Canonical server-side site URL used by auth flows. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL (browser + server). |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Anon/publishable key used by browser + server SSR clients. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service-role key used by the server-only admin client (invitations, webhook handlers, OAuth callback). Never ship to the browser. |
+| `SUPABASE_DB_URL` | Dev only | Postgres URL for `supabase gen types` and migrations. Use the session pooler. |
+| `SITE_URL` | Yes | Canonical server-side site URL. |
 | `NEXT_PUBLIC_SITE_URL` | Yes | Public site URL used by the client and invitation links. |
-| `NEXT_PUBLIC_CONVEX_URL` | Yes | Public Convex deployment URL for the frontend client. |
-| `CONVEX_URL` | Usually | Server-side Convex URL. If omitted, server code falls back to `NEXT_PUBLIC_CONVEX_URL`. |
-| `CONVEX_SITE_URL` | Yes | Convex site URL used by Better Auth server integration. |
-| `NEXT_PUBLIC_CONVEX_SITE_URL` | Optional | Public override for `CONVEX_SITE_URL` when you need separate client/server values. |
-| `GOOGLE_CLIENT_ID` | Yes | Google OAuth client ID for sign-in and calendar access. |
-| `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth client secret. |
 | `OPENROUTER_API_KEY` | Yes | API key for AI-powered scheduling features. |
 | `OPENROUTER_MODEL` | Optional | Override the default OpenRouter model. |
 | `RESEND_API_KEY` | Yes | API key used to send invitation emails. |
@@ -93,12 +91,11 @@ Open http://localhost:3000.
 
 The deploy button above clones this repository into a new Vercel project. Before the app is usable, make sure you also:
 
-1. Create or connect a Convex deployment.
+1. Create or connect a Supabase project; apply `supabase/migrations/*.sql`.
 2. Add the environment variables listed above in Vercel.
-3. Configure Google OAuth for your deployed domain and Better Auth routes.
-4. Set a real `BETTER_AUTH_SECRET` for production.
-5. Configure Resend if you want invitation emails enabled.
-    
+3. Configure the Google provider in the Supabase Auth dashboard (client ID + secret + redirect URI).
+4. Configure Resend if you want invitation emails enabled.
+
 
 ## License
 

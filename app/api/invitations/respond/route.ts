@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { api } from "@/convex/_generated/api";
 import { getEvent, updateEvent } from "@/lib/calendar";
 import { syncUpdatedEventToGoogle } from "@/lib/calendar-google-sync-server";
-import { getConvexClient } from "@/lib/convex";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
   try {
@@ -15,16 +14,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
-    const client = getConvexClient();
+    const supabase = createAdminClient();
 
-    const invitation = await client.query(api.invitations.getByToken, {
-      token,
-    });
-
+    const { data: invitation, error: lookupError } = await supabase
+      .from("invitations")
+      .select(
+        "token,event_id,organizer_user_id,invitee_email,status",
+      )
+      .eq("token", token)
+      .maybeSingle();
+    if (lookupError) {
+      return NextResponse.json(
+        { error: lookupError.message },
+        { status: 500 },
+      );
+    }
     if (!invitation) {
       return NextResponse.json(
         { error: "Invitation not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -38,45 +46,54 @@ export async function POST(request: Request) {
 
     const newStatus = action === "accept" ? "accepted" : "declined";
 
-    await client.mutation(api.invitations.updateStatus, {
-      token,
-      status: newStatus,
-      respondedAt: Date.now(),
-    });
+    const { error: updateError } = await supabase
+      .from("invitations")
+      .update({ status: newStatus, responded_at: new Date().toISOString() })
+      .eq("token", token);
+    if (updateError) {
+      return NextResponse.json(
+        { error: updateError.message },
+        { status: 500 },
+      );
+    }
 
     if (action === "accept") {
       const existingEvent = await getEvent(
-        invitation.organizerUserId,
-        invitation.eventId
+        invitation.organizer_user_id,
+        invitation.event_id,
       );
 
       if (existingEvent) {
         const currentAttendees = existingEvent.attendees || [];
         const alreadyExists = currentAttendees.some(
-          (a) => a.email.toLowerCase() === invitation.inviteeEmail.toLowerCase()
+          (a) =>
+            a.email.toLowerCase() === invitation.invitee_email.toLowerCase(),
         );
 
         const updatedAttendees = alreadyExists
           ? currentAttendees.map((a) =>
-              a.email.toLowerCase() === invitation.inviteeEmail.toLowerCase()
+              a.email.toLowerCase() === invitation.invitee_email.toLowerCase()
                 ? { ...a, status: "accepted" as const }
-                : a
+                : a,
             )
           : [
               ...currentAttendees,
-              { email: invitation.inviteeEmail, status: "accepted" as const },
+              {
+                email: invitation.invitee_email,
+                status: "accepted" as const,
+              },
             ];
 
         const updatedEvent = await updateEvent(
-          invitation.organizerUserId,
-          invitation.eventId,
-          { attendees: updatedAttendees }
+          invitation.organizer_user_id,
+          invitation.event_id,
+          { attendees: updatedAttendees },
         );
 
         await syncUpdatedEventToGoogle(
-          invitation.organizerUserId,
+          invitation.organizer_user_id,
           existingEvent,
-          updatedEvent
+          updatedEvent,
         );
       }
     }
@@ -92,7 +109,7 @@ export async function POST(request: Request) {
     console.error("[invitations/respond] Error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
