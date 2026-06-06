@@ -2,7 +2,7 @@
 
 AI-powered scheduling with natural language event creation, Google Calendar sync, invite emails, and analytics built on Next.js and Supabase.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/JulianTedstone/nozero&project-name=nozero&repository-name=nozero)
+Deployed to **Hetzner** (Docker + Caddy) at `https://zero.nopilot.co` — see [Deploying to Hetzner](#deploying-to-hetzner).
 
 ## Features
 
@@ -87,14 +87,29 @@ Open http://localhost:3000.
 | `RESEND_API_KEY` | Yes | API key used to send invitation emails. |
 | `RESEND_FROM_EMAIL` | Optional | Sender identity for invitation emails. |
 
-## Deploying to Vercel
+## Deploying to Hetzner
 
-The deploy button above clones this repository into a new Vercel project. Before the app is usable, make sure you also:
+nozero is **not a Vercel app.** It runs as a standalone Next.js container (`output: 'standalone'`)
+on the shared nopilot Hetzner box ("jupiter"), behind the existing **host-level Caddy** that
+owns `:80`/`:443` and fronts the other nopilot services. Caddy reverse-proxies
+`zero.nopilot.co` to the `nozero-web` container and handles TLS — the same pattern as
+`nopilot-co-www` (see that repo's `DEPLOY.md`).
+
+Before the app is usable on the box, make sure you also:
 
 1. Create or connect a Supabase project; apply `supabase/migrations/*.sql`.
-2. Add the environment variables listed above in Vercel.
-3. Configure the Google provider in the Supabase Auth dashboard (client ID + secret + redirect URI).
-4. Configure Resend if you want invitation emails enabled.
+2. Set the environment variables listed above in the host `.env` (with `SITE_URL` /
+   `NEXT_PUBLIC_SITE_URL` = `https://zero.nopilot.co`).
+3. Add a `zero.nopilot.co { reverse_proxy nozero-web:3000 }` site block to the host Caddy
+   config and reload it.
+4. Resolve TLS for the proxied (Cloudflare) record — either grey-cloud `zero.nopilot.co` so
+   Caddy can complete ACME, or install the Cloudflare Origin certificate (same approach the
+   other nopilot hostnames use).
+5. Configure the Google provider in the Supabase Auth dashboard (client ID + secret + redirect URI).
+6. Configure Resend if you want invitation emails enabled.
+
+> The deploy artifacts (`Dockerfile`, `docker-compose.host.yml`, host-Caddy snippet, CI workflow)
+> still need to be added to this repo, mirroring `nopilot-co-www`.
 
 
 ## License
