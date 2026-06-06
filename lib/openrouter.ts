@@ -5,20 +5,28 @@ import {
   type OpenRouterProviderOptions,
 } from "@openrouter/ai-sdk-provider";
 
-const apiKey = process.env.OPENROUTER_API_KEY;
 const defaultModel = process.env.OPENROUTER_MODEL || "x-ai/grok-4.1-fast";
 
-if (!apiKey) {
-  throw new Error("OPENROUTER_API_KEY is not configured");
+// Lazily constructed so importing this module (e.g. during the production build's
+// page-data collection) doesn't require OPENROUTER_API_KEY — it's a server-only
+// runtime var, not present at build time.
+let client: ReturnType<typeof createOpenRouter> | null = null;
+function getOpenRouter() {
+  if (!client) {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENROUTER_API_KEY is not configured");
+    }
+    client = createOpenRouter({
+      apiKey,
+      compatibility: "strict",
+    });
+  }
+  return client;
 }
 
-const openrouter = createOpenRouter({
-  apiKey,
-  compatibility: "strict",
-});
-
 export function getOpenRouterModel() {
-  return openrouter.chat(defaultModel);
+  return getOpenRouter().chat(defaultModel);
 }
 
 function supportsReasoningEffort(model: string) {

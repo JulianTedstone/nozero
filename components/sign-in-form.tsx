@@ -4,25 +4,60 @@ import { motion } from "framer-motion";
 import { CalendarIcon } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { authClient } from "@/lib/auth-client";
+import { useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
 
 const spring = { type: "spring", stiffness: 260, damping: 28 } as const;
+const GOOGLE_SCOPES = [
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/calendar.events",
+  "email",
+  "profile",
+  "openid",
+].join(" ");
 
 export default function SignInForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/calendar";
+  const supabase = useMemo(() => createClient(), []);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handlePasswordSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setError(null);
+      setIsLoading(true);
+      const { error: pwError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (pwError) throw pwError;
+      window.location.href = callbackUrl;
+    } catch {
+      setError("Invalid email or password.");
+      setIsLoading(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     try {
       setError(null);
       setIsLoading(true);
-      await authClient.signIn.social({
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const next = encodeURIComponent(callbackUrl);
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        callbackURL: callbackUrl,
+        options: {
+          redirectTo: `${origin}/auth/callback?next=${next}`,
+          scopes: GOOGLE_SCOPES,
+          queryParams: { access_type: "offline", prompt: "consent" },
+        },
       });
+      if (oauthError) throw oauthError;
     } catch {
       setError("Failed to sign in. Please try again.");
       setIsLoading(false);
@@ -52,7 +87,7 @@ export default function SignInForm() {
             <CalendarIcon className="size-6 text-white/90" strokeWidth={1.8} />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Sign in to Zero
+            Sign in to nozero
           </h1>
           <p className="mt-1.5 text-sm text-white/40">
             AI-powered calendar, built for focus
@@ -72,10 +107,47 @@ export default function SignInForm() {
             </div>
           )}
 
+          <form className="mb-4 flex flex-col gap-3" onSubmit={handlePasswordSignIn}>
+            <input
+              autoComplete="email"
+              className="liquid-glass-input h-12 w-full rounded-xl px-3.5 text-[13px] text-white placeholder:text-white/30 focus:outline-none"
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              required
+              type="email"
+              value={email}
+            />
+            <input
+              autoComplete="current-password"
+              className="liquid-glass-input h-12 w-full rounded-xl px-3.5 text-[13px] text-white placeholder:text-white/30 focus:outline-none"
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              required
+              type="password"
+              value={password}
+            />
+            <motion.button
+              className="liquid-glass-input flex h-12 w-full items-center justify-center rounded-xl text-[13px] font-medium text-white transition-colors hover:bg-white/[0.08] disabled:pointer-events-none disabled:opacity-40"
+              disabled={isLoading}
+              type="submit"
+              whileHover={{ scale: 1.015 }}
+              whileTap={{ scale: 0.985 }}
+            >
+              {isLoading ? "Signing in…" : "Sign in"}
+            </motion.button>
+          </form>
+
+          <div className="mb-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[11px] text-white/30">or</span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+
           <motion.button
             className="liquid-glass-input group flex h-12 w-full items-center justify-center gap-3 rounded-xl text-[13px] font-medium text-white transition-colors hover:bg-white/[0.08] disabled:pointer-events-none disabled:opacity-40"
             disabled={isLoading}
             onClick={handleGoogleSignIn}
+            type="button"
             whileHover={{ scale: 1.015 }}
             whileTap={{ scale: 0.985 }}
           >

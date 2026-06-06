@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { api } from "@/convex/_generated/api";
-import { fetchAuthMutation, getCurrentAuthUser } from "@/lib/auth-server";
+import { getCurrentAuthUser } from "@/lib/auth-server";
 import { syncCreatedLocalEventToGoogle } from "@/lib/calendar-google-sync-server";
 import { createEvent, getEvents, syncWithGoogleCalendar } from "@/lib/calendar";
 import { ensureGoogleCalendarWatch } from "@/lib/google-calendar";
+import { getGoogleTokens } from "@/lib/google-tokens";
 import { upsertUserRecord } from "@/lib/store";
 
 function getWebhookBaseUrl(request: Request) {
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     }
 
     try {
-      const tokens = await fetchAuthMutation(api.auth.refreshGoogleAccessToken, {});
+      const tokens = await getGoogleTokens(user.id);
       if (tokens?.accessToken && tokens?.refreshToken) {
         await upsertUserRecord({
           userId: user.id,

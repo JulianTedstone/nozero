@@ -1,9 +1,21 @@
-import { Resend } from "resend";
+import "server-only";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Invite emails are sent via the MXroute SMTP API (https://smtpapi.mxroute.com/).
+// Auth is the SMTP mailbox username + password in the JSON body (no API key).
+// Env (server-only, read lazily so a missing value never breaks the build/boot):
+//   MXROUTE_SMTP_SERVER    e.g. chocobo.mxrouting.net
+//   MXROUTE_SMTP_USERNAME  full mailbox address used to authenticate
+//   MXROUTE_SMTP_PASSWORD  that mailbox's password
+//   MXROUTE_FROM_EMAIL     sender address (defaults to julian@nopilot.co)
+const SMTP_API_URL = "https://smtpapi.mxroute.com/";
 
-const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL || "nozero <noreply@zerocalendar.app>";
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is not set; cannot send invitation email`);
+  }
+  return value;
+}
 
 interface SendInviteParams {
   acceptUrl: string;
@@ -55,11 +67,7 @@ export async function sendInviteEmail(params: SendInviteParams) {
       </tr>`
     : "";
 
-  const { error } = await resend.emails.send({
-    from: FROM_EMAIL,
-    to: toEmail,
-    subject: `${organizerName} invited you: ${eventTitle}`,
-    html: `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+  const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
@@ -173,11 +181,27 @@ export async function sendInviteEmail(params: SendInviteParams) {
     </tr>
   </table>
 </body>
-</html>`,
+</html>`;
+
+  const response = await fetch(SMTP_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      server: requireEnv("MXROUTE_SMTP_SERVER"),
+      username: requireEnv("MXROUTE_SMTP_USERNAME"),
+      password: requireEnv("MXROUTE_SMTP_PASSWORD"),
+      from: process.env.MXROUTE_FROM_EMAIL || "julian@nopilot.co",
+      to: toEmail,
+      subject: `${organizerName} invited you: ${eventTitle}`,
+      body: html,
+    }),
   });
 
-  if (error) {
-    console.error("[resend] Failed to send invite:", error);
-    throw new Error(`Failed to send invite to ${toEmail}: ${error.message}`);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("[mxroute] Failed to send invite:", response.status, detail);
+    throw new Error(
+      `Failed to send invite to ${toEmail}: ${response.status} ${detail}`,
+    );
   }
 }
