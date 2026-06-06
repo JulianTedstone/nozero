@@ -1,11 +1,8 @@
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { api } from "@/convex/_generated/api";
 import { getCurrentAuthUser } from "@/lib/auth-server";
-import { getConvexClient, getServerAccessKey } from "@/lib/convex";
-import { sendInviteEmail } from "@/lib/resend";
-
-const invitationsApi = api.invitations as any;
+import { sendInviteEmail } from "@/lib/email";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function getSiteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
@@ -40,49 +37,49 @@ export async function POST(request: Request) {
     if (!(eventId && eventTitle && invitees?.length)) {
       return NextResponse.json(
         { error: "Missing required fields" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const client = getConvexClient();
-    const serverAccessKey = getServerAccessKey();
+    const supabase = createAdminClient();
     const siteUrl = getSiteUrl();
     const results: { email: string; status: string; token?: string }[] = [];
 
     for (const email of invitees) {
-      const existing = await client.query(
-        invitationsApi.getByEventAndInvitee,
-        {
-          eventId,
-          inviteeEmail: email,
-          organizerUserId: user.id,
-          serverAccessKey,
-        }
-      );
-
+      const { data: existing, error: existingError } = await supabase
+        .from("invitations")
+        .select("token")
+        .eq("event_id", eventId)
+        .eq("invitee_email", email)
+        .maybeSingle();
+      if (existingError) {
+        results.push({ email, status: "lookup_failed" });
+        continue;
+      }
       if (existing) {
         results.push({ email, status: "already_invited" });
         continue;
       }
 
       const token = nanoid(32);
-
-      await client.mutation(invitationsApi.create, {
+      const { error: insertError } = await supabase.from("invitations").insert({
         token,
-        eventId,
-        organizerUserId: user.id,
-        organizerName: user.name || user.email || "Someone",
-        organizerEmail: user.email || "",
-        inviteeEmail: email,
-        eventTitle,
-        eventStart,
-        eventEnd,
-        eventLocation,
-        eventCalendarId,
+        event_id: eventId,
+        organizer_user_id: user.id,
+        organizer_name: user.name || user.email || "Someone",
+        organizer_email: user.email || "",
+        invitee_email: email,
+        event_title: eventTitle,
+        event_start: new Date(eventStart).toISOString(),
+        event_end: new Date(eventEnd).toISOString(),
+        event_location: eventLocation ?? null,
+        event_calendar_id: eventCalendarId ?? null,
         status: "pending",
-        createdAt: Date.now(),
-        serverAccessKey,
       });
+      if (insertError) {
+        results.push({ email, status: "insert_failed" });
+        continue;
+      }
 
       try {
         await sendInviteEmail({
@@ -95,7 +92,6 @@ export async function POST(request: Request) {
           acceptUrl: `${siteUrl}/invite/${token}?action=accept`,
           declineUrl: `${siteUrl}/invite/${token}?action=decline`,
         });
-
         results.push({ email, status: "sent", token });
       } catch (error) {
         console.error(`[invitations] Failed to email ${email}:`, error);
@@ -108,7 +104,7 @@ export async function POST(request: Request) {
     console.error("[invitations] Error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,0 +1,34 @@
+# Shared-host variant for the nopilot Hetzner box ("jupiter").
+#
+# A single host-level Caddy (a separate compose project) already owns :80/:443 and
+# fronts the other nopilot services. This file ships NO Caddy of its own — it just
+# builds the nozero standalone server and attaches it to that host Caddy's network
+# so Caddy can `reverse_proxy nozero-web:3000`.
+#
+#   docker compose -f docker-compose.host.yml up -d --build
+#
+# Then add a site block to the host Caddy config:
+#   zero.nopilot.co { reverse_proxy nozero-web:3000 }
+# and reload Caddy.
+services:
+  web:
+    build:
+      context: .
+      args:
+        # Interpolated from .env in this dir — needed at build time (client bundle).
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+    image: nozero:latest
+    container_name: nozero-web
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "3000"
+    networks:
+      - caddy
+
+networks:
+  caddy:
+    external: true
+    name: nopilot-bathsheba_hetzner-net

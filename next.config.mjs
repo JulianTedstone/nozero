@@ -5,6 +5,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-contained server bundle for the Docker/Caddy deploy on Hetzner.
+  output: "standalone",
   turbopack: {
     root: __dirname,
   },

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { api } from "@/convex/_generated/api";
-import { fetchAuthMutation, getCurrentAuthUser } from "@/lib/auth-server";
+import { getCurrentAuthUser } from "@/lib/auth-server";
 import { syncWithGoogleCalendar } from "@/lib/calendar";
 import { ensureGoogleCalendarWatch } from "@/lib/google-calendar";
+import { getGoogleTokens } from "@/lib/google-tokens";
 import { upsertUserRecord } from "@/lib/store";
 
 function getWebhookBaseUrl(request: NextRequest) {
@@ -20,7 +20,7 @@ function getWebhookBaseUrl(request: NextRequest) {
     return `${protocol}://${host}`;
   }
 
-  return process.env.NEXT_PUBLIC_SITE_URL || process.env.CONVEX_SITE_URL;
+  return process.env.NEXT_PUBLIC_SITE_URL;
 }
 
 export async function POST(request: NextRequest) {
@@ -31,10 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const tokens = await fetchAuthMutation(
-      api.auth.refreshGoogleAccessToken,
-      {}
-    );
+    const tokens = await getGoogleTokens(user.id);
 
     if (!(tokens?.accessToken && tokens?.refreshToken)) {
       return NextResponse.json(

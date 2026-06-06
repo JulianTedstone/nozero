@@ -25,3 +25,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase cli scratch
+supabase/.temp/
+
+# macOS
+.DS_Store

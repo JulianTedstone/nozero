@@ -1,12 +1,11 @@
-import { api } from "@/convex/_generated/api";
-import { fetchAuthMutation } from "@/lib/auth-server";
 import { deleteEvent, type CalendarEvent } from "@/lib/calendar";
 import {
   createGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
   updateGoogleCalendarEvent,
 } from "@/lib/google-calendar";
-import { upsertUserEvent, upsertUserRecord } from "@/lib/store";
+import { getGoogleTokens } from "@/lib/google-tokens";
+import { upsertUserEvent } from "@/lib/store";
 
 type GoogleCalendarAuth = {
   accessToken: string;
@@ -15,39 +14,24 @@ type GoogleCalendarAuth = {
 };
 
 /**
- * Refreshes OAuth tokens and updates the stored user record (same pattern as /api/calendar/events).
- * Returns null when Google is not linked or refresh fails.
+ * Read OAuth tokens for the user from nozero.profiles. Returns null when Google
+ * is not linked. The underlying access-token refresh is handled inside
+ * lib/google-calendar.ts using the refresh_token captured at sign-in.
  */
 export async function getGoogleCalendarAuthForUser(
-  userId: string
+  userId: string,
 ): Promise<GoogleCalendarAuth | null> {
-  try {
-    const tokens = await fetchAuthMutation(api.auth.refreshGoogleAccessToken, {});
-    if (!(tokens.accessToken && tokens.refreshToken)) {
-      return null;
-    }
-
-    await upsertUserRecord({
-      userId,
-      provider: "google",
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt: tokens.accessTokenExpiresAt
-        ? Math.floor(tokens.accessTokenExpiresAt / 1000)
-        : 0,
-    });
-
-    return {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt: tokens.accessTokenExpiresAt
-        ? Math.floor(tokens.accessTokenExpiresAt / 1000)
-        : 0,
-    };
-  } catch (error) {
-    console.error("[calendar-google-sync] Could not refresh Google tokens:", error);
+  const tokens = await getGoogleTokens(userId);
+  if (!(tokens.accessToken && tokens.refreshToken)) {
     return null;
   }
+  return {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresAt: tokens.accessTokenExpiresAt
+      ? Math.floor(tokens.accessTokenExpiresAt / 1000)
+      : 0,
+  };
 }
 
 /**
