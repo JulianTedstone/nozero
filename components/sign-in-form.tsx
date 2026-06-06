@@ -70,8 +70,8 @@ export default function SignInForm() {
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background">
       {/* Ambient background layers */}
       <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,rgba(59,130,246,0.08),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_40%_at_70%_90%,rgba(139,92,246,0.05),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,rgba(255,192,0,0.10),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_40%_at_70%_90%,rgba(255,192,0,0.05),transparent_50%)]" />
         <div className="grid-background absolute inset-0 opacity-40" />
       </div>
 
@@ -83,9 +83,12 @@ export default function SignInForm() {
           initial={{ opacity: 0, y: 16, filter: "blur(4px)" }}
           transition={{ ...spring, delay: 0.05 }}
         >
-          <div className="liquid-glass-elevated mb-5 flex size-14 items-center justify-center rounded-2xl">
-            <CalendarIcon className="size-6 text-white/90" strokeWidth={1.8} />
+          <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-primary">
+            <CalendarIcon className="size-6 text-black" strokeWidth={2} />
           </div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary">
+            nopilot
+          </p>
           <h1 className="text-2xl font-bold tracking-tight text-white">
             Sign in to nozero
           </h1>
@@ -127,7 +130,7 @@ export default function SignInForm() {
               value={password}
             />
             <motion.button
-              className="liquid-glass-input flex h-12 w-full items-center justify-center rounded-xl text-[13px] font-medium text-white transition-colors hover:bg-white/[0.08] disabled:pointer-events-none disabled:opacity-40"
+              className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-40"
               disabled={isLoading}
               type="submit"
               whileHover={{ scale: 1.015 }}
