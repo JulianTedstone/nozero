@@ -1,6 +1,18 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazily constructed so a missing RESEND_API_KEY doesn't crash the build or boot
+// (it only matters when an invite is actually sent).
+let resendClient: Resend | null = null;
+function getResend(): Resend {
+  if (!resendClient) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY is not set; cannot send invitation email");
+    }
+    resendClient = new Resend(apiKey);
+  }
+  return resendClient;
+}
 
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL || "nozero <noreply@zerocalendar.app>";
@@ -55,7 +67,7 @@ export async function sendInviteEmail(params: SendInviteParams) {
       </tr>`
     : "";
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to: toEmail,
     subject: `${organizerName} invited you: ${eventTitle}`,
