@@ -25,7 +25,11 @@ just attaches `nozero-web` to that Caddy's Docker network. Same pattern as
    NEXT_PUBLIC_SITE_URL=https://zero.nopilot.co
    OPENROUTER_API_KEY=
    OPENROUTER_MODEL=x-ai/grok-4.1-fast
-   RESEND_API_KEY=            # optional — invite emails; app boots without it
+   # Invite emails via MXroute SMTP API — app boots without these; only needed to send
+   MXROUTE_SMTP_SERVER=chocobo.mxrouting.net
+   MXROUTE_SMTP_USERNAME=     # full mailbox address used to authenticate
+   MXROUTE_SMTP_PASSWORD=
+   MXROUTE_FROM_EMAIL=julian@nopilot.co
    ```
 2. Build + run, attached to the host Caddy network:
    ```bash

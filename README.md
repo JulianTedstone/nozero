@@ -46,8 +46,11 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=x-ai/grok-4.1-fast
 
-RESEND_API_KEY=
-RESEND_FROM_EMAIL="nozero <email@here.com>"
+# Invite emails via the MXroute SMTP API (https://smtpapi.mxroute.com/)
+MXROUTE_SMTP_SERVER=chocobo.mxrouting.net
+MXROUTE_SMTP_USERNAME=                  # full mailbox address used to authenticate
+MXROUTE_SMTP_PASSWORD=
+MXROUTE_FROM_EMAIL=julian@nopilot.co
 ```
 
 Google OAuth is configured in the Supabase dashboard (Auth → Providers → Google), not in the app env. The Supabase redirect URI is `https://<project>.supabase.co/auth/v1/callback`. The app's `/auth/callback` route exchanges the code for a session and captures `provider_token` + `provider_refresh_token` into `nozero.profiles`.
@@ -84,8 +87,10 @@ Open http://localhost:3000.
 | `NEXT_PUBLIC_SITE_URL` | Yes | Public site URL used by the client and invitation links. |
 | `OPENROUTER_API_KEY` | Yes | API key for AI-powered scheduling features. |
 | `OPENROUTER_MODEL` | Optional | Override the default OpenRouter model. |
-| `RESEND_API_KEY` | Yes | API key used to send invitation emails. |
-| `RESEND_FROM_EMAIL` | Optional | Sender identity for invitation emails. |
+| `MXROUTE_SMTP_SERVER` | For emails | MXroute mail host, e.g. `chocobo.mxrouting.net`. |
+| `MXROUTE_SMTP_USERNAME` | For emails | Full mailbox address used to authenticate to the MXroute SMTP API. |
+| `MXROUTE_SMTP_PASSWORD` | For emails | That mailbox's password. |
+| `MXROUTE_FROM_EMAIL` | Optional | Sender address (defaults to `julian@nopilot.co`). |
 
 ## Deploying to Hetzner
 

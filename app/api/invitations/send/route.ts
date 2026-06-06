@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
-import { sendInviteEmail } from "@/lib/resend";
+import { sendInviteEmail } from "@/lib/email";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function getSiteUrl() {
