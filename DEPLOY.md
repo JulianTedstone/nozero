@@ -13,7 +13,7 @@ just attaches `nozero-web` to that Caddy's Docker network. Same pattern as
    ```bash
    git clone https://github.com/JulianTedstone/nozero.git
    cd nozero
-   git checkout feat/2-phase6-supabase-realtime   # until the migration stack merges to main
+   # main now carries the full Supabase migration + Hetzner deploy stack
    $EDITOR .env
    ```
    `.env` needs:
