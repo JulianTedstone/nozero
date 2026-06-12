@@ -6,6 +6,7 @@
   "scripts": {
     "build": "bun --bun next build",
     "dev": "bun --bun next dev",
+    "dev:secrets": "op run --env-file=.env.op -- bun --bun next dev",
     "lint": "ultracite check",
     "lint:fix": "ultracite fix",
     "start": "bun --bun next start",

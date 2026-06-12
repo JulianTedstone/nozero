@@ -16,6 +16,7 @@ interface ChatMessage {
 interface AiPanelProps {
   onClose: () => void;
   onEventMutated?: () => void;
+  persona?: "Bertrand" | "Pierre";
   userId?: string;
 }
 
@@ -31,7 +32,7 @@ const streamdownAnimation = {
   stagger: 68,
 } as const;
 
-export function AiPanel({ userId, onClose, onEventMutated }: AiPanelProps) {
+export function AiPanel({ userId, onClose, onEventMutated, persona = "Bertrand" }: AiPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -187,9 +188,9 @@ export function AiPanel({ userId, onClose, onEventMutated }: AiPanelProps) {
       initial={{ x: 80, opacity: 0 }}
       transition={spring}
     >
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+      <div className="flex items-center justify-between px-5 py-4">
         <div>
-          <h3 className="text-sm font-semibold text-white/90">Zero AI</h3>
+          <h3 className="text-sm font-semibold text-white/90">{persona}</h3>
           <p className="text-[10px] text-white/30">Calendar assistant</p>
         </div>
         <Button
@@ -204,30 +205,6 @@ export function AiPanel({ userId, onClose, onEventMutated }: AiPanelProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
         <div className="space-y-4">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-sm font-medium text-white/60">Ask Zero anything</p>
-              <p className="mt-1.5 max-w-[220px] text-[11px] leading-relaxed text-white/30">
-                Create events, check your schedule, find free time, or get insights.
-              </p>
-              <div className="mt-5 flex flex-wrap justify-center gap-1.5">
-                {["What's on today?", "Schedule a meeting", "Find free time"].map((suggestion) => (
-                  <button
-                    className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[10px] text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/60"
-                    key={suggestion}
-                    onClick={() => {
-                      setInput(suggestion);
-                      inputRef.current?.focus();
-                    }}
-                    type="button"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {messages.map((msg, idx) => {
             const isLatest = idx === messages.length - 1;
             return (
@@ -295,14 +272,14 @@ export function AiPanel({ userId, onClose, onEventMutated }: AiPanelProps) {
         </div>
       </div>
 
-      <div className="border-t border-white/[0.06] px-4 py-3">
+      <div className="px-4 py-3">
         <div className="liquid-glass-input flex items-center gap-2 rounded-xl px-3 py-2">
           <input
             className="flex-1 bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25"
             disabled={isStreaming}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask Zero..."
+            placeholder={`Ask ${persona}...`}
             ref={inputRef}
             value={input}
           />

@@ -5,6 +5,8 @@
 create schema if not exists nozero;
 
 grant usage on schema nozero to anon, authenticated, service_role;
+grant all on all tables in schema nozero to service_role;
+grant all on all sequences in schema nozero to service_role;
 
 -- updated_at trigger function (schema-local).
 create or replace function nozero.set_updated_at()

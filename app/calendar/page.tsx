@@ -23,10 +23,14 @@ export default async function CalendarPage() {
     endOfMonth,
   );
 
+  const persona =
+    process.env.NEXT_PUBLIC_DEVICE_NAME === "europa" ? "Pierre" : "Bertrand";
+
   return (
     <div className="h-dvh overflow-hidden bg-background">
       <ModernCalendarView
         initialEvents={events}
+        persona={persona}
         userEmail={user.email}
         userId={user.id}
         userImage={user.image ?? undefined}

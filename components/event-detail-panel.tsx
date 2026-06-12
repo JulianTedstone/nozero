@@ -4,13 +4,19 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Building2Icon,
   CalendarIcon,
   ChevronDownIcon,
   ClockIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
   MapPinIcon,
   TextIcon,
   Trash2Icon,
+  TrendingUpIcon,
+  UserIcon,
   UsersIcon,
+  VideoIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -40,6 +46,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
+import type { LookupResult } from "@/app/api/context/lookup/route";
 import type { CalendarEvent } from "@/types/calendar";
 
 const formSchema = z.object({
@@ -61,6 +68,7 @@ const formSchema = z.object({
     .default([]),
   calendarId: z.string().optional(),
   location: z.string().optional(),
+  conferenceUrl: z.string().optional(),
 });
 
 interface EventDetailPanelProps {
@@ -83,7 +91,6 @@ interface EventDetailPanelProps {
 
 const spring = { type: "spring", stiffness: 300, damping: 30 };
 
-/** Single-line glass rows: same height as category select (h-10). */
 const glassRow =
   "liquid-glass-input flex h-10 min-h-10 min-w-0 shrink-0 items-center gap-3 rounded-xl px-3";
 
@@ -102,6 +109,10 @@ export function EventDetailPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+
+  const [contextData, setContextData] = useState<LookupResult | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const contextTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isCreating = mode === "create";
   const isEditing = mode === "edit";
@@ -128,8 +139,56 @@ export function EventDetailPanel({
       participants: [],
       calendarId: "",
       location: "",
+      conferenceUrl: "",
     },
   });
+
+  const watchedTitle = form.watch("title");
+  const watchedParticipants = form.watch("participants");
+  const watchedStartDate = form.watch("startDate");
+
+  useEffect(() => {
+    if (contextTimerRef.current) clearTimeout(contextTimerRef.current);
+
+    const hasTitle = watchedTitle?.trim().length > 0;
+    const hasParticipants = watchedParticipants.length > 0;
+
+    if (!hasTitle && !hasParticipants) {
+      setContextData(null);
+      setContextLoading(false);
+      return;
+    }
+
+    setContextLoading(true);
+    contextTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/context/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: watchedTitle,
+            participants: watchedParticipants.map((p) => p.email),
+            startDate: watchedStartDate,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as LookupResult;
+          const hasContent =
+            data.background ||
+            data.participants.some((p) => p.name || p.company) ||
+            data.deals.length > 0 ||
+            data.desiredOutput;
+          setContextData(hasContent ? data : null);
+        }
+      } finally {
+        setContextLoading(false);
+      }
+    }, 900);
+
+    return () => {
+      if (contextTimerRef.current) clearTimeout(contextTimerRef.current);
+    };
+  }, [watchedTitle, watchedParticipants, watchedStartDate]);
 
   useEffect(() => {
     if (event && (mode === "edit" || mode === "view")) {
@@ -149,6 +208,7 @@ export function EventDetailPanel({
           })) || [],
         calendarId: event.calendarId || defaultGoogleCalendarId,
         location: event.location || "",
+        conferenceUrl: (event as CalendarEvent & { conferenceUrl?: string }).conferenceUrl || "",
       });
     } else if (mode === "create") {
       form.reset({
@@ -161,6 +221,7 @@ export function EventDetailPanel({
         participants: [],
         calendarId: "",
         location: "",
+        conferenceUrl: "",
       });
     }
   }, [
@@ -225,6 +286,7 @@ export function EventDetailPanel({
           start,
           end,
           location: values.location,
+          conferenceUrl: values.conferenceUrl || undefined,
           calendarId: values.calendarId || undefined,
           attendees: values.participants.map((p) => ({
             email: p.email,
@@ -385,6 +447,8 @@ export function EventDetailPanel({
       ? format(new Date(event.start), "EEEE, MMMM d")
       : "";
 
+  const conferenceUrl = form.watch("conferenceUrl") ?? "";
+
   return (
     <motion.div
       animate={{ x: 0, opacity: 1 }}
@@ -393,7 +457,7 @@ export function EventDetailPanel({
       initial={{ x: 80, opacity: 0 }}
       transition={spring}
     >
-      <div className="flex items-center justify-between border-white/[0.06] border-b px-5 py-4">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
         <div>
           <h3 className="font-semibold text-sm text-white/90">
             {isCreating ? "New Event" : isEditing ? "Edit Event" : event?.title}
@@ -556,6 +620,58 @@ export function EventDetailPanel({
                     )}
                   />
 
+                  {/* Video conference */}
+                  <FormField
+                    control={form.control}
+                    name="conferenceUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <div className={glassRow}>
+                            <VideoIcon className="size-4 shrink-0 text-white/30" />
+                            {conferenceUrl ? (
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <a
+                                  className="min-w-0 flex-1 truncate text-blue-400 text-xs hover:underline"
+                                  href={conferenceUrl}
+                                  rel="noopener noreferrer"
+                                  target="_blank"
+                                >
+                                  {conferenceUrl}
+                                </a>
+                                <button
+                                  className="shrink-0 text-white/30 hover:text-white/60"
+                                  onClick={() => field.onChange("")}
+                                  type="button"
+                                >
+                                  <XIcon className="size-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <input
+                                  className="min-h-0 min-w-0 flex-1 bg-transparent py-0 text-white/80 text-xs leading-normal outline-none placeholder:text-white/25"
+                                  placeholder="Paste Meet / Zoom link"
+                                  {...field}
+                                />
+                                <button
+                                  className="shrink-0 rounded-md bg-white/[0.06] px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.10] hover:text-white/70"
+                                  onClick={() => {
+                                    window.open("https://meet.google.com/new", "_blank");
+                                  }}
+                                  type="button"
+                                >
+                                  New Meet
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   {isCreating && googleCalendars.length > 1 && (
                     <FormField
                       control={form.control}
@@ -630,6 +746,165 @@ export function EventDetailPanel({
                       </FormItem>
                     )}
                   />
+
+                  {/* Context panel */}
+                  <AnimatePresence>
+                    {(contextLoading || contextData) && (
+                      <motion.div
+                        animate={{ opacity: 1, y: 0 }}
+                        className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]"
+                        exit={{ opacity: 0, y: -4 }}
+                        initial={{ opacity: 0, y: 4 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-white/30">
+                            Context
+                          </span>
+                          {contextLoading && (
+                            <Loader2Icon className="size-3 animate-spin text-white/20" />
+                          )}
+                        </div>
+
+                        {contextLoading && !contextData && (
+                          <div className="px-3 py-3">
+                            <div className="space-y-1.5">
+                              {[80, 60, 72].map((w) => (
+                                <div
+                                  key={w}
+                                  className="h-2 animate-pulse rounded-full bg-white/[0.06]"
+                                  style={{ width: `${w}%` }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {contextData && (
+                          <div className="space-y-3 px-3 py-3 text-xs">
+                            {contextData.background && (
+                              <p className="leading-relaxed text-white/50">
+                                {contextData.background}
+                              </p>
+                            )}
+
+                            {contextData.participants.some(
+                              (p) => p.name || p.company || p.role
+                            ) && (
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-white/25">
+                                  Participants
+                                </p>
+                                {contextData.participants.map((p) => (
+                                  <div
+                                    className="flex items-start gap-2"
+                                    key={p.email}
+                                  >
+                                    <UserIcon className="mt-0.5 size-3 shrink-0 text-white/20" />
+                                    <div className="min-w-0">
+                                      <span className="text-white/60">
+                                        {p.name ?? p.email}
+                                      </span>
+                                      {(p.role || p.company) && (
+                                        <span className="text-white/30">
+                                          {" — "}
+                                          {[p.role, p.company]
+                                            .filter(Boolean)
+                                            .join(" @ ")}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {contextData.deals.length > 0 && (
+                              <div className="space-y-1.5">
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-white/25">
+                                  Deals
+                                </p>
+                                {contextData.deals.map((d, i) => (
+                                  <div
+                                    className="flex items-center gap-2"
+                                    key={i}
+                                  >
+                                    <TrendingUpIcon className="size-3 shrink-0 text-white/20" />
+                                    <span className="text-white/60">
+                                      {d.name}
+                                    </span>
+                                    {(d.stage || d.value) && (
+                                      <span className="text-white/30">
+                                        {[d.stage, d.value]
+                                          .filter(Boolean)
+                                          .join(" · ")}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {contextData.desiredOutput && (
+                              <div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-white/25">
+                                  Desired output
+                                </p>
+                                <p className="mt-1 leading-relaxed text-white/50">
+                                  {contextData.desiredOutput}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Links panel */}
+                  <AnimatePresence>
+                    {contextData && contextData.links.length > 0 && (
+                      <motion.div
+                        animate={{ opacity: 1, y: 0 }}
+                        className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]"
+                        exit={{ opacity: 0, y: -4 }}
+                        initial={{ opacity: 0, y: 4 }}
+                        transition={{ duration: 0.2, delay: 0.05 }}
+                      >
+                        <div className="border-b border-white/[0.06] px-3 py-2">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-white/30">
+                            Links
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 px-3 py-2.5">
+                          {contextData.links.map((link, i) => (
+                            <a
+                              className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/70"
+                              href={link.url}
+                              key={i}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              {link.type === "contact" && (
+                                <UserIcon className="size-3 text-white/30" />
+                              )}
+                              {link.type === "company" && (
+                                <Building2Icon className="size-3 text-white/30" />
+                              )}
+                              {link.type === "deal" && (
+                                <TrendingUpIcon className="size-3 text-white/30" />
+                              )}
+                              {link.type === "general" && (
+                                <ExternalLinkIcon className="size-3 text-white/30" />
+                              )}
+                              {link.label}
+                              <ExternalLinkIcon className="size-2.5 text-white/20" />
+                            </a>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -646,7 +921,7 @@ export function EventDetailPanel({
             )}
           </div>
 
-          <div className="border-white/[0.06] border-t px-5 py-3">
+          <div className="border-t border-white/[0.06] px-5 py-3">
             <div className="flex items-center gap-2">
               {isEditing && (
                 <Button
