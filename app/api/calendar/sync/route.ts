@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { syncWithGoogleCalendar } from "@/lib/calendar";
+import { hasAnyCalendarLinked } from "@/lib/google-accounts-sync";
 import { ensureGoogleCalendarWatch } from "@/lib/google-calendar";
 import { getGoogleTokens } from "@/lib/google-tokens";
 import { upsertUserRecord } from "@/lib/store";
@@ -31,35 +32,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const tokens = await getGoogleTokens(user.id);
+    const pullOnly =
+      request.nextUrl.searchParams.get("pullOnly") === "true" ||
+      request.nextUrl.searchParams.get("mode") === "pull";
 
-    if (!(tokens?.accessToken && tokens?.refreshToken)) {
+    const tokens = await getGoogleTokens(user.id);
+    const hasLinked = await hasAnyCalendarLinked(user.id);
+
+    if (!(tokens?.accessToken && tokens?.refreshToken) && !hasLinked) {
       return NextResponse.json(
-        { message: "Google Calendar not connected" },
-        { status: 400 }
+        { message: "No calendar accounts connected", status: "error" },
+        { status: 400 },
       );
     }
 
-    const expiresAt = tokens.accessTokenExpiresAt
-      ? Math.floor(tokens.accessTokenExpiresAt / 1000)
-      : 0;
+    let result;
+    if (tokens?.accessToken && tokens?.refreshToken) {
+      const expiresAt = tokens.accessTokenExpiresAt
+        ? Math.floor(tokens.accessTokenExpiresAt / 1000)
+        : 0;
 
-    await upsertUserRecord({
-      userId: user.id,
-      provider: "google",
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt,
-    });
+      await upsertUserRecord({
+        userId: user.id,
+        provider: "google",
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt,
+      });
 
-    const result = await syncWithGoogleCalendar(user.id, {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt,
-    });
+      result = await syncWithGoogleCalendar(user.id, {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt,
+      }, { pullOnly });
+    } else {
+      result = await syncWithGoogleCalendar(user.id, undefined, { pullOnly });
+    }
 
-    if (result.success) {
+    if (result.success && tokens?.accessToken && tokens?.refreshToken) {
       try {
+        const expiresAt = tokens.accessTokenExpiresAt
+          ? Math.floor(tokens.accessTokenExpiresAt / 1000)
+          : 0;
         await ensureGoogleCalendarWatch({
           userId: user.id,
           accessToken: tokens.accessToken,
@@ -76,6 +90,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         message: result.message,
         status: "success",
+        pulled: result.pulled ?? 0,
+        deleted: result.deleted ?? 0,
+        accounts: result.accounts ?? 0,
+        errors: result.errors ?? [],
+        pullOnly,
       });
     }
     return NextResponse.json(
@@ -83,6 +102,10 @@ export async function POST(request: NextRequest) {
         message: result.message,
         status: "error",
         details: result.message,
+        pulled: result.pulled ?? 0,
+        deleted: result.deleted ?? 0,
+        accounts: result.accounts ?? 0,
+        errors: result.errors ?? [],
       },
       { status: 500 }
     );

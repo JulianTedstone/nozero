@@ -1,5 +1,7 @@
 import { getUserTimezone } from "@/lib/auth";
+import { setConnectedAccountSyncToken } from "@/lib/connected-accounts";
 import type { CalendarEvent } from "@/lib/calendar";
+import { getInitialSyncWindow } from "@/lib/sync-window";
 import {
   deleteUserEvent,
   getGoogleAuth,
@@ -10,6 +12,44 @@ import {
 
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const DEFAULT_CALENDAR_ID = "primary";
+
+/** Stable local event id scoped to a Google account (avoids cross-account collisions). */
+export function googleLocalEventId(
+  accountEmail: string,
+  googleEventId: string,
+): string {
+  const slug = accountEmail.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return `google_${slug}_${googleEventId}`;
+}
+
+function eventBelongsToGoogleAccount(
+  event: CalendarEvent,
+  accountEmail: string,
+  calendarId: string,
+): boolean {
+  const emailMatch =
+    !event.accountEmail ||
+    event.accountEmail.toLowerCase() === accountEmail.toLowerCase();
+  const calMatch =
+    !event.calendarId ||
+    event.calendarId === calendarId ||
+    calendarId === DEFAULT_CALENDAR_ID;
+  return event.source === "google" && emailMatch && calMatch;
+}
+
+function googleEventIdFromLocalEvent(event: CalendarEvent): string {
+  if (event.sourceId) return event.sourceId;
+  return googleEventIdFromLocalId(event.id);
+}
+
+function googleEventIdFromLocalId(localId: string): string {
+  if (!localId.startsWith("google_")) {
+    throw new Error("Not a Google Calendar event");
+  }
+  const rest = localId.slice("google_".length);
+  const lastUnderscore = rest.lastIndexOf("_");
+  return lastUnderscore >= 0 ? rest.slice(lastUnderscore + 1) : rest;
+}
 
 interface GoogleCalendarEvent {
   attendees?: Array<{
@@ -270,7 +310,8 @@ async function fetchGoogleCalendarJson<T>(params: {
 function convertGoogleEventToCalendarEvent(
   googleEvent: GoogleCalendarEvent,
   userId: string,
-  calendarId: string = DEFAULT_CALENDAR_ID
+  calendarId: string = DEFAULT_CALENDAR_ID,
+  accountEmail?: string,
 ): CalendarEvent {
   const isAllDay = !!(googleEvent.start.date && googleEvent.end.date);
   const start = isAllDay
@@ -280,8 +321,13 @@ function convertGoogleEventToCalendarEvent(
     ? new Date(`${googleEvent.end.date}T00:00:00.000Z`).toISOString()
     : googleEvent.end.dateTime;
 
+  const googleId = googleEvent.id ?? "";
+  const id = accountEmail
+    ? googleLocalEventId(accountEmail, googleId)
+    : `google_${googleId}`;
+
   return {
-    id: `google_${googleEvent.id}`,
+    id,
     title: googleEvent.summary,
     description: googleEvent.description,
     start,
@@ -292,7 +338,8 @@ function convertGoogleEventToCalendarEvent(
       : "#3b82f6",
     userId,
     source: "google",
-    sourceId: googleEvent.id,
+    sourceId: googleId,
+    accountEmail,
     calendarId,
     attendees: googleEvent.attendees?.map((attendee) => ({
       email: attendee.email,
@@ -310,9 +357,10 @@ function convertGoogleEventToCalendarEvent(
 async function convertCalendarEventToGoogleEvent(
   event: CalendarEvent
 ): Promise<Partial<GoogleCalendarEvent>> {
-  const googleEventId = event.id.startsWith("google_")
-    ? event.id.substring(7)
-    : undefined;
+  const googleEventId = event.sourceId
+    ?? (event.id.startsWith("google_")
+      ? googleEventIdFromLocalEvent(event)
+      : undefined);
 
   const userTimezone = await getUserTimezone(event.userId);
 
@@ -458,7 +506,7 @@ export async function updateGoogleCalendarEvent(
       throw new Error("Not a Google Calendar event");
     }
 
-    const googleEventId = event.id.substring(7);
+    const googleEventId = googleEventIdFromLocalEvent(event);
 
     const googleEvent = convertCalendarEventToGoogleEvent(event);
 
@@ -501,7 +549,7 @@ export async function deleteGoogleCalendarEvent(
       throw new Error("Not a Google Calendar event");
     }
 
-    const googleEventId = eventId.substring(7);
+    const googleEventId = googleEventIdFromLocalId(eventId);
 
     const response = await fetchGoogleCalendarResponse({
       userId,
@@ -531,11 +579,18 @@ export async function getGoogleCalendars(
   refreshToken: string,
   expiresAt: number
 ): Promise<
-  { id: string; summary: string; primary: boolean; backgroundColor: string }[]
+  {
+    id: string;
+    summary: string;
+    primary: boolean;
+    backgroundColor: string;
+    accessRole?: string;
+  }[]
 > {
   try {
     const data = await fetchGoogleCalendarJson<{
       items?: Array<{
+        accessRole?: string;
         backgroundColor?: string;
         id: string;
         primary: boolean;
@@ -555,6 +610,7 @@ export async function getGoogleCalendars(
       summary: item.summary,
       primary: item.primary,
       backgroundColor: item.backgroundColor || "#3b82f6",
+      accessRole: item.accessRole,
     }));
   } catch (error) {
     console.error("Error fetching Google Calendars:", error);
@@ -721,22 +777,54 @@ export async function ensureGoogleCalendarWatch(params: {
 
 export async function syncGoogleCalendarEventsIncrementally(params: {
   accessToken: string;
+  accountEmail: string;
   calendarId?: string;
   expiresAt: number;
+  initialSyncToken?: string | null;
+  isPrimary?: boolean;
   refreshToken: string;
   userId: string;
 }) {
   const {
     accessToken,
+    accountEmail,
     calendarId = DEFAULT_CALENDAR_ID,
     expiresAt,
+    initialSyncToken,
+    isPrimary = false,
     refreshToken,
     userId,
   } = params;
 
-  const storedAuth = await getGoogleAuth(userId);
-  const currentSyncToken = storedAuth?.googleSyncToken;
+  const storedAuth = isPrimary ? await getGoogleAuth(userId) : null;
+  const currentSyncToken =
+    initialSyncToken ?? storedAuth?.googleSyncToken ?? undefined;
   const userTimezone = await getUserTimezone(userId);
+
+  const clearSyncToken = async () => {
+    if (isPrimary) {
+      await upsertUserRecord({ userId, googleSyncToken: "" });
+    } else {
+      await setConnectedAccountSyncToken(userId, accountEmail, "");
+    }
+  };
+
+  const persistSyncToken = async (nextSyncToken: string | undefined) => {
+    if (isPrimary) {
+      await upsertUserRecord({
+        userId,
+        provider: "google",
+        accessToken,
+        refreshToken,
+        expiresAt,
+        googleSyncToken: nextSyncToken,
+        googleWatchCalendarId: calendarId,
+        lastGoogleSync: Date.now(),
+      });
+    } else if (nextSyncToken) {
+      await setConnectedAccountSyncToken(userId, accountEmail, nextSyncToken);
+    }
+  };
 
   const syncOnce = async (syncToken?: string, isRecoveryFullSync = false) => {
     const syncedEvents: CalendarEvent[] = [];
@@ -746,18 +834,22 @@ export async function syncGoogleCalendarEventsIncrementally(params: {
     let nextSyncToken: string | undefined;
 
     do {
-      const params = new URLSearchParams({
+      const query = new URLSearchParams({
         singleEvents: "true",
         showDeleted: "true",
         timeZone: userTimezone,
       });
 
       if (syncToken) {
-        params.set("syncToken", syncToken);
+        query.set("syncToken", syncToken);
+      } else {
+        const { start: rangeStart, end: rangeEnd } = getInitialSyncWindow();
+        query.set("timeMin", rangeStart.toISOString());
+        query.set("timeMax", rangeEnd.toISOString());
       }
 
       if (nextPageToken) {
-        params.set("pageToken", nextPageToken);
+        query.set("pageToken", nextPageToken);
       }
 
       const response = await fetchGoogleCalendarResponse({
@@ -766,48 +858,52 @@ export async function syncGoogleCalendarEventsIncrementally(params: {
         acceptedStatusCodes: syncToken ? [410] : undefined,
         refreshToken,
         expiresAt,
-        url: `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+        url: `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${query.toString()}`,
         context: "Failed to sync Google Calendar events",
       });
 
       if (!response.ok) {
         if (response.status === 410 && syncToken) {
-          await upsertUserRecord({
-            userId,
-            googleSyncToken: "",
-          });
+          await clearSyncToken();
 
-          const localGoogleEvents = (await listUserEvents(userId)).filter(
-            (event) => event.source === "google"
+          const stale = (await listUserEvents(userId)).filter((event) =>
+            eventBelongsToGoogleAccount(event, accountEmail, calendarId),
           );
-
           await Promise.all(
-            localGoogleEvents.map((event) => deleteUserEvent(userId, event.id))
+            stale.map((event) => deleteUserEvent(userId, event.id)),
           );
 
           return syncOnce(undefined, true);
         }
 
         throw new Error(
-          `Failed to sync Google Calendar events: ${response.status} ${response.statusText}`
+          `Failed to sync Google Calendar events: ${response.status} ${response.statusText}`,
         );
       }
 
       const data = (await response.json()) as GoogleEventsResponse;
 
       for (const item of data.items ?? []) {
-        const localEventId = `google_${item.id}`;
+        const googleId = item.id ?? "";
+        const localEventId = googleLocalEventId(accountEmail, googleId);
 
         if (item.status === "cancelled") {
           await deleteUserEvent(userId, localEventId);
+          await deleteUserEvent(userId, `google_${googleId}`);
           deleted++;
           continue;
         }
 
-        const event = convertGoogleEventToCalendarEvent(item, userId);
+        const event = convertGoogleEventToCalendarEvent(
+          item,
+          userId,
+          calendarId,
+          accountEmail,
+        );
         await upsertUserEvent(event);
         syncedEvents.push(event);
         syncedIds.add(event.id);
+        syncedIds.add(`google_${googleId}`);
       }
 
       nextPageToken = data.nextPageToken;
@@ -815,8 +911,8 @@ export async function syncGoogleCalendarEventsIncrementally(params: {
     } while (nextPageToken);
 
     if (!syncToken || isRecoveryFullSync) {
-      const localGoogleEvents = (await listUserEvents(userId)).filter(
-        (event) => event.source === "google"
+      const localGoogleEvents = (await listUserEvents(userId)).filter((event) =>
+        eventBelongsToGoogleAccount(event, accountEmail, calendarId),
       );
 
       await Promise.all(
@@ -825,20 +921,11 @@ export async function syncGoogleCalendarEventsIncrementally(params: {
           .map(async (event) => {
             deleted++;
             await deleteUserEvent(userId, event.id);
-          })
+          }),
       );
     }
 
-    await upsertUserRecord({
-      userId,
-      provider: "google",
-      accessToken,
-      refreshToken,
-      expiresAt,
-      googleSyncToken: nextSyncToken,
-      googleWatchCalendarId: calendarId,
-      lastGoogleSync: Date.now(),
-    });
+    await persistSyncToken(nextSyncToken);
 
     return {
       deleted,
@@ -849,4 +936,75 @@ export async function syncGoogleCalendarEventsIncrementally(params: {
   };
 
   return syncOnce(currentSyncToken);
+}
+
+/** Fetch and upsert events for a fixed time window (background extension). */
+export async function syncGoogleCalendarEventsInRange(params: {
+  accessToken: string;
+  accountEmail: string;
+  calendarId?: string;
+  end: Date;
+  expiresAt: number;
+  refreshToken: string;
+  start: Date;
+  userId: string;
+}): Promise<{ events: CalendarEvent[]; pulled: number }> {
+  const {
+    accessToken,
+    accountEmail,
+    calendarId = DEFAULT_CALENDAR_ID,
+    end,
+    expiresAt,
+    refreshToken,
+    start,
+    userId,
+  } = params;
+
+  const userTimezone = await getUserTimezone(userId);
+  const syncedEvents: CalendarEvent[] = [];
+  let nextPageToken: string | undefined;
+
+  do {
+    const query = new URLSearchParams({
+      singleEvents: "true",
+      showDeleted: "false",
+      timeZone: userTimezone,
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+    });
+
+    if (nextPageToken) {
+      query.set("pageToken", nextPageToken);
+    }
+
+    const data = await fetchGoogleCalendarJson<GoogleEventsResponse>({
+      userId,
+      accessToken,
+      refreshToken,
+      expiresAt,
+      input: `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(
+        calendarId,
+      )}/events?${query.toString()}`,
+      context: "Failed to fetch Google Calendar window",
+    });
+
+    for (const item of data.items ?? []) {
+      if (item.status === "cancelled" || !item.id) {
+        continue;
+      }
+
+      const event = convertGoogleEventToCalendarEvent(
+        item,
+        userId,
+        calendarId,
+        accountEmail,
+      );
+      await upsertUserEvent(event);
+      syncedEvents.push(event);
+    }
+
+    nextPageToken = data.nextPageToken;
+  } while (nextPageToken);
+
+  return { events: syncedEvents, pulled: syncedEvents.length };
 }

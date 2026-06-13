@@ -2,6 +2,7 @@ import "server-only";
 
 import { generateText } from "ai";
 import { getOpenRouterModel } from "@/lib/openrouter";
+import { searchSomaContactsByEmail } from "@/lib/soma-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -45,14 +46,8 @@ async function fetchSomaContext(
   if (!somaUrl || !somaKey || participants.length === 0) return "";
 
   try {
-    // Search for each participant in soma CRM
     const results = await Promise.allSettled(
-      participants.map((email) =>
-        fetch(`${somaUrl}/api/contacts/search?email=${encodeURIComponent(email)}`, {
-          headers: { Authorization: `Bearer ${somaKey}` },
-          signal: AbortSignal.timeout(4000),
-        }).then((r) => (r.ok ? r.json() : null))
-      )
+      participants.map((email) => searchSomaContactsByEmail(email))
     );
 
     const found = results
@@ -63,7 +58,6 @@ async function fetchSomaContext(
       return `Soma CRM data:\n${JSON.stringify(found, null, 2)}`;
     }
 
-    // Fallback: search by meeting title for deals
     const dealRes = await fetch(`${somaUrl}/api/deals/search?q=${encodeURIComponent(title)}`, {
       headers: { Authorization: `Bearer ${somaKey}` },
       signal: AbortSignal.timeout(4000),

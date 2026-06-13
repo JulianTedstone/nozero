@@ -29,7 +29,9 @@ export interface CalendarEvent {
   reminders?: { minutes: number; method: "email" | "popup" }[];
   sharedBy?: string;
   sharedWith?: string[];
-  source?: "google" | "local" | "microsoft";
+  source?: "google" | "local" | "microsoft" | "caldav";
+  /** Google account email this event was synced from (multi-account). */
+  accountEmail?: string;
   sourceId?: string;
   start: string;
   timezone?: string;

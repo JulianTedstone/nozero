@@ -234,7 +234,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--muted-foreground);
 }
 
 /* ─── Liquid Glass Material System ────────────── */
@@ -634,13 +634,11 @@
   white-space: nowrap;
   cursor: pointer;
   border-radius: calc(var(--radius) - 4px);
-  background: rgba(255, 255, 255, 0.04);
-  border-left: 3px solid currentColor;
   transition: all 0.15s ease;
 }
 
 .event-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  filter: brightness(1.1);
 }
 
 .event-item-black {

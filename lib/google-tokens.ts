@@ -34,6 +34,7 @@ export type ConnectedAccountToken = {
   refreshToken: string | null;
   tokenExpiry: Date | null;
   scope: string | null;
+  googleSyncToken?: string | null;
 };
 
 /**
@@ -62,6 +63,7 @@ export async function getConnectedAccountTokens(
     refreshToken: t.refreshToken ?? null,
     tokenExpiry: t.tokenExpiry ? new Date(t.tokenExpiry) : null,
     scope: t.scope ?? null,
+    googleSyncToken: t.googleSyncToken ?? null,
   }));
 }
 

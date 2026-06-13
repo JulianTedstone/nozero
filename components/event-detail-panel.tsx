@@ -46,6 +46,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
+import { htmlToPlainText } from "@/lib/html-text";
 import type { LookupResult } from "@/app/api/context/lookup/route";
 import type { CalendarEvent } from "@/types/calendar";
 
@@ -194,7 +195,7 @@ export function EventDetailPanel({
     if (event && (mode === "edit" || mode === "view")) {
       form.reset({
         title: event.title || "",
-        description: event.description || "",
+        description: htmlToPlainText(event.description || ""),
         startDate: event.start
           ? format(new Date(event.start), "yyyy-MM-dd")
           : "",
@@ -488,17 +489,20 @@ export function EventDetailPanel({
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <Input
-                      className="h-10 border-0 bg-transparent px-0 font-semibold text-lg text-white placeholder:text-white/25 focus-visible:ring-0"
-                      placeholder="Event title"
-                      {...field}
-                      ref={(e) => {
-                        field.ref(e);
-                        (
-                          titleRef as React.MutableRefObject<HTMLInputElement | null>
-                        ).current = e;
-                      }}
-                    />
+                    <div className={glassRow}>
+                      <TextIcon className="size-4 shrink-0 text-white/30" />
+                      <Input
+                        className="h-full min-h-0 flex-1 rounded-none border-0 bg-transparent px-0 font-medium text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0"
+                        placeholder="Event title"
+                        {...field}
+                        ref={(e) => {
+                          field.ref(e);
+                          (
+                            titleRef as React.MutableRefObject<HTMLInputElement | null>
+                          ).current = e;
+                        }}
+                      />
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -160,7 +160,53 @@ export async function saveUserPreferences(
   userId: string,
   preferences: Record<string, unknown>,
 ) {
-  await upsertUserRecord({ userId, preferences });
+  const existing = await getUserPreferences(userId);
+  const merged: Record<string, unknown> = { ...existing, ...preferences };
+  // Form saves omit OAuth fields — preserve them unless explicitly provided
+  if (!("connectedTokens" in preferences)) {
+    merged.connectedTokens = existing.connectedTokens;
+  }
+  if (!("connectedAccounts" in preferences)) {
+    merged.connectedAccounts = existing.connectedAccounts;
+  }
+  if (!("connectedCalDav" in preferences)) {
+    merged.connectedCalDav = existing.connectedCalDav;
+  }
+  if (!("calendarSubscriptions" in preferences)) {
+    merged.calendarSubscriptions = existing.calendarSubscriptions;
+  }
+  if (!("calendarVisibility" in preferences)) {
+    merged.calendarVisibility = existing.calendarVisibility;
+  }
+  if (!("calendarSidebarExpanded" in preferences)) {
+    merged.calendarSidebarExpanded = existing.calendarSidebarExpanded;
+  }
+  if (!("calendarSyncRange" in preferences)) {
+    merged.calendarSyncRange = existing.calendarSyncRange;
+  }
+  await upsertUserRecord({ userId, preferences: merged });
+}
+
+export async function listUserEventsInRange(
+  userId: string,
+  start: Date | string,
+  end: Date | string,
+): Promise<CalendarEvent[]> {
+  const rangeStart =
+    typeof start === "string" ? start : new Date(start).toISOString();
+  const rangeEnd = typeof end === "string" ? end : new Date(end).toISOString();
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("data")
+    .eq("user_id", userId)
+    .lte("start_at", rangeEnd)
+    .gte("end_at", rangeStart)
+    .order("start_at", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map((row) => row.data as unknown as CalendarEvent);
 }
 
 export async function getUserTimezone(userId: string) {

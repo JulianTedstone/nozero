@@ -12,6 +12,7 @@ import {
   getUserEvent,
   listUserCategories,
   listUserEvents,
+  listUserEventsInRange,
   upsertUserCategory,
   upsertUserEvent,
   upsertUserRecord,
@@ -19,9 +20,9 @@ import {
 import {
   createGoogleCalendarEvent,
   getGoogleCalendarEvents,
-  syncGoogleCalendarEventsIncrementally,
   updateGoogleCalendarEvent,
 } from "./google-calendar";
+import { pullAllCalendarAccounts } from "./google-accounts-sync";
 
 export interface RecurrenceRule {
   byDay?: string[];
@@ -306,15 +307,7 @@ export async function getEvents(
   end: Date | string
 ): Promise<CalendarEvent[]> {
   try {
-    const rangeStart = typeof start === "string" ? new Date(start) : start;
-    const rangeEnd = typeof end === "string" ? new Date(end) : end;
-    const events = await listUserEvents(userId);
-
-    return events.filter((event) => {
-      const eventStart = new Date(event.start);
-      const eventEnd = new Date(event.end);
-      return eventStart <= rangeEnd && eventEnd >= rangeStart;
-    });
+    return await listUserEventsInRange(userId, start, end);
   } catch (error) {
     console.error("Error fetching events:", error);
     throw new Error("Failed to fetch events");
@@ -929,8 +922,16 @@ export async function syncWithGoogleCalendar(
     accessToken: string;
     refreshToken: string;
     expiresAt?: number | null;
-  }
-): Promise<{ success: boolean; message: string }> {
+  },
+  options?: { pullOnly?: boolean },
+): Promise<{
+  success: boolean;
+  message: string;
+  pulled?: number;
+  deleted?: number;
+  accounts?: number;
+  errors?: string[];
+}> {
   try {
     const userData = googleAuth
       ? {
@@ -947,20 +948,64 @@ export async function syncWithGoogleCalendar(
       !userData.accessToken ||
       !userData.refreshToken
     ) {
+      const linked = await pullAllCalendarAccounts(userId);
+      if (linked.accounts === 0) {
+        return {
+          success: false,
+          message:
+            "Google Calendar is not connected. Please connect your Google account first.",
+        };
+      }
+      if (linked.pulled === 0 && linked.errors.length > 0) {
+        return {
+          success: false,
+          message: linked.errors.join("; "),
+          pulled: linked.pulled,
+          deleted: linked.deleted,
+          accounts: linked.accounts,
+          errors: linked.errors,
+        };
+      }
+      await upsertUserRecord({ userId, lastGoogleSync: Date.now() });
+      const caldavMessage =
+        `✓ Sync completed for ${linked.accounts} connected account(s).\n` +
+        `Pulled ${linked.pulled} events (${linked.deleted} removed locally).` +
+        (linked.errors.length ? `\nWarnings: ${linked.errors.join("; ")}` : "");
       return {
-        success: false,
-        message:
-          "Google Calendar is not connected. Please connect your Google account first.",
+        success: true,
+        message: caldavMessage,
+        pulled: linked.pulled,
+        deleted: linked.deleted,
+        accounts: linked.accounts,
+        errors: linked.errors,
       };
     }
 
-    // 1. PULL: Process inbound Google changes first using sync tokens.
-    const inboundSync = await syncGoogleCalendarEventsIncrementally({
-      userId,
-      accessToken: userData.accessToken as string,
-      refreshToken: userData.refreshToken as string,
-      expiresAt: userData.expiresAt as number,
+    const { initializeCalendarSyncRange } = await import(
+      "@/lib/google-accounts-sync"
+    );
+    await initializeCalendarSyncRange(userId);
+
+    // 1. PULL: all linked Google accounts (primary + additional).
+    const inboundPull = await pullAllCalendarAccounts(userId, {
+      googleOnly: options?.pullOnly === true,
     });
+
+    if (options?.pullOnly) {
+      await upsertUserRecord({ userId, lastGoogleSync: Date.now() });
+      return {
+        success: true,
+        message:
+          `✓ Pulled ${inboundPull.pulled} event change(s) from ${inboundPull.accounts} account(s).` +
+          (inboundPull.errors.length
+            ? `\nWarnings: ${inboundPull.errors.join("; ")}`
+            : ""),
+        pulled: inboundPull.pulled,
+        deleted: inboundPull.deleted,
+        accounts: inboundPull.accounts,
+        errors: inboundPull.errors,
+      };
+    }
 
     // 2. PUSH: Get local events and sync them to Google Calendar
     const localEvents = await listUserEvents(userId);
@@ -975,9 +1020,8 @@ export async function syncWithGoogleCalendar(
 
     let created = 0;
     let updated = 0;
-    let deleted = 0;
-    const pulled = inboundSync.events.length;
-    deleted += inboundSync.deleted;
+    let deleted = inboundPull.deleted;
+    const pulled = inboundPull.pulled;
 
     // Push local events to Google Calendar
     for (const event of nonGoogleLocalEvents) {
@@ -1031,13 +1075,20 @@ export async function syncWithGoogleCalendar(
 
     const message =
       "✓ Sync completed successfully.\n" +
-      `Processed ${pulled} inbound Google changes.\n` +
+      `Synced ${inboundPull.accounts} Google account(s); processed ${pulled} inbound changes.\n` +
       `Pushed ${created} new + ${updated} updated events to Google Calendar.\n` +
-      `Removed ${deleted} deleted Google events locally.`;
+      `Removed ${deleted} deleted Google events locally.` +
+      (inboundPull.errors.length
+        ? `\nWarnings: ${inboundPull.errors.join("; ")}`
+        : "");
 
     return {
       success: true,
       message,
+      pulled,
+      deleted,
+      accounts: inboundPull.accounts,
+      errors: inboundPull.errors,
     };
   } catch (error) {
     console.error("Error syncing with Google Calendar:", error);
@@ -1048,6 +1099,7 @@ export async function syncWithGoogleCalendar(
     return {
       success: false,
       message,
+      errors: [message],
     };
   }
 }

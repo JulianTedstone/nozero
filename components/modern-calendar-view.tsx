@@ -23,15 +23,19 @@ import {
 } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertCircleIcon,
   CalendarIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   LayersIcon,
   LayoutDashboardIcon,
+  Loader2Icon,
   LogOutIcon,
   MailIcon,
   MenuIcon,
   PlusIcon,
+  RefreshCwIcon,
   SearchIcon,
   SettingsIcon,
   SparklesIcon,
@@ -46,6 +50,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,12 +71,36 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth-client";
-import { cn } from "@/lib/utils";
+import { cn, friendlyAccountName, hexToRgba } from "@/lib/utils";
+import { eventMatchesVisibleSubscriptions } from "@/lib/calendar-subscription-utils";
+import type { SubscriptionCalendarView } from "@/lib/calendar-subscription-utils";
 import type { CalendarEvent } from "@/types/calendar";
 import { AiPanel } from "./ai-panel";
 import { EventDetailPanel } from "./event-detail-panel";
 
+type SyncStatus = "idle" | "syncing" | "success" | "error";
+
+type CalendarSyncResponse = {
+  message?: string;
+  status?: string;
+  pulled?: number;
+  deleted?: number;
+  accounts?: number;
+  errors?: string[];
+};
+
+function formatSyncAge(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 15) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+
 type ViewMode = "day" | "week" | "month" | "year";
+
 type RightPanel = "none" | "event" | "ai";
 
 interface GoogleCalendar {
@@ -92,12 +121,43 @@ interface ModernCalendarViewProps {
   userProvider?: string;
 }
 
-const EVENT_COLORS: Record<string, string> = {
-  Work: "text-emerald-400",
-  Personal: "text-blue-400",
-  Family: "text-purple-400",
-  Meeting: "text-amber-400",
-};
+const HOUR_HEIGHT_PX = 48;
+const DAY_GRID_HEIGHT = 24 * HOUR_HEIGHT_PX;
+
+function minutesSinceMidnight(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function resolveEventCalendarColor(
+  event: CalendarEvent,
+  subscriptions: SubscriptionCalendarView[],
+): string {
+  if (!event.source || event.source === "local") {
+    return event.color ?? "#3b82f6";
+  }
+
+  const calendarId = event.calendarId ?? "primary";
+  const accountEmail = event.accountEmail?.toLowerCase();
+  const match = subscriptions.find(
+    (s) =>
+      s.calendarId === calendarId &&
+      s.sourceType === event.source &&
+      (!accountEmail || s.accountEmail.toLowerCase() === accountEmail),
+  );
+
+  return match?.color ?? event.color ?? "#3b82f6";
+}
+
+function eventPillStyle(
+  event: CalendarEvent,
+  subscriptions: SubscriptionCalendarView[],
+): CSSProperties {
+  const color = resolveEventCalendarColor(event, subscriptions);
+  return {
+    backgroundColor: hexToRgba(color, 0.22),
+    color,
+  };
+}
 
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(false);
@@ -121,7 +181,7 @@ export function ModernCalendarView({
   userProvider,
 }: ModernCalendarViewProps) {
   const router = useRouter();
-  const { dismiss } = useToast();
+  const { dismiss, toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [miniCalendarDate, setMiniCalendarDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
@@ -133,26 +193,20 @@ export function ModernCalendarView({
     "create" | "edit" | "view"
   >("create");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendar[]>([]);
+  const [subscribedCalendars, setSubscribedCalendars] = useState<
+    SubscriptionCalendarView[]
+  >([]);
+  const [calendarsExpanded, setCalendarsExpanded] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [syncSummary, setSyncSummary] = useState<string | null>(null);
+  const [backgroundExtending, setBackgroundExtending] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterQuery, setFilterQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"email" | "calendar" | "board" | "context">("calendar");
 
-  // Read additional accounts from localStorage (fixed key, no user scoping)
-  const [additionalAccounts, setAdditionalAccounts] = useState<Array<{ id: string; email: string; color: string; label: string }>>([]);
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem("nozero:connected-accounts");
-      if (stored) {
-        const parsed = JSON.parse(stored) as Array<{ id: string; email: string; color: string; label: string }>;
-        if (Array.isArray(parsed)) {
-          setAdditionalAccounts(parsed.filter((a) => a.id !== "primary-google"));
-        }
-      }
-    } catch {}
-  }, []);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
 
@@ -160,14 +214,18 @@ export function ModernCalendarView({
   const isLoggedIn = !!userId;
 
   const displayEvents = useMemo(() => {
-    if (!filterQuery.trim()) return events;
-    const q = filterQuery.toLowerCase();
-    return events.filter((e) =>
-      e.title?.toLowerCase().includes(q) ||
-      e.description?.toLowerCase().includes(q) ||
-      e.location?.toLowerCase().includes(q)
+    let filtered = events.filter((event) =>
+      eventMatchesVisibleSubscriptions(event, subscribedCalendars),
     );
-  }, [events, filterQuery]);
+    if (!filterQuery.trim()) return filtered;
+    const q = filterQuery.toLowerCase();
+    return filtered.filter(
+      (e) =>
+        e.title?.toLowerCase().includes(q) ||
+        e.description?.toLowerCase().includes(q) ||
+        e.location?.toLowerCase().includes(q),
+    );
+  }, [events, filterQuery, subscribedCalendars]);
 
   const refreshEvents = useCallback(async () => {
     if (!userId) {
@@ -209,60 +267,166 @@ export function ModernCalendarView({
     setEvents(data.events);
   }, [currentDate, userId, viewMode]);
 
+  const runBackgroundExtend = useCallback(async () => {
+    if (!userId) return;
+
+    setBackgroundExtending(true);
+    try {
+      let fullyExtended = false;
+      let iterations = 0;
+      const maxIterations = 24;
+
+      while (!fullyExtended && iterations < maxIterations) {
+        iterations += 1;
+        const res = await fetch("/api/calendar/sync/extend", {
+          method: "POST",
+        });
+        if (!res.ok) break;
+
+        const data = (await res.json()) as {
+          extended?: boolean;
+          pastComplete?: boolean;
+          futureComplete?: boolean;
+        };
+
+        if (!data.extended) {
+          fullyExtended = true;
+          break;
+        }
+
+        await refreshEvents();
+
+        if (data.pastComplete && data.futureComplete) {
+          fullyExtended = true;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 400));
+      }
+    } catch {
+      // Background extension is best-effort.
+    } finally {
+      setBackgroundExtending(false);
+    }
+  }, [refreshEvents, userId]);
+
+  const runCalendarSync = useCallback(
+    async (manual = false) => {
+      if (!userId) return;
+
+      setSyncStatus("syncing");
+      setSyncSummary(null);
+
+      try {
+        const syncUrl = manual
+          ? "/api/calendar/sync"
+          : "/api/calendar/sync?pullOnly=true";
+        const res = await fetch(syncUrl, { method: "POST" });
+        const data = (await res.json()) as CalendarSyncResponse;
+        const errors = data.errors ?? [];
+        const pulled = data.pulled ?? 0;
+        const accounts = data.accounts ?? 0;
+
+        if (!res.ok || data.status === "error") {
+          const detail =
+            errors.length > 0
+              ? errors.join("; ")
+              : data.message ?? `Sync failed (${res.status})`;
+          setSyncStatus("error");
+          setSyncSummary(detail);
+          if (manual) {
+            toast({
+              title: "Calendar sync failed",
+              description: detail,
+              variant: "destructive",
+            });
+          }
+          return;
+        }
+
+        setLastSyncedAt(new Date());
+        await refreshEvents();
+
+        if (errors.length > 0) {
+          setSyncStatus("error");
+          setSyncSummary(errors.join("; "));
+          if (manual) {
+            toast({
+              title: "Sync completed with warnings",
+              description: errors.join("; "),
+            });
+          }
+          void runBackgroundExtend();
+          return;
+        }
+
+        setSyncStatus("success");
+        setSyncSummary(
+          accounts > 0
+            ? `${pulled} event${pulled === 1 ? "" : "s"} from ${accounts} account${accounts === 1 ? "" : "s"}`
+            : (data.message ?? "Synced"),
+        );
+
+        void runBackgroundExtend();
+      } catch {
+        const detail = "Could not reach the sync server";
+        setSyncStatus("error");
+        setSyncSummary(detail);
+        if (manual) {
+          toast({
+            title: "Calendar sync failed",
+            description: detail,
+            variant: "destructive",
+          });
+        }
+      }
+    },
+    [refreshEvents, runBackgroundExtend, toast, userId],
+  );
+
   useEffect(() => {
     router.prefetch("/settings");
   }, [router]);
 
   useEffect(() => {
-    if (userProvider === "google" && isLoggedIn) {
-      fetch("/api/calendars/google-list")
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data?.calendars) {
-            setGoogleCalendars(
-              data.calendars.map((cal: GoogleCalendar) => ({
-                ...cal,
-                visible: true,
-              }))
-            );
-          }
-        })
-        .catch(() => {});
-    }
-  }, [userProvider, isLoggedIn]);
+    if (!isLoggedIn) return;
+    fetch("/api/calendar/subscriptions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.calendars) return;
+        setSubscribedCalendars(data.calendars as SubscriptionCalendarView[]);
+        if (typeof data.sidebarExpanded === "boolean") {
+          setCalendarsExpanded(data.sidebarExpanded);
+        }
+      })
+      .catch(() => {});
+  }, [isLoggedIn]);
 
   useEffect(() => {
-    if (userProvider === "google" && isLoggedIn) {
-      const syncNow = async () => {
-        try {
-          await fetch("/api/calendar/sync", { method: "POST" });
-          await refreshEvents();
-        } catch {}
-      };
+    if (!isLoggedIn) return;
 
-      syncNow();
+    void runCalendarSync(false);
 
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === "visible") {
-          void syncNow();
-        }
-      };
+    const onFocus = () => void runCalendarSync(false);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void runCalendarSync(false);
+      }
+    };
 
-      window.addEventListener("focus", syncNow);
-      document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-      const interval = setInterval(syncNow, 30 * 1000);
+    const interval = setInterval(() => void runCalendarSync(false), 2 * 60 * 1000);
 
-      return () => {
-        clearInterval(interval);
-        window.removeEventListener("focus", syncNow);
-        document.removeEventListener(
-          "visibilitychange",
-          handleVisibilityChange
-        );
-      };
-    }
-  }, [userProvider, isLoggedIn, refreshEvents]);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
+    };
+  }, [isLoggedIn, runCalendarSync]);
 
   useEffect(() => {
     void refreshEvents().catch(() => {});
@@ -428,9 +592,6 @@ export function ModernCalendarView({
     setCurrentDate((prev) => fns[viewMode](prev));
   };
 
-  const getEventColor = (event: CalendarEvent) =>
-    EVENT_COLORS[event.categories?.[0] || ""] || "text-blue-400";
-
   const eventOccursOnDate = useCallback((event: CalendarEvent, date: Date) => {
     const eventStart = new Date(event.start);
     const eventEnd = new Date(event.end);
@@ -449,7 +610,30 @@ export function ModernCalendarView({
       dayStart.setHours(0, 0, 0, 0);
       return eventStart > dayStart ? eventStart : dayStart;
     },
-    []
+    [],
+  );
+
+  const getEventLayoutForDay = useCallback(
+    (event: CalendarEvent, date: Date) => {
+      const visibleStart = getVisibleEventStart(event, date);
+      const eventEnd = new Date(event.end);
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59, 999);
+      const visibleEnd = eventEnd < dayEnd ? eventEnd : dayEnd;
+
+      const startMin = minutesSinceMidnight(visibleStart);
+      const endMin = Math.max(
+        minutesSinceMidnight(visibleEnd),
+        startMin + 5,
+      );
+      const durationMin = endMin - startMin;
+
+      return {
+        top: (startMin / 60) * HOUR_HEIGHT_PX,
+        height: Math.max((durationMin / 60) * HOUR_HEIGHT_PX, 18),
+      };
+    },
+    [getVisibleEventStart],
   );
 
   const miniCalendarDays = useMemo(() => {
@@ -465,13 +649,46 @@ export function ModernCalendarView({
     });
   }, [miniCalendarDate]);
 
-  const toggleCalendarVisibility = (calendarId: string) => {
-    setGoogleCalendars((prev) =>
-      prev.map((cal) =>
-        cal.id === calendarId ? { ...cal, visible: !cal.visible } : cal
-      )
-    );
+  const toggleCalendarVisibility = (key: string) => {
+    setSubscribedCalendars((prev) => {
+      const next = prev.map((cal) =>
+        cal.key === key ? { ...cal, visible: !cal.visible } : cal,
+      );
+      const target = next.find((c) => c.key === key);
+      if (target) {
+        void fetch("/api/calendar/visibility", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, visible: target.visible }),
+        });
+      }
+      return next;
+    });
   };
+
+  const toggleCalendarsExpanded = () => {
+    const next = !calendarsExpanded;
+    setCalendarsExpanded(next);
+    void fetch("/api/calendar/visibility", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sidebarExpanded: next }),
+    });
+  };
+
+  const googleCalendarsForPanel: GoogleCalendar[] = useMemo(
+    () =>
+      subscribedCalendars
+        .filter((c) => c.visible)
+        .map((c) => ({
+          id: c.calendarId,
+          summary: c.name,
+          primary: c.primary ?? false,
+          backgroundColor: c.color,
+          visible: c.visible,
+        })),
+    [subscribedCalendars],
+  );
 
   const navigateMiniDay = (day: Date) => {
     setCurrentDate(day);
@@ -482,51 +699,69 @@ export function ModernCalendarView({
   /* ─── View Renderers ────────────────────────── */
 
   const renderDayView = () => {
-    const dayEvents = displayEvents.filter((event) =>
-      eventOccursOnDate(event, currentDate)
+    const dayEvents = displayEvents.filter(
+      (event) => eventOccursOnDate(event, currentDate) && !event.allDay,
     );
     const hours = Array.from({ length: 24 }, (_, i) => i);
+    const halfHourLines = Array.from({ length: 48 }, (_, i) => i);
 
     return (
       <div className="liquid-glass-subtle h-full overflow-hidden rounded-2xl">
         <div className="h-full overflow-auto">
-          {hours.map((hour) => (
-            <div
-              className="flex min-h-[52px] transition-colors hover:bg-white/[0.02] md:min-h-[56px]"
-              key={hour}
-            >
-              <div className="w-12 flex-shrink-0 py-2 pr-2 text-right text-[11px] text-white/30 md:w-16 md:pr-3">
-                {format(new Date().setHours(hour, 0), "h a")}
-              </div>
-              <div className="relative flex-1 px-2 py-1">
-                {dayEvents
-                  .filter(
-                    (event) =>
-                      getVisibleEventStart(event, currentDate).getHours() ===
-                      hour
-                  )
-                  .map((event) => (
-                    <button
-                      className={cn(
-                        "event-item w-full text-left",
-                        getEventColor(event)
-                      )}
-                      key={event.id}
-                      onClick={() => openEditPanel(event)}
-                      type="button"
-                    >
-                      <span className="text-white/80">{event.title}</span>
-                      <span className="ml-1.5 text-white/30">
-                        {format(
-                          getVisibleEventStart(event, currentDate),
-                          "h:mm a"
-                        )}
-                      </span>
-                    </button>
-                  ))}
-              </div>
+          <div className="relative flex" style={{ minHeight: DAY_GRID_HEIGHT }}>
+            <div className="w-12 flex-shrink-0 md:w-16">
+              {hours.map((hour) => (
+                <div
+                  className="py-1 pr-2 text-right text-[11px] text-white/30 md:pr-3"
+                  key={hour}
+                  style={{ height: HOUR_HEIGHT_PX }}
+                >
+                  {format(new Date().setHours(hour, 0), "h a")}
+                </div>
+              ))}
             </div>
-          ))}
+            <div
+              className="relative flex-1 border-l border-white/[0.04]"
+              onClick={() => openCreatePanel(currentDate)}
+            >
+              {halfHourLines.map((slot) => (
+                <div
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0 border-b border-white/[0.04]",
+                    slot % 2 === 1 && "border-dashed border-white/[0.03]",
+                  )}
+                  key={slot}
+                  style={{ top: (slot / 2) * HOUR_HEIGHT_PX }}
+                />
+              ))}
+              {dayEvents.map((event) => {
+                const layout = getEventLayoutForDay(event, currentDate);
+                return (
+                  <button
+                    className="event-item absolute right-1 left-1 z-[1] truncate text-left text-[10px] md:text-[11px]"
+                    key={event.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditPanel(event);
+                    }}
+                    style={{
+                      ...eventPillStyle(event, subscribedCalendars),
+                      ...layout,
+                    }}
+                    type="button"
+                  >
+                    <span className="font-medium">{event.title}</span>
+                    <span className="ml-1.5 opacity-70">
+                      {format(
+                        getVisibleEventStart(event, currentDate),
+                        "h:mm a",
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -539,6 +774,7 @@ export function ModernCalendarView({
       end: addDays(weekStart, 6),
     });
     const hours = Array.from({ length: 24 }, (_, i) => i);
+    const halfHourLines = Array.from({ length: 48 }, (_, i) => i);
 
     return (
       <div className="liquid-glass-subtle flex h-full flex-col overflow-hidden rounded-2xl">
@@ -556,7 +792,7 @@ export function ModernCalendarView({
                 className={cn(
                   "mx-auto mt-0.5 flex h-6 w-6 items-center justify-center rounded-lg font-medium text-[10px] md:h-7 md:w-7 md:text-xs",
                   isSameDay(day, new Date()) &&
-                    "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30"
+                    "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30",
                 )}
               >
                 {format(day, "d")}
@@ -564,56 +800,67 @@ export function ModernCalendarView({
             </div>
           ))}
         </div>
-        <div className="grid flex-1 grid-cols-8 overflow-auto">
-          <div>
-            {hours.map((hour) => (
-              <div
-                className="h-[44px] py-1 pr-1 text-right text-[9px] text-white/25 md:h-[52px] md:pr-2 md:text-[10px]"
-                key={hour}
-              >
-                {format(new Date().setHours(hour, 0), "h a")}
-              </div>
-            ))}
-          </div>
-          {weekDays.map((day) => (
-            <div key={day.toISOString()}>
-              {hours.map((hour) => {
-                const hourEvents = displayEvents.filter(
-                  (event) =>
-                    eventOccursOnDate(event, day) &&
-                    getVisibleEventStart(event, day).getHours() === hour
-                );
-                return (
-                  <div
-                    className="h-[44px] border-r border-b border-white/[0.04] p-0.5 transition-colors hover:bg-white/[0.02] md:h-[52px]"
-                    key={hour}
-                    onClick={() => {
-                      const d = new Date(day);
-                      d.setHours(hour, 0, 0, 0);
-                      openCreatePanel(d);
-                    }}
-                  >
-                    {hourEvents.map((event) => (
+        <div className="flex-1 overflow-auto">
+          <div className="grid grid-cols-8" style={{ minHeight: DAY_GRID_HEIGHT }}>
+            <div>
+              {hours.map((hour) => (
+                <div
+                  className="py-1 pr-1 text-right text-[9px] text-white/25 md:pr-2 md:text-[10px]"
+                  key={hour}
+                  style={{ height: HOUR_HEIGHT_PX }}
+                >
+                  {format(new Date().setHours(hour, 0), "h a")}
+                </div>
+              ))}
+            </div>
+            {weekDays.map((day) => {
+              const dayEvents = displayEvents.filter(
+                (event) =>
+                  eventOccursOnDate(event, day) && !event.allDay,
+              );
+
+              return (
+                <div
+                  className="relative border-r border-white/[0.04]"
+                  key={day.toISOString()}
+                  onClick={() => openCreatePanel(day)}
+                  style={{ height: DAY_GRID_HEIGHT }}
+                >
+                  {halfHourLines.map((slot) => (
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-x-0 border-b border-white/[0.04]",
+                        slot % 2 === 1 &&
+                          "border-dashed border-white/[0.03]",
+                      )}
+                      key={slot}
+                      style={{ top: (slot / 2) * HOUR_HEIGHT_PX }}
+                    />
+                  ))}
+                  {dayEvents.map((event) => {
+                    const layout = getEventLayoutForDay(event, day);
+                    return (
                       <button
-                        className={cn(
-                          "event-item w-full truncate text-left text-[9px] md:text-[10px]",
-                          getEventColor(event)
-                        )}
+                        className="event-item absolute right-0.5 left-0.5 z-[1] truncate px-1 text-left text-[9px] md:text-[10px]"
                         key={event.id}
                         onClick={(e) => {
                           e.stopPropagation();
                           openEditPanel(event);
                         }}
+                        style={{
+                          ...eventPillStyle(event, subscribedCalendars),
+                          ...layout,
+                        }}
                         type="button"
                       >
                         {event.title}
                       </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -649,20 +896,6 @@ export function ModernCalendarView({
     const multiDayEvents = displayEvents.filter(isMultiDay);
     const MAX_LANES = 3;
     const LANE_H = 22;
-
-    const getSpanColor = (event: CalendarEvent) => {
-      const cat = event.categories?.[0] || "";
-      switch (cat) {
-        case "Work":
-          return "bg-emerald-500/20 text-emerald-300";
-        case "Family":
-          return "bg-purple-500/20 text-purple-300";
-        case "Meeting":
-          return "bg-amber-500/20 text-amber-300";
-        default:
-          return "bg-blue-500/20 text-blue-300";
-      }
-    };
 
     return (
       <div className="liquid-glass-subtle flex h-full flex-col overflow-hidden rounded-2xl">
@@ -829,15 +1062,16 @@ export function ModernCalendarView({
                               .slice(0, singleLimit)
                               .map((event) => (
                                 <button
-                                  className={cn(
-                                    "event-item w-full truncate text-left",
-                                    getEventColor(event)
-                                  )}
+                                  className="event-item w-full truncate text-left"
                                   key={event.id}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openEditPanel(event);
                                   }}
+                                  style={eventPillStyle(
+                                    event,
+                                    subscribedCalendars,
+                                  )}
                                   type="button"
                                 >
                                   {event.title}
@@ -855,11 +1089,14 @@ export function ModernCalendarView({
                             <div className="mt-0.5 flex justify-center gap-[3px] md:hidden">
                               {allDayEvents.slice(0, 3).map((event) => (
                                 <div
-                                  className={cn(
-                                    "h-[5px] w-[5px] rounded-full bg-current",
-                                    getEventColor(event)
-                                  )}
+                                  className="h-[5px] w-[5px] rounded-full"
                                   key={event.id}
+                                  style={{
+                                    backgroundColor: resolveEventCalendarColor(
+                                      event,
+                                      subscribedCalendars,
+                                    ),
+                                  }}
                                 />
                               ))}
                             </div>
@@ -886,7 +1123,6 @@ export function ModernCalendarView({
                                   ? "rounded-l-[5px] pl-2"
                                   : "pl-1.5",
                                 span.isEnd ? "rounded-r-[5px]" : "",
-                                getSpanColor(span.event)
                               )}
                               key={`${span.event.id}-w${weekIdx}`}
                               onClick={(e) => {
@@ -894,6 +1130,10 @@ export function ModernCalendarView({
                                 openEditPanel(span.event);
                               }}
                               style={{
+                                ...eventPillStyle(
+                                  span.event,
+                                  subscribedCalendars,
+                                ),
                                 gridColumn: `${span.startCol + 1} / span ${span.span}`,
                                 gridRow: span.lane + 1,
                               }}
@@ -1129,58 +1369,90 @@ export function ModernCalendarView({
         New Event
       </Button>
 
-      {/* Google Calendars */}
-      {userProvider === "google" && googleCalendars.length > 0 && (
+      {/* Subscribed calendars */}
+      {subscribedCalendars.length > 0 && (
         <div className="liquid-glass-subtle rounded-xl p-3">
-          <div className="mb-2.5">
-            <span className="section-label">My Calendars</span>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={toggleCalendarsExpanded}
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+            >
+              <span className="section-label">My Calendars</span>
+              {calendarsExpanded ? (
+                <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-white/30" />
+              ) : (
+                <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-white/30" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runCalendarSync(true)}
+              disabled={syncStatus === "syncing"}
+              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 text-[9px] text-white/45 hover:bg-white/[0.06] disabled:opacity-50"
+              title="Sync calendars now"
+            >
+              {syncStatus === "syncing" ? (
+                <Loader2Icon className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCwIcon className="h-3 w-3" />
+              )}
+              Sync
+            </button>
           </div>
-          <div className="space-y-1.5">
-            {googleCalendars.map((calendar) => (
-              <div
-                className="flex items-center justify-between gap-2 py-0.5"
-                key={calendar.id}
-              >
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleCalendarVisibility(calendar.id)}
-                    className="h-3.5 w-3.5 flex-shrink-0 rounded transition-opacity"
-                    style={{ backgroundColor: calendar.backgroundColor, opacity: calendar.visible ? 1 : 0.25 }}
-                    aria-label={calendar.visible ? "Hide calendar" : "Show calendar"}
-                  />
-                  <span className="truncate text-[11px] text-white/50">
-                    {calendar.summary}
-                    {calendar.primary && (
-                      <span className="ml-1 text-white/25">(Primary)</span>
-                    )}
-                  </span>
+          <p
+            className={cn(
+              "mb-2 truncate text-[9px]",
+              syncStatus === "error" ? "text-amber-400/80" : "text-white/30",
+            )}
+          >
+            {syncStatus === "syncing" && "Syncing calendars…"}
+            {syncStatus === "error" && (syncSummary ?? "Sync failed")}
+            {syncStatus === "success" &&
+              (syncSummary ??
+                (lastSyncedAt
+                  ? `Updated ${formatSyncAge(lastSyncedAt)}`
+                  : "Synced"))}
+            {syncStatus === "idle" &&
+              (lastSyncedAt
+                ? `Last sync ${formatSyncAge(lastSyncedAt)}`
+                : "Waiting for first sync…")}
+            {backgroundExtending && syncStatus !== "syncing" && (
+              <span className="text-white/25"> · loading more history…</span>
+            )}
+          </p>
+          {calendarsExpanded && (
+            <div className="max-h-48 space-y-1.5 overflow-y-auto">
+              {subscribedCalendars.map((calendar) => (
+                <div
+                  className="flex items-center justify-between gap-2 py-0.5"
+                  key={calendar.key}
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleCalendarVisibility(calendar.key)}
+                      className="h-3.5 w-3.5 flex-shrink-0 rounded transition-opacity"
+                      style={{
+                        backgroundColor: calendar.color,
+                        opacity: calendar.visible ? 1 : 0.25,
+                      }}
+                      aria-label={
+                        calendar.visible ? "Hide calendar" : "Show calendar"
+                      }
+                    />
+                    <span className="truncate text-[11px] text-white/50">
+                      {calendar.name}
+                      <span className="ml-1 text-white/25">
+                        ({friendlyAccountName(calendar.accountEmail)})
+                      </span>
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Additional accounts from settings */}
-      {additionalAccounts.length > 0 && (
-        <div className="space-y-2">
-          {additionalAccounts.map((acct) => (
-            <div key={acct.id} className="flex items-center gap-1.5 px-1 py-0.5">
-              <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: acct.color }} />
-              <span className="truncate text-[9px] text-white/35">{acct.email || acct.label}</span>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
-      {additionalAccounts.length === 0 && (
-        <button
-          type="button"
-          onClick={() => router.push("/settings?section=accounts")}
-          className="text-[9px] text-white/20 hover:text-white/40 transition-colors px-1"
-        >
-          + Add accounts in Settings
-        </button>
       )}
         </>
       )}
@@ -1195,12 +1467,70 @@ export function ModernCalendarView({
 
   /* ─── Panel Content (shared between mobile sheet & desktop side) ── */
 
+  const userAvatarButton = (
+    <Button
+      className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/[0.08] bg-white/[0.06] p-0 hover:bg-white/[0.1]"
+      size="icon"
+      variant="ghost"
+    >
+      {userImage ? (
+        <img
+          alt={userName}
+          className="h-full w-full object-cover"
+          src={userImage}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-500/40 to-blue-600/40 font-semibold text-white text-xs">
+          {userName?.[0] || <UserIcon className="h-3.5 w-3.5" />}
+        </div>
+      )}
+    </Button>
+  );
+
+  const sidebarUserFooter = isLoggedIn ? (
+    <div className="flex shrink-0 items-center gap-2 border-white/[0.06] border-t p-4">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>{userAvatarButton}</DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="mb-2 w-56 rounded-2xl border border-white/[0.12] bg-popover p-1.5 shadow-2xl ring-1 ring-white/10"
+          side="top"
+        >
+          <DropdownMenuLabel className="px-3 py-2.5">
+            <p className="font-semibold text-white text-xs">{userName}</p>
+            <p className="text-[10px] text-white/55">{userEmail}</p>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator className="bg-white/[0.06]" />
+          <DropdownMenuItem
+            className="cursor-pointer rounded-xl text-red-300 text-xs focus:bg-white/[0.06] focus:text-red-300"
+            onClick={async () => {
+              await authClient.signOut();
+              window.location.href = "/";
+            }}
+          >
+            <LogOutIcon className="mr-2 h-3.5 w-3.5" />
+            Log out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button
+        className="h-9 w-9 shrink-0 rounded-lg border border-white/[0.06] bg-white/[0.03] text-white/45 hover:bg-white/[0.06] hover:text-white/70"
+        onClick={() => router.push("/settings")}
+        size="icon"
+        title="Settings"
+        variant="ghost"
+      >
+        <SettingsIcon className="h-4 w-4" />
+      </Button>
+    </div>
+  ) : null;
+
   const panelContent = (
     <>
       {rightPanel === "event" && (
         <EventDetailPanel
           event={selectedEvent}
-          googleCalendars={googleCalendars}
+          googleCalendars={googleCalendarsForPanel}
           mode={eventPanelMode}
           onClose={closePanel}
           onEventCreated={() => {
@@ -1265,8 +1595,11 @@ export function ModernCalendarView({
                   <XIcon className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <div className="flex-1 space-y-4 overflow-y-auto p-4">
-                {sidebarInner}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex-1 space-y-4 overflow-y-auto p-4">
+                  {sidebarInner}
+                </div>
+                {sidebarUserFooter}
               </div>
             </motion.div>
           </>
@@ -1278,6 +1611,7 @@ export function ModernCalendarView({
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {sidebarInner}
         </div>
+        {sidebarUserFooter}
       </div>
 
       {/* ── Main Calendar ── */}
@@ -1326,6 +1660,29 @@ export function ModernCalendarView({
             >
               Today
             </Button>
+
+            {isLoggedIn && (
+              <Button
+                className={cn(
+                  "hidden h-7 gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[11px] text-white/50 hover:bg-white/[0.06] md:inline-flex",
+                  syncStatus === "error" && "border-amber-500/20 text-amber-400/80",
+                )}
+                disabled={syncStatus === "syncing"}
+                onClick={() => void runCalendarSync(true)}
+                size="sm"
+                title={syncSummary ?? "Sync all connected calendars"}
+                variant="ghost"
+              >
+                {syncStatus === "syncing" ? (
+                  <Loader2Icon className="h-3 w-3 animate-spin" />
+                ) : syncStatus === "error" ? (
+                  <AlertCircleIcon className="h-3 w-3" />
+                ) : (
+                  <RefreshCwIcon className="h-3 w-3" />
+                )}
+                {syncStatus === "syncing" ? "Syncing" : "Sync"}
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2.5">
@@ -1381,56 +1738,6 @@ export function ModernCalendarView({
             >
               <SparklesIcon className="h-4 w-4" />
             </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/[0.08] bg-white/[0.06] p-0 hover:bg-white/[0.1]"
-                  size="icon"
-                  variant="ghost"
-                >
-                  {userImage ? (
-                    <img
-                      alt={userName}
-                      className="h-full w-full object-cover"
-                      src={userImage}
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-500/40 to-blue-600/40 font-semibold text-white text-xs">
-                      {userName?.[0] || <UserIcon className="h-3.5 w-3.5" />}
-                    </div>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="mt-2 w-56 rounded-2xl border border-white/[0.12] bg-popover p-1.5 shadow-2xl ring-1 ring-white/10"
-              >
-                <DropdownMenuLabel className="px-3 py-2.5">
-                  <p className="font-semibold text-white text-xs">{userName}</p>
-                  <p className="text-[10px] text-white/55">{userEmail}</p>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/[0.06]" />
-                <DropdownMenuItem
-                  className="cursor-pointer rounded-xl text-white/80 text-xs focus:bg-white/[0.06] focus:text-white"
-                  onClick={() => router.push("/settings")}
-                >
-                  <SettingsIcon className="mr-2 h-3.5 w-3.5" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-white/[0.06]" />
-                <DropdownMenuItem
-                  className="cursor-pointer rounded-xl text-red-300 text-xs focus:bg-white/[0.06] focus:text-red-300"
-                  onClick={async () => {
-                    await authClient.signOut();
-                    window.location.href = "/";
-                  }}
-                >
-                  <LogOutIcon className="mr-2 h-3.5 w-3.5" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
 

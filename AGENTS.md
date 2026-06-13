@@ -126,3 +126,25 @@ No automated test suite is currently configured. There are no test files or test
 ## Environment
 
 The project requires environment variables for Supabase (URL, anon key, service-role key), OpenRouter, and Resend. Google OAuth is configured in the Supabase dashboard rather than the app env. `.env*` is gitignored; see `README.md` for the full variable list.
+
+## Learned User Preferences
+
+- Primary Supabase login account is separate from linked calendar accounts; multiple Google and CalDAV accounts must coexist without overwriting prior connections.
+- Per-account calendar subscription is configured in Settings, not by auto-importing every shared/org calendar.
+- Sidebar calendar visibility toggles must persist across sessions; only subscribed calendars sync events.
+- Calendar labels should show friendly account names (e.g. `julian.tedstone@coherence.digital` → "Julian, Coherence"), not generic "Calendar"/"Primary".
+- Do not list connected accounts under the My Calendars sidebar; account management belongs in Settings.
+- CalDAV credential edits must retain stored passwords without forcing re-entry on Save/Reconnect.
+- Calendar sync should use a bounded date window (±3 months initially), not full history pulls.
+- Event UI: participant fields need Soma/message-history contact autocomplete; notes should render plain text; time picker supports 5-minute increments; pill colors match subscribed calendar colors without side accent stripes.
+
+## Learned Workspace Facts
+
+- Google and CalDAV tokens/credentials live in `nozero.profiles.preferences` (`connectedTokens`, `connectedCalDav`); the `calendar_tokens` migration exists but the app does not use that table.
+- CalDAV connect/sync: `POST /api/accounts/caldav/connect`, `lib/caldav-sync.ts` with `tsdav` `DAVClient` (authenticate at construction; no `client.login()`).
+- Multi-account Google sync pulls all linked accounts via `pullAllGoogleCalendarAccounts()` in `lib/google-accounts-sync.ts`.
+- Calendar subscriptions and visibility filtering: `lib/calendar-subscriptions.ts`, `lib/calendar-subscription-utils.ts` (`eventMatchesVisibleSubscriptions`); visibility API at `/api/calendar/visibility`.
+- Windowed sync: initial pull ±3 months (`lib/sync-window.ts`, `lib/calendar-sync-range.ts`); background extension via `POST /api/calendar/sync/extend` in 3-month chunks.
+- Contact autocomplete: `/api/contacts/suggest` (Soma client in `lib/soma-client.ts`) plus local invitation/event attendee fallbacks.
+- Calendar page slowness risk: `modern-calendar-view.tsx` mount runs full sync, repeated `refreshEvents()`, and up to ~24 background extend API calls per load.
+- Settings form saves must merge `preferences` blobs so OAuth/calendar token fields are not wiped when updating appearance/time prefs.

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string; connected?: string; email?: string; oauth_error?: string }>;
+  searchParams: Promise<{ section?: string; connected?: string; email?: string; oauth_error?: string; sync?: string }>;
 }) {
   const user = await getCurrentAuthUser();
 
@@ -17,17 +17,22 @@ export default async function SettingsPage({
   }
 
   const preferences = await getUserPreferences(user.id);
-  const { section, connected, email, oauth_error } = await searchParams;
+  const { section, connected, email, oauth_error, sync } = await searchParams;
   const validSection = ["appearance", "time", "accounts"].includes(section ?? "") ? section : undefined;
+  const connectedAccounts = Array.isArray(preferences.connectedAccounts)
+    ? preferences.connectedAccounts
+    : [];
 
   return (
     <div className="min-h-dvh overflow-x-hidden bg-background">
       <ModernSettingsForm
+        initialConnectedAccounts={connectedAccounts}
         initialPreferences={preferences}
         initialSection={validSection as "appearance" | "time" | "accounts" | undefined}
         connectedAccountId={connected}
         connectedEmail={email}
         oauthError={oauth_error}
+        triggerSync={sync === "1"}
         userEmail={user.email}
         userId={user.id}
         userImage={user.image ?? ""}

@@ -23,11 +23,13 @@ import { cn } from "@/lib/utils";
 const VALUE_FORMAT = "yyyy-MM-dd'T'HH:mm";
 const DEFAULT_HOUR = 9;
 const DEFAULT_MINUTE = 0;
+const TIME_SLOT_MINUTES = 5;
+const SLOTS_PER_DAY = (24 * 60) / TIME_SLOT_MINUTES;
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
 
-const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => ({
-  hours: Math.floor(i / 2),
-  minutes: (i % 2) * 30,
+const TIME_SLOTS = Array.from({ length: SLOTS_PER_DAY }, (_, i) => ({
+  hours: Math.floor((i * TIME_SLOT_MINUTES) / 60),
+  minutes: (i * TIME_SLOT_MINUTES) % 60,
 }));
 
 function parseDateTime(value?: string) {
@@ -232,7 +234,7 @@ function TimeSlotList({
 
   return (
     <div
-      className="max-h-[196px] overflow-y-auto overscroll-contain py-0.5"
+      className="max-h-[220px] overflow-y-auto overscroll-contain py-0.5"
       ref={scrollRef}
     >
       {TIME_SLOTS.map(({ hours, minutes }) => {

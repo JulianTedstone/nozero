@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { syncCreatedLocalEventToGoogle } from "@/lib/calendar-google-sync-server";
-import { createEvent, getEvents, syncWithGoogleCalendar } from "@/lib/calendar";
-import { ensureGoogleCalendarWatch } from "@/lib/google-calendar";
-import { getGoogleTokens } from "@/lib/google-tokens";
-import { upsertUserRecord } from "@/lib/store";
-
-function getWebhookBaseUrl(request: Request) {
-  const origin = new URL(request.url).origin;
-  return origin === "null" ? undefined : origin;
-}
+import { createEvent, getEvents } from "@/lib/calendar";
 
 export async function GET(request: Request) {
   try {
@@ -25,41 +17,6 @@ export async function GET(request: Request) {
 
     if (!(start && end)) {
       return NextResponse.json({ error: "Missing start/end" }, { status: 400 });
-    }
-
-    try {
-      const tokens = await getGoogleTokens(user.id);
-      if (tokens?.accessToken && tokens?.refreshToken) {
-        await upsertUserRecord({
-          userId: user.id,
-          provider: "google",
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: tokens.accessTokenExpiresAt
-            ? Math.floor(tokens.accessTokenExpiresAt / 1000)
-            : 0,
-        });
-
-        await syncWithGoogleCalendar(user.id, {
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: tokens.accessTokenExpiresAt
-            ? Math.floor(tokens.accessTokenExpiresAt / 1000)
-            : null,
-        });
-
-        await ensureGoogleCalendarWatch({
-          userId: user.id,
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: tokens.accessTokenExpiresAt
-            ? Math.floor(tokens.accessTokenExpiresAt / 1000)
-            : 0,
-          webhookBaseUrl: getWebhookBaseUrl(request),
-        });
-      }
-    } catch (error) {
-      console.error("Non-blocking Google sync failed during events fetch:", error);
     }
 
     const events = await getEvents(user.id, start, end);

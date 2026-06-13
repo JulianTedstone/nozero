@@ -10,6 +10,7 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  serverExternalPackages: ["tsdav", "node-ical", "temporal-polyfill", "rrule-temporal"],
   typescript: {
     ignoreBuildErrors: true,
   },
