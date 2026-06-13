@@ -108,7 +108,8 @@ export async function refreshConnectedAccountToken(
       tokens[email].accessToken = data.access_token;
       tokens[email].tokenExpiry = new Date(Date.now() + data.expires_in * 1000).toISOString();
       tokens[email].updatedAt = new Date().toISOString();
-      await admin.from("profiles").update({ preferences: { ...prefs, connectedTokens: tokens } }).eq("id", userId);
+      const { patchUserPreferences } = await import("@/lib/user-preferences");
+      await patchUserPreferences(userId, { connectedTokens: tokens });
     }
   }
 

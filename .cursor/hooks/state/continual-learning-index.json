@@ -2,8 +2,40 @@
   "version": 1,
   "transcripts": {
     "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/156a4051-95e0-43d7-83b1-1ae9b60845c1.jsonl": {
-      "mtimeMs": 1781305445000,
-      "processedAt": "2026-06-13T00:04:05.000Z"
+      "mtimeMs": 1781361895000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/2d1f930b-afbe-40ec-9262-dfc8ae027965.jsonl": {
+      "mtimeMs": 1781305600000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/abb4078f-71ae-4072-94a7-055b8306fbac.jsonl": {
+      "mtimeMs": 1781361386000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/b7393826-b918-46a2-96e2-c76d867749ae.jsonl": {
+      "mtimeMs": 1781361902000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/6c4b40f8-62e1-4dba-b84e-f4c7eb2d93a4/6c4b40f8-62e1-4dba-b84e-f4c7eb2d93a4.jsonl": {
+      "mtimeMs": 1781361539000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/a12c8182-61c9-4288-af2d-b9ec88993e4b/a12c8182-61c9-4288-af2d-b9ec88993e4b.jsonl": {
+      "mtimeMs": 1781361571000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/eb1544b2-0294-49e1-bbc6-b7e351289a7d/eb1544b2-0294-49e1-bbc6-b7e351289a7d.jsonl": {
+      "mtimeMs": 1781340037000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/e349b7b8-2a7e-4245-92aa-5611773be7e2/e349b7b8-2a7e-4245-92aa-5611773be7e2.jsonl": {
+      "mtimeMs": 1781361608000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/e349b7b8-2a7e-4245-92aa-5611773be7e2/subagents/aa28ca8f-42f3-4b4e-91cd-871cfe0f05f4.jsonl": {
+      "mtimeMs": 1781341478000,
+      "processedAt": "2026-06-13T14:46:03.000Z"
     }
   }
 }

@@ -1,5 +1,8 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserPreferences, getUserRecord } from "@/lib/store";
+import {
+  patchUserPreferences,
+  readUserPreferences,
+} from "@/lib/user-preferences";
 
 export type CalendarSubscription = {
   calendarId: string;
@@ -21,29 +24,6 @@ export function calendarSubscriptionKey(
   calendarId: string,
 ): string {
   return `${accountId}::${calendarId}`;
-}
-
-async function readPreferences(userId: string) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("profiles")
-    .select("preferences")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data?.preferences ?? {}) as Record<string, unknown>;
-}
-
-async function writePreferences(
-  userId: string,
-  prefs: Record<string, unknown>,
-) {
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("profiles")
-    .update({ preferences: prefs })
-    .eq("id", userId);
-  if (error) throw error;
 }
 
 export function defaultGoogleSubscriptions(
@@ -82,13 +62,13 @@ export async function setSubscriptionsForAccount(
   accountId: string,
   subscriptions: CalendarSubscription[],
 ) {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const calendarSubscriptions = {
     ...((prefs.calendarSubscriptions as Record<string, CalendarSubscription[]>) ??
       {}),
     [accountId]: subscriptions,
   };
-  await writePreferences(userId, { ...prefs, calendarSubscriptions });
+  await patchUserPreferences(userId, { calendarSubscriptions });
 }
 
 export async function getCalendarVisibility(
@@ -104,11 +84,7 @@ export async function setCalendarVisibilityMap(
   userId: string,
   visibility: Record<string, boolean>,
 ) {
-  const prefs = await readPreferences(userId);
-  await writePreferences(userId, {
-    ...prefs,
-    calendarVisibility: visibility,
-  });
+  await patchUserPreferences(userId, { calendarVisibility: visibility });
 }
 
 export async function setCalendarVisible(
@@ -116,12 +92,12 @@ export async function setCalendarVisible(
   key: string,
   visible: boolean,
 ) {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const calendarVisibility = {
     ...((prefs.calendarVisibility as Record<string, boolean>) ?? {}),
     [key]: visible,
   };
-  await writePreferences(userId, { ...prefs, calendarVisibility });
+  await patchUserPreferences(userId, { calendarVisibility });
 }
 
 export async function getCalendarSidebarExpanded(
@@ -135,11 +111,7 @@ export async function setCalendarSidebarExpanded(
   userId: string,
   expanded: boolean,
 ) {
-  const prefs = await readPreferences(userId);
-  await writePreferences(userId, {
-    ...prefs,
-    calendarSidebarExpanded: expanded,
-  });
+  await patchUserPreferences(userId, { calendarSidebarExpanded: expanded });
 }
 
 /** Subscribed calendars for sync — returns primary + connected account entries. */

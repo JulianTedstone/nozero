@@ -1,5 +1,8 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserPreferences, getUserRecord } from "@/lib/store";
+import {
+  patchUserPreferences,
+  readUserPreferences,
+} from "@/lib/user-preferences";
 
 export type EmailAccountView = {
   id: string;
@@ -10,29 +13,6 @@ export type EmailAccountView = {
   visible: boolean;
   isPrimary: boolean;
 };
-
-async function readPreferences(userId: string) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("profiles")
-    .select("preferences")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data?.preferences ?? {}) as Record<string, unknown>;
-}
-
-async function writePreferences(
-  userId: string,
-  prefs: Record<string, unknown>,
-) {
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("profiles")
-    .update({ preferences: prefs })
-    .eq("id", userId);
-  if (error) throw error;
-}
 
 export async function getEmailAccountVisibility(
   userId: string,
@@ -48,23 +28,19 @@ export async function setEmailAccountVisibility(
   email: string,
   visible: boolean,
 ) {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const emailAccountVisibility = {
     ...((prefs.emailAccountVisibility as Record<string, boolean>) ?? {}),
     [email.toLowerCase()]: visible,
   };
-  await writePreferences(userId, { ...prefs, emailAccountVisibility });
+  await patchUserPreferences(userId, { emailAccountVisibility });
 }
 
 export async function setEmailAccountVisibilityMap(
   userId: string,
   map: Record<string, boolean>,
 ) {
-  const prefs = await readPreferences(userId);
-  await writePreferences(userId, {
-    ...prefs,
-    emailAccountVisibility: map,
-  });
+  await patchUserPreferences(userId, { emailAccountVisibility: map });
 }
 
 export async function getEmailAccountsExpanded(userId: string): Promise<boolean> {
@@ -76,11 +52,7 @@ export async function setEmailAccountsExpanded(
   userId: string,
   expanded: boolean,
 ) {
-  const prefs = await readPreferences(userId);
-  await writePreferences(userId, {
-    ...prefs,
-    emailAccountsExpanded: expanded,
-  });
+  await patchUserPreferences(userId, { emailAccountsExpanded: expanded });
 }
 
 const ACCOUNT_COLORS = [

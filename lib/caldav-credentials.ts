@@ -1,4 +1,8 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  readUserPreferences,
+  removeCalDavCredentialAtomic,
+  setCalDavCredentialAtomic,
+} from "@/lib/user-preferences";
 
 export type CalDavCredentialRecord = {
   serverUrl: string;
@@ -7,34 +11,11 @@ export type CalDavCredentialRecord = {
   updatedAt: string;
 };
 
-async function readPreferences(userId: string) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("profiles")
-    .select("preferences")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data?.preferences ?? {}) as Record<string, unknown>;
-}
-
-async function writePreferences(
-  userId: string,
-  prefs: Record<string, unknown>,
-) {
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("profiles")
-    .update({ preferences: prefs })
-    .eq("id", userId);
-  if (error) throw error;
-}
-
 export async function getCalDavCredentials(
   userId: string,
   email: string,
 ): Promise<CalDavCredentialRecord | null> {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const connectedCalDav = (prefs.connectedCalDav ?? {}) as Record<
     string,
     CalDavCredentialRecord
@@ -45,7 +26,7 @@ export async function getCalDavCredentials(
 export async function listCalDavCredentials(userId: string): Promise<
   Array<{ email: string } & CalDavCredentialRecord>
 > {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const connectedCalDav = (prefs.connectedCalDav ?? {}) as Record<
     string,
     CalDavCredentialRecord
@@ -61,23 +42,12 @@ export async function setCalDavCredentials(
   email: string,
   creds: Omit<CalDavCredentialRecord, "updatedAt">,
 ) {
-  const prefs = await readPreferences(userId);
-  const connectedCalDav = (prefs.connectedCalDav ?? {}) as Record<
-    string,
-    CalDavCredentialRecord
-  >;
-  connectedCalDav[email] = {
+  await setCalDavCredentialAtomic(userId, email, {
     ...creds,
     updatedAt: new Date().toISOString(),
-  };
-  await writePreferences(userId, { ...prefs, connectedCalDav });
+  });
 }
 
 export async function removeCalDavCredentials(userId: string, email: string) {
-  const prefs = await readPreferences(userId);
-  const connectedCalDav = {
-    ...(prefs.connectedCalDav as Record<string, CalDavCredentialRecord> | undefined),
-  };
-  delete connectedCalDav[email];
-  await writePreferences(userId, { ...prefs, connectedCalDav });
+  await removeCalDavCredentialAtomic(userId, email);
 }

@@ -13,7 +13,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -137,7 +137,10 @@ type Account = {
   color: string;
   serverUrl?: string;
   username?: string;
+  /** Transient UI only — never persisted to localStorage or server metadata. */
   password?: string;
+  /** CalDAV password exists server-side in preferences.connectedCalDav. */
+  hasStoredCredentials?: boolean;
 };
 
 interface ModernSettingsFormProps {
@@ -358,7 +361,15 @@ function buildAccountList(
   userEmail: string,
   serverAccounts?: Account[],
 ): Account[] {
-  const primary: Account = {
+  const primary = primaryGoogleAccount(userEmail);
+  const additional = (serverAccounts ?? []).filter(
+    (a) => a.id !== "primary-google",
+  );
+  return additional.length > 0 ? [primary, ...additional] : [primary];
+}
+
+function primaryGoogleAccount(userEmail: string): Account {
+  return {
     id: "primary-google",
     email: userEmail,
     type: "google",
@@ -366,10 +377,86 @@ function buildAccountList(
     connected: true,
     color: "#4285F4",
   };
-  const additional = (serverAccounts ?? []).filter(
-    (a) => a.id !== "primary-google",
-  );
+}
+
+/** Merge account lists from server, API, and localStorage — later sources win on conflict. */
+function mergeAccountLists(
+  userEmail: string,
+  ...sources: (Account[] | undefined)[]
+): Account[] {
+  const primary = primaryGoogleAccount(userEmail);
+  const byId = new Map<string, Account>();
+  for (const source of sources) {
+    if (!source?.length) continue;
+    for (const account of source) {
+      if (account.id === "primary-google") continue;
+      const prev = byId.get(account.id);
+      const { password: _dropPassword, ...rest } = account;
+      byId.set(account.id, prev ? { ...prev, ...rest, password: undefined } : { ...rest, password: undefined });
+    }
+  }
+  const additional = [...byId.values()];
   return additional.length > 0 ? [primary, ...additional] : [primary];
+}
+
+function migrateLegacyAccountStorage(
+  accountsKey: string,
+  userId: string,
+  userEmail: string,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (!window.localStorage.getItem(accountsKey)) {
+      const legacyKeys = [
+        userId ? `nozero:accounts:${userId}` : null,
+        userEmail ? `nozero:accounts:${userEmail}` : null,
+      ].filter(Boolean) as string[];
+      for (const legacyKey of legacyKeys) {
+        const legacyStored = window.localStorage.getItem(legacyKey);
+        if (legacyStored) {
+          window.localStorage.setItem(accountsKey, legacyStored);
+          break;
+        }
+      }
+    }
+    if (userId) window.localStorage.removeItem(`nozero:accounts:${userId}`);
+    if (userEmail) window.localStorage.removeItem(`nozero:accounts:${userEmail}`);
+  } catch {}
+}
+
+function stripPasswordsForStorage(accounts: Account[]): Account[] {
+  return accounts.map(({ password: _password, ...rest }) => rest);
+}
+
+function readAccountsFromLocalStorage(accountsKey: string): Account[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = window.localStorage.getItem(accountsKey);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as Account[];
+    return Array.isArray(parsed) ? stripPasswordsForStorage(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+function accountsMetadataFingerprint(accounts: Account[]): string {
+  return accounts
+    .filter((a) => a.id !== "primary-google")
+    .map(
+      (a) =>
+        `${a.id}:${a.email}:${a.type}:${a.label}:${a.color}:${a.serverUrl ?? ""}:${a.username ?? ""}`,
+    )
+    .sort()
+    .join("|");
+}
+
+function accountsFingerprint(accounts: Account[]): string {
+  return accounts
+    .filter((a) => a.id !== "primary-google")
+    .map((a) => `${a.id}:${a.email}:${a.connected}:${a.type}`)
+    .sort()
+    .join("|");
 }
 
 function ContextBindingsHint({ accountEmail }: { accountEmail: string }) {
@@ -445,12 +532,13 @@ export function ModernSettingsForm({
   );
 
   async function persistAccounts(next: Account[]) {
+    const stripped = stripPasswordsForStorage(next);
     try {
-      window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(next));
+      window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(stripped));
     } catch {}
-    const payload = next
+    const payload = stripped
       .filter((a) => a.id !== "primary-google")
-      .map(({ password: _password, ...rest }) => rest);
+      .map(({ hasStoredCredentials: _hasStoredCredentials, ...rest }) => rest);
     try {
       await fetch("/api/accounts", {
         method: "PUT",
@@ -459,6 +547,48 @@ export function ModernSettingsForm({
       });
     } catch (error) {
       console.error("Failed to persist accounts:", error);
+    }
+  }
+
+  async function reconnectStoredCalDavAccounts(accountList: Account[]) {
+    const targets = accountList.filter(
+      (a) =>
+        a.type === "caldav" &&
+        a.hasStoredCredentials &&
+        a.email &&
+        a.serverUrl &&
+        a.username,
+    );
+    if (targets.length === 0) return;
+
+    let anyConnected = false;
+    for (const account of targets) {
+      try {
+        const res = await fetch("/api/accounts/caldav/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountId: account.id,
+            email: account.email,
+            serverUrl: account.serverUrl,
+            username: account.username,
+            label: account.label,
+            color: account.color,
+          }),
+        });
+        if (res.ok) anyConnected = true;
+      } catch {
+        // Best-effort reconnect on load
+      }
+    }
+
+    if (anyConnected) {
+      try {
+        await fetch("/api/calendar/sync", { method: "POST" });
+      } catch {}
+      try {
+        await fetch("/api/email/sync", { method: "POST" });
+      } catch {}
     }
   }
 
@@ -498,13 +628,9 @@ export function ModernSettingsForm({
     if (!connectedAccountId) return;
     const email = connectedEmail ?? "";
 
-    let current: Account[] = [];
-    try {
-      const stored = window.localStorage.getItem(ACCOUNTS_KEY);
-      if (stored) current = JSON.parse(stored) as Account[];
-    } catch {}
+    let current = readAccountsFromLocalStorage(ACCOUNTS_KEY);
     if (current.length === 0) {
-      current = [{ id: "primary-google", email: userEmail, type: "google", label: "Google Calendar & Gmail", connected: true, color: "#4285F4" }];
+      current = [primaryGoogleAccount(userEmail)];
     }
 
     const byId = connectedAccountId !== "new" ? current.find((a) => a.id === connectedAccountId) : undefined;
@@ -517,6 +643,8 @@ export function ModernSettingsForm({
     } else {
       next = [...current, { id: `acct-${Date.now()}`, email, type: "google" as AccountType, label: "Google Calendar & Gmail", connected: true, color: "#4285F4" }];
     }
+
+    next = mergeAccountLists(userEmail, initialConnectedAccounts, next);
 
     persistAccounts(next);
     setAccounts(next);
@@ -536,6 +664,72 @@ export function ModernSettingsForm({
   const [editDraft, setEditDraft] = useState<Partial<Account>>({});
 
   const { theme, setTheme } = useTheme();
+  const [themeMounted, setThemeMounted] = useState(false);
+
+  useEffect(() => {
+    setThemeMounted(true);
+  }, []);
+
+  const didReconnectRef = useRef(false);
+
+  // Hydrate accounts from localStorage + API (server props alone miss client-only data).
+  useEffect(() => {
+    if (connectedAccountId || oauthError) return;
+
+    let cancelled = false;
+
+    async function hydrateAccounts() {
+      migrateLegacyAccountStorage(ACCOUNTS_KEY, userId, userEmail);
+      const fromStorage = readAccountsFromLocalStorage(ACCOUNTS_KEY);
+
+      let fromApi: Account[] = [];
+      try {
+        const res = await fetch("/api/accounts");
+        if (res.ok) {
+          const data = (await res.json()) as { accounts?: Account[] };
+          fromApi = Array.isArray(data.accounts) ? data.accounts : [];
+        }
+      } catch {
+        // Fall back to SSR props + localStorage
+      }
+
+      const merged = mergeAccountLists(
+        userEmail,
+        initialConnectedAccounts,
+        fromStorage,
+        fromApi,
+      );
+
+      if (cancelled) return;
+
+      setAccounts((prev) => {
+        const prevFp = accountsFingerprint(prev);
+        const mergedFp = accountsFingerprint(merged);
+        if (prevFp === mergedFp) return prev;
+        return merged;
+      });
+
+      const serverBase = fromApi.length ? fromApi : initialConnectedAccounts;
+      const serverFp = accountsMetadataFingerprint(
+        buildAccountList(userEmail, serverBase),
+      );
+      const mergedMetaFp = accountsMetadataFingerprint(merged);
+      if (mergedMetaFp !== serverFp) {
+        void persistAccounts(merged);
+      }
+
+      if (!didReconnectRef.current) {
+        didReconnectRef.current = true;
+        void reconnectStoredCalDavAccounts(merged);
+      }
+    }
+
+    void hydrateAccounts();
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userEmail, userId]);
 
   // User profile edit state
   const [displayName, setDisplayName] = useState(userName);
@@ -752,7 +946,9 @@ export function ModernSettingsForm({
       (isICloud ? ICLOUD_CALDAV_SERVER : "");
     const username = editDraft.username ?? account.username ?? "";
     const passwordInput = (editDraft.password ?? account.password ?? "").trim();
-    const canReuseStoredPassword = account.connected && !passwordInput;
+    const canReuseStoredPassword =
+      !passwordInput &&
+      (account.hasStoredCredentials === true || account.connected);
 
     if (!serverUrl || !username || (!passwordInput && !canReuseStoredPassword)) {
       toast({
@@ -787,32 +983,23 @@ export function ModernSettingsForm({
         );
       }
 
-      const next = accounts.some((a) => a.id === account.id)
-        ? accounts.map((a) =>
-            a.id === account.id
-              ? {
-                  ...a,
-                  ...editDraft,
-                  connected: true,
-                  serverUrl,
-                  username,
-                  password: "",
-                }
-              : a,
-          )
-        : [
-            ...accounts,
-            {
-              ...account,
-              ...editDraft,
-              connected: true,
-              serverUrl,
-              username,
-              password: "",
-            },
-          ];
-      setAccounts(next);
-      await persistAccounts(next);
+      const connectedAccount: Account = {
+        ...account,
+        ...editDraft,
+        connected: true,
+        serverUrl,
+        username,
+        password: "",
+      };
+
+      let nextAccounts: Account[] = [];
+      setAccounts((prev) => {
+        nextAccounts = prev.some((a) => a.id === account.id)
+          ? prev.map((a) => (a.id === account.id ? connectedAccount : a))
+          : [...prev, connectedAccount];
+        return nextAccounts;
+      });
+      await persistAccounts(nextAccounts);
       const connectedICloud = isICloudCalDav({
         serverUrl,
         label: editDraft.label ?? account.label,
@@ -1044,8 +1231,14 @@ export function ModernSettingsForm({
                     color: editDraft.color ?? (isICloud ? "#0071E3" : "#8B5CF6"),
                     serverUrl: editDraft.serverUrl ?? (isICloud ? ICLOUD_CALDAV_SERVER : undefined),
                     username: editDraft.username ?? (isICloud ? email : undefined),
+                    password: editDraft.password ?? "",
                   };
-                  setAccounts((prev) => [...prev, newAcct]);
+                  let staged: Account[] = [];
+                  setAccounts((prev) => {
+                    staged = [...prev, newAcct];
+                    return staged;
+                  });
+                  void persistAccounts(staged);
                   await connectCalDavAccount(newAcct);
                 }}
                 className={cn(
@@ -1208,7 +1401,7 @@ export function ModernSettingsForm({
                             onClick={() => setTheme(t)}
                             className={cn(
                               "rounded-lg px-3 py-1.5 text-[11px] font-medium capitalize transition-all",
-                              theme === t
+                              themeMounted && theme === t
                                 ? "bg-foreground text-background shadow-sm"
                                 : "text-foreground/40 hover:text-foreground/60"
                             )}

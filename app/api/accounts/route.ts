@@ -23,11 +23,15 @@ export async function GET() {
       (await listCalDavCredentials(user.id)).map((c) => c.email.toLowerCase()),
     );
 
-    const enriched = accounts.map((a) =>
-      a.type === "caldav" && caldavEmails.has(a.email.toLowerCase())
-        ? { ...a, connected: true }
-        : a,
-    );
+    const enriched = accounts.map((a) => {
+      const hasStored =
+        a.type === "caldav" && caldavEmails.has(a.email.toLowerCase());
+      return {
+        ...a,
+        hasStoredCredentials: hasStored,
+        connected: hasStored ? true : a.connected,
+      };
+    });
 
     return NextResponse.json({
       primaryEmail: user.email,

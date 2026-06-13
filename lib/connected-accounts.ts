@@ -1,5 +1,8 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserPreferences, getUserRecord } from "@/lib/store";
+import {
+  patchUserPreferences,
+  readUserPreferences,
+} from "@/lib/user-preferences";
 
 export type ConnectedAccountMeta = {
   id: string;
@@ -10,6 +13,8 @@ export type ConnectedAccountMeta = {
   color: string;
   serverUrl?: string;
   username?: string;
+  /** Server has CalDAV password in preferences.connectedCalDav (never sent to client). */
+  hasStoredCredentials?: boolean;
 };
 
 type ConnectedTokenRecord = {
@@ -21,33 +26,10 @@ type ConnectedTokenRecord = {
   googleSyncToken?: string | null;
 };
 
-async function readPreferences(userId: string) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("profiles")
-    .select("preferences")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data?.preferences ?? {}) as Record<string, unknown>;
-}
-
-async function writePreferences(
-  userId: string,
-  prefs: Record<string, unknown>,
-) {
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("profiles")
-    .update({ preferences: prefs })
-    .eq("id", userId);
-  if (error) throw error;
-}
-
 export async function getConnectedAccounts(
   userId: string,
 ): Promise<ConnectedAccountMeta[]> {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const raw = prefs.connectedAccounts;
   if (!Array.isArray(raw)) return [];
   return raw as ConnectedAccountMeta[];
@@ -57,8 +39,7 @@ export async function saveConnectedAccounts(
   userId: string,
   accounts: ConnectedAccountMeta[],
 ) {
-  const prefs = await readPreferences(userId);
-  await writePreferences(userId, { ...prefs, connectedAccounts: accounts });
+  await patchUserPreferences(userId, { connectedAccounts: accounts });
 }
 
 export async function upsertConnectedAccountMeta(
@@ -89,7 +70,7 @@ export async function getConnectedTokenRecord(
   userId: string,
   email: string,
 ): Promise<ConnectedTokenRecord | null> {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const connectedTokens = (prefs.connectedTokens ?? {}) as Record<
     string,
     ConnectedTokenRecord
@@ -102,7 +83,7 @@ export async function setConnectedAccountSyncToken(
   email: string,
   googleSyncToken: string,
 ) {
-  const prefs = await readPreferences(userId);
+  const prefs = await readUserPreferences(userId);
   const connectedTokens = (prefs.connectedTokens ?? {}) as Record<
     string,
     ConnectedTokenRecord
@@ -113,14 +94,16 @@ export async function setConnectedAccountSyncToken(
     googleSyncToken,
     updatedAt: new Date().toISOString(),
   };
-  await writePreferences(userId, { ...prefs, connectedTokens });
+  await patchUserPreferences(userId, { connectedTokens });
 }
 
 export async function removeConnectedToken(userId: string, email: string) {
-  const prefs = await readPreferences(userId);
-  const connectedTokens = { ...(prefs.connectedTokens as Record<string, unknown> | undefined) };
+  const prefs = await readUserPreferences(userId);
+  const connectedTokens = {
+    ...(prefs.connectedTokens as Record<string, unknown> | undefined),
+  };
   delete connectedTokens[email];
-  await writePreferences(userId, { ...prefs, connectedTokens });
+  await patchUserPreferences(userId, { connectedTokens });
 }
 
 /** All Google accounts with valid OAuth tokens (primary login + connected). */
