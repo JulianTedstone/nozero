@@ -137,7 +137,8 @@ The project requires environment variables for Supabase (URL, anon key, service-
 - Calendar labels should show friendly account names (e.g. `julian.tedstone@coherence.digital` → "Julian, Coherence"), not generic "Calendar"/"Primary".
 - Do not list connected accounts under the My Calendars sidebar; account management belongs in Settings.
 - CalDAV credential edits must retain stored passwords without forcing re-entry on Save/Reconnect.
-- Calendar sync should use a bounded date window (±3 months initially), not full history pulls.
+- Calendar and email must be offline-first: instant reads from a local mirror; sync never blocks initial paint; sync is manual refresh or background only; the app must work fully offline with data as of the last sync.
+- Email and board tabs follow the calendar three-column shell: email adds connected-account toggles, Unread·Tracking·All filters, search, Flightdeck stream tag cloud, and paginated inbox (~20 threads); board tab exposes GitHub Project #17.
 - Event UI: participant fields need Soma/message-history contact autocomplete; notes render plain text; time picker uses 5-minute increments; event pills use subscribed calendar colors on flat/2D panels without left accent borders.
 - Event detail: group fields into toggleable What / Where / When sections (default order What → Where → When, globally configurable in settings); replace the Edit Event header with a HuD (title, organizer status, friendly datetime, map/video launchers, countdown); lock non-owned meetings with padlock + organizer tooltip; extract Teams/Zoom/Meet/Slack links from invite body into the meeting URL field.
 - Recurring meetings should follow Google Calendar recurrence rules and edit scope (this/ following / all).
@@ -146,14 +147,14 @@ The project requires environment variables for Supabase (URL, anon key, service-
 ## Learned Workspace Facts
 
 - Google and CalDAV tokens/credentials live in `nozero.profiles.preferences` (`connectedTokens`, `connectedCalDav`); the `calendar_tokens` migration exists but the app does not use that table.
-- CalDAV connect/sync: `POST /api/accounts/caldav/connect`, `lib/caldav-sync.ts` with `tsdav` `DAVClient` (authenticate at construction; no `client.login()`).
+- CalDAV connect/sync (incl. iCloud preset at `https://caldav.icloud.com`, app-specific password): `POST /api/accounts/caldav/connect`, `lib/caldav-sync.ts` with `tsdav` `DAVClient`; stored as `type: "caldav"`.
 - Multi-account Google sync pulls all linked accounts via `pullAllGoogleCalendarAccounts()` in `lib/google-accounts-sync.ts`.
 - Calendar subscriptions and visibility filtering: `lib/calendar-subscriptions.ts`, `lib/calendar-subscription-utils.ts` (`eventMatchesVisibleSubscriptions`); visibility API at `/api/calendar/visibility`.
 - Windowed sync: initial pull ±3 months (`lib/sync-window.ts`, `lib/calendar-sync-range.ts`); background extension via `POST /api/calendar/sync/extend` in 3-month chunks.
 - Contact autocomplete: `/api/contacts/suggest` (Soma client in `lib/soma-client.ts`) plus local invitation/event attendee fallbacks.
-- Calendar page slowness risk: `modern-calendar-view.tsx` mount runs full sync, repeated `refreshEvents()`, and up to ~24 background extend API calls per load.
+- Local mirror: IndexedDB `nozero-local-mirror` in `lib/local-mirror/db.ts`; calendar/email UI reads mirror first; background sync in `hooks/use-background-sync.ts`; hydrate via `calendar-hydrate` / `email-hydrate`; email threads list defaults to `sync=false`.
 - Settings form saves must merge `preferences` blobs so OAuth/calendar token fields are not wiped when updating appearance/time prefs.
-- iCloud Calendar connects via a Settings preset on the CalDAV stack (`https://caldav.icloud.com`, app-specific password); stored internally as `type: "caldav"`.
 - Account codes: `nozero.account_codes` table plus `/api/account-codes` and `lib/account-codes.ts`; scoped to linked account email; archived codes stay out of pickers but are never hard-deleted.
 - Event detail support modules: `lib/event-detail-layout.ts`, `lib/conference-links.ts`, `lib/recurrence.ts`, `components/event-detail-hud.tsx`.
 - `getEvents` still loads all user events to expand recurring masters into the requested range — a major query cost until masters are indexed/filtered.
+- Email and Flightdeck UI: `components/email-view.tsx` with Soma-backed `/api/email/threads` and explicit `POST /api/email/sync`; Flightdeck board in `components/flightdeck-board-view.tsx` + `/api/flightdeck/board`.
