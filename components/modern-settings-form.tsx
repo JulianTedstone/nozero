@@ -153,6 +153,35 @@ const ACCOUNT_COLORS = [
   "#EC4899",
 ];
 
+const ICLOUD_CALDAV_SERVER = "https://caldav.icloud.com";
+
+type AccountPickerOption = "google" | "icloud" | "caldav" | "imap";
+
+const ACCOUNT_PICKER_OPTIONS: {
+  id: AccountPickerOption;
+  label: string;
+}[] = [
+  { id: "google", label: "Google" },
+  { id: "icloud", label: "iCloud" },
+  { id: "caldav", label: "CalDAV" },
+  { id: "imap", label: "IMAP" },
+];
+
+function isICloudCalDav(account?: Partial<Account>): boolean {
+  const url = (account?.serverUrl ?? "").trim().replace(/\/$/, "");
+  return url === ICLOUD_CALDAV_SERVER;
+}
+
+function newAccountTypeLabel(
+  type: AccountType,
+  icloud: boolean,
+): string {
+  if (type === "google") return "Google";
+  if (icloud) return "iCloud";
+  if (type === "caldav") return "CalDAV";
+  return "IMAP";
+}
+
 type CalendarOption = {
   calendarId: string;
   name: string;
@@ -448,6 +477,7 @@ export function ModernSettingsForm({
   const [isConnectingCalDav, setIsConnectingCalDav] = useState(false);
   // For the add-account form
   const [newAccountType, setNewAccountType] = useState<AccountType | null>(null);
+  const [calDavPreset, setCalDavPreset] = useState<"icloud" | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<Account>>({});
 
   const { theme, setTheme } = useTheme();
@@ -509,12 +539,41 @@ export function ModernSettingsForm({
     setEditingId(account.id);
     setEditDraft({ ...account });
     setNewAccountType(null);
+    setCalDavPreset(isICloudCalDav(account) ? "icloud" : null);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditDraft({});
     setNewAccountType(null);
+    setCalDavPreset(null);
+  }
+
+  function selectNewAccountType(option: AccountPickerOption) {
+    if (option === "icloud") {
+      setNewAccountType("caldav");
+      setCalDavPreset("icloud");
+      setEditDraft({
+        type: "caldav",
+        color: "#0071E3",
+        label: "iCloud Calendar",
+        serverUrl: ICLOUD_CALDAV_SERVER,
+      });
+      return;
+    }
+    if (option === "caldav") {
+      setNewAccountType("caldav");
+      setCalDavPreset(null);
+      setEditDraft({ type: "caldav", color: "#8B5CF6", label: "CalDAV" });
+      return;
+    }
+    setCalDavPreset(null);
+    setNewAccountType(option);
+    setEditDraft({
+      type: option,
+      color: "#4285F4",
+      label: option === "google" ? "Google Calendar & Gmail" : "IMAP",
+    });
   }
 
   async function saveEdit() {
@@ -607,7 +666,7 @@ export function ModernSettingsForm({
       id: `acct-${Date.now()}`,
       email: draft.email || "",
       type: newAccountType,
-      label: draft.label || (newAccountType === "google" ? "Google Calendar & Gmail" : newAccountType === "caldav" ? "CalDAV" : "IMAP"),
+      label: draft.label || (newAccountType === "google" ? "Google Calendar & Gmail" : newAccountType === "caldav" ? (calDavPreset === "icloud" ? "iCloud Calendar" : "CalDAV") : "IMAP"),
       connected: false,
       color: draft.color || "#4285F4",
       serverUrl: draft.serverUrl || "",
@@ -622,7 +681,14 @@ export function ModernSettingsForm({
   }
 
   async function connectCalDavAccount(account: Account) {
-    const serverUrl = editDraft.serverUrl ?? account.serverUrl ?? "";
+    const isICloud =
+      calDavPreset === "icloud" ||
+      isICloudCalDav(account) ||
+      isICloudCalDav(editDraft);
+    const serverUrl =
+      editDraft.serverUrl ??
+      account.serverUrl ??
+      (isICloud ? ICLOUD_CALDAV_SERVER : "");
     const username = editDraft.username ?? account.username ?? "";
     const passwordInput = (editDraft.password ?? account.password ?? "").trim();
     const canReuseStoredPassword = account.connected && !passwordInput;
@@ -686,8 +752,12 @@ export function ModernSettingsForm({
           ];
       setAccounts(next);
       await persistAccounts(next);
+      const connectedICloud = isICloudCalDav({
+        serverUrl,
+        label: editDraft.label ?? account.label,
+      });
       toast({
-        title: "CalDAV connected",
+        title: connectedICloud ? "iCloud connected" : "CalDAV connected",
         description: `Found ${data.calendarCount ?? 0} calendar(s). Syncing events…`,
       });
       cancelEdit();
@@ -709,6 +779,12 @@ export function ModernSettingsForm({
     const isNew = !account;
     const type = isNew ? newAccountType! : account!.type;
     const isPrimary = account?.id === "primary-google";
+    const isICloud =
+      calDavPreset === "icloud" ||
+      isICloudCalDav(isNew ? editDraft : { ...account, ...editDraft });
+    const connectAccent = isICloud
+      ? "bg-sky-600 hover:bg-sky-700"
+      : "bg-violet-500 hover:bg-violet-600";
 
     return (
       <div className="mt-3 space-y-3 border-t border-border pt-3">
@@ -776,44 +852,80 @@ export function ModernSettingsForm({
 
         {(type === "caldav" || type === "imap") && (
           <div className="space-y-2">
+            {isICloud && type === "caldav" && (
+              <div className="space-y-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-[10px] text-muted-foreground">
+                <p className="font-medium text-foreground/90">
+                  Use an Apple app-specific password
+                </p>
+                <p>
+                  Your normal Apple ID password will not work. Create one at{" "}
+                  <a
+                    className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                    href="https://appleid.apple.com/account/manage"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    appleid.apple.com
+                  </a>{" "}
+                  under Sign-In and Security → App-Specific Passwords.
+                </p>
+              </div>
+            )}
             {isNew && (
               <div className="space-y-1">
                 <label className="text-[10px] text-muted-foreground">Email</label>
                 <input
                   className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
-                  onChange={(e) => setEditDraft((d) => ({ ...d, email: e.target.value }))}
-                  placeholder="email@domain.com"
+                  onChange={(e) => {
+                    const email = e.target.value;
+                    setEditDraft((d) => ({
+                      ...d,
+                      email,
+                      ...(isICloud ? { username: email } : {}),
+                    }));
+                  }}
+                  placeholder={isICloud ? "you@icloud.com" : "email@domain.com"}
                   value={editDraft.email ?? ""}
                 />
               </div>
             )}
             <div className="space-y-1">
               <label className="text-[10px] text-muted-foreground">Server URL</label>
-              <input
-                className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
-                onChange={(e) => setEditDraft((d) => ({ ...d, serverUrl: e.target.value }))}
-                placeholder={type === "caldav" ? "https://caldav.example.com" : "imap.example.com"}
-                value={editDraft.serverUrl ?? account?.serverUrl ?? ""}
-              />
+              {isICloud && type === "caldav" ? (
+                <p className="flex h-8 items-center rounded-lg border border-border bg-muted/30 px-3 text-xs text-muted-foreground">
+                  {ICLOUD_CALDAV_SERVER}
+                </p>
+              ) : (
+                <input
+                  className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
+                  onChange={(e) => setEditDraft((d) => ({ ...d, serverUrl: e.target.value }))}
+                  placeholder={type === "caldav" ? "https://caldav.example.com" : "imap.example.com"}
+                  value={editDraft.serverUrl ?? account?.serverUrl ?? ""}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-[10px] text-muted-foreground">Username</label>
               <input
                 className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
                 onChange={(e) => setEditDraft((d) => ({ ...d, username: e.target.value }))}
-                placeholder="username"
+                placeholder={isICloud ? "Apple ID email" : "username"}
                 value={editDraft.username ?? account?.username ?? ""}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">Password</label>
+              <label className="text-[10px] text-muted-foreground">
+                {isICloud && type === "caldav" ? "App-specific password" : "Password"}
+              </label>
               <input
                 className={settingsInput}
                 onChange={(e) => setEditDraft((d) => ({ ...d, password: e.target.value }))}
                 placeholder={
                   !isNew && account?.connected
                     ? "Leave blank to keep current password"
-                    : "••••••••"
+                    : isICloud && type === "caldav"
+                      ? "xxxx-xxxx-xxxx-xxxx"
+                      : "••••••••"
                 }
                 type="password"
                 value={editDraft.password ?? ""}
@@ -866,16 +978,19 @@ export function ModernSettingsForm({
                     id: `acct-${Date.now()}`,
                     email,
                     type: "caldav",
-                    label: editDraft.label || "CalDAV",
+                    label: editDraft.label || (isICloud ? "iCloud Calendar" : "CalDAV"),
                     connected: false,
-                    color: editDraft.color ?? "#8B5CF6",
-                    serverUrl: editDraft.serverUrl,
-                    username: editDraft.username,
+                    color: editDraft.color ?? (isICloud ? "#0071E3" : "#8B5CF6"),
+                    serverUrl: editDraft.serverUrl ?? (isICloud ? ICLOUD_CALDAV_SERVER : undefined),
+                    username: editDraft.username ?? (isICloud ? email : undefined),
                   };
                   setAccounts((prev) => [...prev, newAcct]);
                   await connectCalDavAccount(newAcct);
                 }}
-                className="h-8 flex-1 rounded-lg bg-violet-500 text-xs font-medium text-white hover:bg-violet-600 transition-colors disabled:opacity-50"
+                className={cn(
+                  "h-8 flex-1 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50",
+                  connectAccent,
+                )}
               >
                 {isConnectingCalDav ? "Connecting…" : "Test & Connect"}
               </button>
@@ -897,7 +1012,10 @@ export function ModernSettingsForm({
                 type="button"
                 disabled={isConnectingCalDav}
                 onClick={() => connectCalDavAccount(account!)}
-                className="h-8 flex-1 rounded-lg bg-violet-500 text-xs font-medium text-white hover:bg-violet-600 transition-colors disabled:opacity-50"
+                className={cn(
+                  "h-8 flex-1 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50",
+                  connectAccent,
+                )}
               >
                 {isConnectingCalDav ? "Connecting…" : account?.connected ? "Reconnect" : "Test & Connect"}
               </button>
@@ -1382,7 +1500,7 @@ export function ModernSettingsForm({
                   {editingId === "new" && newAccountType && (
                     <div className="liquid-glass-subtle rounded-2xl p-4">
                       <p className="font-medium text-xs text-foreground/90 mb-3">
-                        New {newAccountType === "google" ? "Google" : newAccountType === "caldav" ? "CalDAV" : "IMAP"} Account
+                        New {newAccountTypeLabel(newAccountType, calDavPreset === "icloud")} Account
                       </p>
                       {renderEditForm()}
                     </div>
@@ -1395,6 +1513,7 @@ export function ModernSettingsForm({
                     onClick={() => {
                       setEditingId("new");
                       setNewAccountType(null);
+                      setCalDavPreset(null);
                       setEditDraft({});
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-3 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground/80"
@@ -1405,18 +1524,15 @@ export function ModernSettingsForm({
                 ) : !newAccountType ? (
                   <div className="liquid-glass-subtle rounded-2xl p-4 space-y-3">
                     <p className="text-xs text-muted-foreground font-medium">Select account type</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["google", "caldav", "imap"] as AccountType[]).map((t) => (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {ACCOUNT_PICKER_OPTIONS.map((option) => (
                         <button
-                          key={t}
+                          key={option.id}
                           type="button"
-                          onClick={() => {
-                            setNewAccountType(t);
-                            setEditDraft({ type: t, color: "#4285F4", label: t === "google" ? "Google Calendar & Gmail" : t === "caldav" ? "CalDAV" : "IMAP" });
-                          }}
-                          className="rounded-xl border border-border bg-muted/40 py-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground/90 transition-colors capitalize"
+                          onClick={() => selectNewAccountType(option.id)}
+                          className="rounded-xl border border-border bg-muted/40 py-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground/90 transition-colors"
                         >
-                          {t === "google" ? "Google" : t.toUpperCase()}
+                          {option.label}
                         </button>
                       ))}
                     </div>
