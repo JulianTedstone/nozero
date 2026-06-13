@@ -44,13 +44,12 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
+            git config --global --add safe.directory "$(pwd)"
             if [ ! -d .git ]; then
-              git init
+              git init -b main
               git remote add origin https://github.com/JulianTedstone/nozero.git
-              git fetch origin main
-              git checkout -B main origin/main
-            else
-              git pull --ff-only origin main
             fi
+            git fetch origin main
+            git reset --hard origin/main
             docker compose -f docker-compose.host.yml up -d --build
             docker image prune -f
