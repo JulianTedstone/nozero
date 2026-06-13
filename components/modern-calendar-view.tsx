@@ -28,7 +28,6 @@ import {
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  LayersIcon,
   LayoutDashboardIcon,
   Loader2Icon,
   LogOutIcon,
@@ -42,7 +41,7 @@ import {
   UserIcon,
   XIcon,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Fragment,
   useCallback,
@@ -69,14 +68,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useBackgroundSync } from "@/hooks/use-background-sync";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth-client";
+import { formatSyncAge } from "@/lib/format-sync-age";
+import { hydrateCalendarMirrorFromServer } from "@/lib/local-mirror/calendar-hydrate";
+import {
+  readCalendarEventsInRange,
+  readMirrorMeta,
+  upsertCalendarEvents,
+  writeMirrorMeta,
+} from "@/lib/local-mirror/db";
 import { cn, friendlyAccountName, hexToRgba } from "@/lib/utils";
 import { eventMatchesVisibleSubscriptions } from "@/lib/calendar-subscription-utils";
 import type { SubscriptionCalendarView } from "@/lib/calendar-subscription-utils";
 import type { CalendarEvent } from "@/types/calendar";
 import { AiPanel } from "./ai-panel";
+import type { EventDetailSectionId } from "@/lib/event-detail-layout";
+import { ContextView } from "./context-view";
+import { ContextIcon } from "./context-icon";
+import { FlightdeckBoardView } from "./flightdeck-board-view";
+import { EmailView } from "./email-view";
+import {
+  EventContextPanel,
+  type EventContextNavigation,
+} from "./event-context-panel";
 import { EventDetailPanel } from "./event-detail-panel";
+import type { ContextFocus } from "@/types/context-focus";
 
 type SyncStatus = "idle" | "syncing" | "success" | "error";
 
@@ -89,21 +107,12 @@ type CalendarSyncResponse = {
   errors?: string[];
 };
 
-function formatSyncAge(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 15) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
-}
-
 type ViewMode = "day" | "week" | "month" | "year";
 
 type RightPanel = "none" | "event" | "ai";
 
 interface GoogleCalendar {
+  accountEmail?: string;
   backgroundColor: string;
   id: string;
   primary: boolean;
@@ -113,6 +122,7 @@ interface GoogleCalendar {
 
 interface ModernCalendarViewProps {
   initialEvents: CalendarEvent[];
+  eventSectionOrder?: EventDetailSectionId[];
   persona?: "Bertrand" | "Pierre";
   userEmail?: string;
   userId?: string;
@@ -154,8 +164,10 @@ function eventPillStyle(
 ): CSSProperties {
   const color = resolveEventCalendarColor(event, subscriptions);
   return {
-    backgroundColor: hexToRgba(color, 0.22),
-    color,
+    backgroundColor: hexToRgba(color, 0.28),
+    color: "rgba(255, 255, 255, 0.9)",
+    border: "none",
+    boxShadow: "none",
   };
 }
 
@@ -173,6 +185,7 @@ function useIsMobile(breakpoint = 768) {
 
 export function ModernCalendarView({
   initialEvents,
+  eventSectionOrder,
   persona = "Bertrand",
   userId,
   userEmail,
@@ -205,10 +218,26 @@ export function ModernCalendarView({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterQuery, setFilterQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"email" | "calendar" | "board" | "context">("calendar");
+  const [activeTab, setActiveTab] = useState<
+    "email" | "calendar" | "board" | "context"
+  >("calendar");
+  const [contextFocus, setContextFocus] = useState<ContextFocus>({
+    type: "none",
+  });
+  const [centerView, setCenterView] = useState<"calendar" | "context">(
+    "calendar",
+  );
+  const [contextEvent, setContextEvent] = useState<CalendarEvent | null>(null);
+  const [boardStreamFilter, setBoardStreamFilter] = useState<string | null>(
+    null,
+  );
+  const searchParams = useSearchParams();
+  const [emailThreadId, setEmailThreadId] = useState<string | null>(null);
+  const [emailMirrorVersion, setEmailMirrorVersion] = useState(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const mirrorSeededRef = useRef(false);
 
   const isMobile = useIsMobile();
   const isLoggedIn = !!userId;
@@ -227,45 +256,64 @@ export function ModernCalendarView({
     );
   }, [events, filterQuery, subscribedCalendars]);
 
-  const refreshEvents = useCallback(async () => {
-    if (!userId) {
-      return;
-    }
+  const refreshEvents = useCallback(
+    async (opts?: { fetchNetwork?: boolean }) => {
+      if (!userId) {
+        return;
+      }
 
-    let start: Date;
-    let end: Date;
+      let start: Date;
+      let end: Date;
 
-    switch (viewMode) {
-      case "day":
-        start = new Date(currentDate);
-        start.setHours(0, 0, 0, 0);
-        end = new Date(currentDate);
-        end.setHours(23, 59, 59, 999);
-        break;
-      case "week":
-        start = startOfWeek(currentDate);
-        end = endOfWeek(currentDate);
-        break;
-      case "month":
-        start = startOfMonth(currentDate);
-        end = endOfMonth(currentDate);
-        break;
-      case "year":
-        start = startOfYear(currentDate);
-        end = endOfYear(currentDate);
-        break;
-    }
+      switch (viewMode) {
+        case "day":
+          start = new Date(currentDate);
+          start.setHours(0, 0, 0, 0);
+          end = new Date(currentDate);
+          end.setHours(23, 59, 59, 999);
+          break;
+        case "week":
+          start = startOfWeek(currentDate);
+          end = endOfWeek(currentDate);
+          break;
+        case "month":
+          start = startOfMonth(currentDate);
+          end = endOfMonth(currentDate);
+          break;
+        case "year":
+          start = startOfYear(currentDate);
+          end = endOfYear(currentDate);
+          break;
+      }
 
-    const response = await fetch(
-      `/api/calendar/events?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`
-    );
+      const localEvents = await readCalendarEventsInRange(userId, start, end);
+      setEvents(localEvents);
 
-    if (!response.ok) {
-      throw new Error("Failed to refresh events");
-    }
-    const data = await response.json();
-    setEvents(data.events);
-  }, [currentDate, userId, viewMode]);
+      const shouldFetch =
+        opts?.fetchNetwork !== false && typeof navigator !== "undefined" && navigator.onLine;
+      if (!shouldFetch) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/calendar/events?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`,
+        );
+        if (!response.ok) {
+          return;
+        }
+        const data = (await response.json()) as { events?: CalendarEvent[] };
+        if (data.events?.length) {
+          await upsertCalendarEvents(userId, data.events);
+        }
+        const merged = await readCalendarEventsInRange(userId, start, end);
+        setEvents(merged);
+      } catch {
+        // Keep the local mirror visible when offline or the API is unreachable.
+      }
+    },
+    [currentDate, userId, viewMode],
+  );
 
   const runBackgroundExtend = useCallback(async () => {
     if (!userId) return;
@@ -309,18 +357,14 @@ export function ModernCalendarView({
     }
   }, [refreshEvents, userId]);
 
-  const runCalendarSync = useCallback(
-    async (manual = false) => {
+  const runCalendarSync = useCallback(async () => {
       if (!userId) return;
 
       setSyncStatus("syncing");
       setSyncSummary(null);
 
       try {
-        const syncUrl = manual
-          ? "/api/calendar/sync"
-          : "/api/calendar/sync?pullOnly=true";
-        const res = await fetch(syncUrl, { method: "POST" });
+        const res = await fetch("/api/calendar/sync", { method: "POST" });
         const data = (await res.json()) as CalendarSyncResponse;
         const errors = data.errors ?? [];
         const pulled = data.pulled ?? 0;
@@ -333,28 +377,26 @@ export function ModernCalendarView({
               : data.message ?? `Sync failed (${res.status})`;
           setSyncStatus("error");
           setSyncSummary(detail);
-          if (manual) {
-            toast({
-              title: "Calendar sync failed",
-              description: detail,
-              variant: "destructive",
-            });
-          }
+          toast({
+            title: "Calendar sync failed",
+            description: detail,
+            variant: "destructive",
+          });
           return;
         }
 
-        setLastSyncedAt(new Date());
-        await refreshEvents();
+        await hydrateCalendarMirrorFromServer(userId);
+        const syncedAt = new Date();
+        setLastSyncedAt(syncedAt);
+        await refreshEvents({ fetchNetwork: true });
 
         if (errors.length > 0) {
           setSyncStatus("error");
           setSyncSummary(errors.join("; "));
-          if (manual) {
-            toast({
-              title: "Sync completed with warnings",
-              description: errors.join("; "),
-            });
-          }
+          toast({
+            title: "Sync completed with warnings",
+            description: errors.join("; "),
+          });
           void runBackgroundExtend();
           return;
         }
@@ -371,17 +413,22 @@ export function ModernCalendarView({
         const detail = "Could not reach the sync server";
         setSyncStatus("error");
         setSyncSummary(detail);
-        if (manual) {
-          toast({
-            title: "Calendar sync failed",
-            description: detail,
-            variant: "destructive",
-          });
-        }
+        toast({
+          title: "Calendar sync failed",
+          description: detail,
+          variant: "destructive",
+        });
       }
     },
     [refreshEvents, runBackgroundExtend, toast, userId],
   );
+
+  useBackgroundSync({
+    userId,
+    enabled: isLoggedIn,
+    onCalendarSynced: () => refreshEvents({ fetchNetwork: true }),
+    onEmailSynced: () => setEmailMirrorVersion((v) => v + 1),
+  });
 
   useEffect(() => {
     router.prefetch("/settings");
@@ -402,35 +449,33 @@ export function ModernCalendarView({
   }, [isLoggedIn]);
 
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!userId || mirrorSeededRef.current) return;
+    mirrorSeededRef.current = true;
 
-    void runCalendarSync(false);
-
-    const onFocus = () => void runCalendarSync(false);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void runCalendarSync(false);
+    void (async () => {
+      if (initialEvents.length > 0) {
+        await upsertCalendarEvents(userId, initialEvents);
       }
-    };
-
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    const interval = setInterval(() => void runCalendarSync(false), 2 * 60 * 1000);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-      );
-    };
-  }, [isLoggedIn, runCalendarSync]);
+      const meta = await readMirrorMeta(userId, "calendar");
+      if (meta?.lastSyncAt) {
+        setLastSyncedAt(new Date(meta.lastSyncAt));
+      }
+      await refreshEvents({ fetchNetwork: false });
+      if (navigator.onLine) {
+        await hydrateCalendarMirrorFromServer(userId);
+        const hydratedMeta = await readMirrorMeta(userId, "calendar");
+        if (hydratedMeta?.lastSyncAt) {
+          setLastSyncedAt(new Date(hydratedMeta.lastSyncAt));
+        }
+        await refreshEvents({ fetchNetwork: false });
+      }
+    })();
+  }, [initialEvents, refreshEvents, userId]);
 
   useEffect(() => {
-    void refreshEvents().catch(() => {});
-  }, [refreshEvents]);
+    if (!userId) return;
+    void refreshEvents({ fetchNetwork: navigator.onLine });
+  }, [currentDate, refreshEvents, userId, viewMode]);
 
   useEffect(() => {
     if (!isMobile || rightPanel === "none") {
@@ -470,6 +515,72 @@ export function ModernCalendarView({
     setSelectedDate(null);
   }, []);
 
+  const closeContextPanel = useCallback(() => {
+    setCenterView("calendar");
+    setContextEvent(null);
+  }, []);
+
+  const openContextPanel = useCallback((event: CalendarEvent) => {
+    setCenterView("context");
+    setContextEvent(event);
+    setRightPanel("none");
+    setSelectedEvent(null);
+    setSidebarOpen(false);
+  }, []);
+
+  const openMeetingContext = useCallback(
+    (event: CalendarEvent) => {
+      openContextPanel(event);
+    },
+    [openContextPanel],
+  );
+
+  const contextNavigation = useMemo<EventContextNavigation>(
+    () => ({
+      onOpenCalendarEvent: (ev: CalendarEvent) => {
+        closeContextPanel();
+        setActiveTab("calendar");
+        setContextFocus({ type: "none" });
+        openEditPanel(ev);
+      },
+      onOpenEmail: (params?: { threadId?: string }) => {
+        closeContextPanel();
+        if (params?.threadId) {
+          setEmailThreadId(params.threadId);
+        }
+        setActiveTab("email");
+      },
+      onOpenBoard: (params?: { stream?: string }) => {
+        closeContextPanel();
+        setBoardStreamFilter(params?.stream?.trim() || null);
+        setActiveTab("board");
+      },
+    }),
+    [closeContextPanel, openEditPanel],
+  );
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("threadId");
+    if (fromUrl) {
+      setEmailThreadId(fromUrl);
+      setActiveTab("email");
+    }
+  }, [searchParams]);
+
+  const recentContextMeetings = useMemo(() => {
+    const now = Date.now();
+    return [...events]
+      .filter((ev) => (ev.attendees?.length ?? 0) > 0)
+      .sort((a, b) => {
+        const at = a.start ? new Date(a.start).getTime() : 0;
+        const bt = b.start ? new Date(b.start).getTime() : 0;
+        const aUp = at >= now;
+        const bUp = bt >= now;
+        if (aUp !== bUp) return aUp ? -1 : 1;
+        return aUp ? at - bt : bt - at;
+      });
+  }, [events]);
+
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) =>
       target instanceof HTMLElement &&
@@ -484,6 +595,12 @@ export function ModernCalendarView({
 
       if (key === "escape") {
         if (isTypingTarget) {
+          return;
+        }
+
+        if (centerView === "context") {
+          event.preventDefault();
+          closeContextPanel();
           return;
         }
 
@@ -564,6 +681,8 @@ export function ModernCalendarView({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    centerView,
+    closeContextPanel,
     closePanel,
     dismiss,
     openAiPanel,
@@ -686,6 +805,7 @@ export function ModernCalendarView({
           primary: c.primary ?? false,
           backgroundColor: c.color,
           visible: c.visible,
+          accountEmail: c.accountEmail,
         })),
     [subscribedCalendars],
   );
@@ -1118,7 +1238,7 @@ export function ModernCalendarView({
                           .map((span) => (
                             <button
                               className={cn(
-                                "pointer-events-auto mx-[3px] flex h-[18px] items-center truncate font-medium text-[10px] transition-colors hover:brightness-125",
+                                "pointer-events-auto mx-[3px] flex h-[18px] items-center truncate font-medium text-[10px] transition-opacity hover:opacity-90",
                                 span.isStart
                                   ? "rounded-l-[5px] pl-2"
                                   : "pl-1.5",
@@ -1273,12 +1393,17 @@ export function ModernCalendarView({
           { id: "email", icon: MailIcon },
           { id: "calendar", icon: CalendarIcon },
           { id: "board", icon: LayoutDashboardIcon },
-          { id: "context", icon: LayersIcon },
+          { id: "context", icon: ContextIcon },
         ] as const).map(({ id, icon: Icon }) => (
           <button
             key={id}
             type="button"
-            onClick={() => setActiveTab(id)}
+            onClick={() => {
+              setActiveTab(id);
+              if (id === "context" && contextFocus.type === "none") {
+                setContextFocus({ type: "none" });
+              }
+            }}
             className={cn(
               "flex-1 flex flex-col items-center gap-1 rounded-lg py-2 transition-colors",
               activeTab === id ? "bg-white/[0.08] text-white/80" : "text-white/25 hover:text-white/40"
@@ -1387,7 +1512,7 @@ export function ModernCalendarView({
             </button>
             <button
               type="button"
-              onClick={() => void runCalendarSync(true)}
+              onClick={() => void runCalendarSync()}
               disabled={syncStatus === "syncing"}
               className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 text-[9px] text-white/45 hover:bg-white/[0.06] disabled:opacity-50"
               title="Sync calendars now"
@@ -1457,9 +1582,57 @@ export function ModernCalendarView({
         </>
       )}
 
-      {activeTab !== "calendar" && (
-        <div className="flex flex-col items-center justify-center py-12 gap-2">
-          <span className="text-[11px] text-white/25">Coming soon</span>
+      {activeTab === "context" && (
+        <div className="space-y-3">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-white/30">
+            Context
+          </p>
+          {contextFocus.type === "meeting" ? (
+            <button
+              className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-left text-[11px] text-white/55 hover:bg-white/[0.06]"
+              onClick={() => setContextFocus({ type: "none" })}
+              type="button"
+            >
+              <span className="block truncate font-medium text-white/70">
+                {contextFocus.event.title || "Meeting"}
+              </span>
+              <span className="text-white/30">Zoomed in — tap to overview</span>
+            </button>
+          ) : (
+            <p className="text-[11px] leading-relaxed text-white/25">
+              Open a meeting from Calendar or pick one in the main panel.
+            </p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "board" && (
+        <div className="space-y-3">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-white/30">
+            Flightdeck
+          </p>
+          <p className="text-[11px] leading-relaxed text-white/25">
+            GitHub Project #17 — kanban in the main panel. Use stream filter
+            there to focus a lane.
+          </p>
+          {boardStreamFilter ? (
+            <p className="text-[10px] text-white/35">
+              Stream ·{" "}
+              <span className="text-white/55">{boardStreamFilter}</span>
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      {activeTab === "email" && (
+        <div className="space-y-3">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-white/30">
+            Email
+          </p>
+          <p className="text-[11px] leading-relaxed text-white/25">
+            Threads and replies in the main panel. Context rail shows people,
+            companies, and Flightdeck tasks.
+          </p>
         </div>
       )}
     </>
@@ -1545,7 +1718,10 @@ export function ModernCalendarView({
             void refreshEvents().catch(() => {});
             closePanel();
           }}
+          onOpenContext={openMeetingContext}
+          sectionOrder={eventSectionOrder}
           selectedDate={selectedDate}
+          userEmail={userEmail}
           userId={userId}
         />
       )}
@@ -1614,8 +1790,17 @@ export function ModernCalendarView({
         {sidebarUserFooter}
       </div>
 
-      {/* ── Main Calendar ── */}
+      {/* ── Main area (calendar | context takeover | …) ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {centerView === "context" && contextEvent ? (
+          <EventContextPanel
+            event={contextEvent}
+            navigation={contextNavigation}
+            onBack={closeContextPanel}
+            userEmail={userEmail}
+          />
+        ) : activeTab === "calendar" ? (
+          <>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 md:px-5 md:py-3">
           <div className="flex items-center gap-1.5 md:gap-3">
@@ -1668,7 +1853,7 @@ export function ModernCalendarView({
                   syncStatus === "error" && "border-amber-500/20 text-amber-400/80",
                 )}
                 disabled={syncStatus === "syncing"}
-                onClick={() => void runCalendarSync(true)}
+                onClick={() => void runCalendarSync()}
                 size="sm"
                 title={syncSummary ?? "Sync all connected calendars"}
                 variant="ghost"
@@ -1745,11 +1930,35 @@ export function ModernCalendarView({
         <div className="min-h-0 flex-1 overflow-hidden p-2 md:p-3">
           {renderCalendarView()}
         </div>
+          </>
+        ) : activeTab === "context" ? (
+          <ContextView
+            focus={contextFocus}
+            navigation={contextNavigation}
+            onFocusChange={setContextFocus}
+            recentMeetings={recentContextMeetings}
+            userEmail={userEmail}
+          />
+        ) : activeTab === "board" ? (
+          <FlightdeckBoardView initialStream={boardStreamFilter} />
+        ) : activeTab === "email" ? (
+          <EmailView
+            initialThreadId={emailThreadId}
+            mirrorVersion={emailMirrorVersion}
+            onThreadIdChange={setEmailThreadId}
+            userEmail={userEmail}
+            userId={userId}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8">
+            <span className="text-sm text-white/30">Coming soon</span>
+          </div>
+        )}
       </div>
 
       {/* ── Right Panel ── */}
       <AnimatePresence mode="wait">
-        {rightPanel !== "none" &&
+        {rightPanel !== "none" && centerView !== "context" &&
           (isMobile ? (
             /* Mobile: bottom sheet overlay */
             <Fragment key="mobile-panel">

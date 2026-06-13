@@ -5,6 +5,11 @@ import { nanoid } from "nanoid";
 import { RRule } from "rrule";
 import { v4 as uuidv4 } from "uuid";
 import {
+  type RecurrenceEditScope,
+  masterEventId,
+  recurrenceRuleToRRuleOptions,
+} from "@/lib/recurrence";
+import {
   defaultCategories,
   deleteUserEvent,
   getGoogleAuth,
@@ -48,6 +53,7 @@ export interface CalendarEvent {
   categories?: string[];
   categoryId?: string;
   color?: string;
+  conferenceUrl?: string;
   description?: string;
   end: string;
   exceptionDate?: string;
@@ -91,72 +97,7 @@ export interface CalendarCategory {
   visible: boolean;
 }
 
-function recurrenceRuleToRRuleOptions(
-  rule: RecurrenceRule,
-  eventStart: Date
-): RRule.Options {
-  const options: RRule.Options = {
-    freq: {
-      daily: RRule.DAILY,
-      weekly: RRule.WEEKLY,
-      monthly: RRule.MONTHLY,
-      yearly: RRule.YEARLY,
-    }[rule.frequency],
-    interval: rule.interval,
-    dtstart: eventStart,
-  };
-
-  if (rule.count) {
-    options.count = rule.count;
-  }
-
-  if (rule.until) {
-    options.until = new Date(rule.until);
-  }
-
-  if (rule.byDay) {
-    options.byweekday = rule.byDay.map((day) => {
-      const dayMap: Record<string, number> = {
-        MO: RRule.MO,
-        TU: RRule.TU,
-        WE: RRule.WE,
-        TH: RRule.TH,
-        FR: RRule.FR,
-        SA: RRule.SA,
-        SU: RRule.SU,
-      };
-      return dayMap[day];
-    });
-  }
-
-  if (rule.byMonthDay) {
-    options.bymonthday = rule.byMonthDay;
-  }
-
-  if (rule.byMonth) {
-    options.bymonth = rule.byMonth;
-  }
-
-  if (rule.bySetPos) {
-    options.bysetpos = rule.bySetPos;
-  }
-
-  if (rule.weekStart) {
-    options.wkst = {
-      MO: RRule.MO,
-      TU: RRule.TU,
-      WE: RRule.WE,
-      TH: RRule.TH,
-      FR: RRule.FR,
-      SA: RRule.SA,
-      SU: RRule.SU,
-    }[rule.weekStart];
-  }
-
-  return options;
-}
-
-function _generateRecurringInstances(
+export function generateRecurringInstances(
   event: CalendarEvent,
   startRange: Date,
   endRange: Date,
@@ -301,13 +242,59 @@ function getTimezoneOffset(date: Date, timezone: string): number {
   return offset;
 }
 
+function masterMayOccurInRange(
+  master: CalendarEvent,
+  rangeStart: Date,
+  rangeEnd: Date,
+): boolean {
+  if (!master.recurrence) return false;
+  const masterStart = parseISO(master.start);
+  if (masterStart > rangeEnd) return false;
+  if (master.recurrence.until) {
+    const until = parseISO(master.recurrence.until);
+    if (until < rangeStart) return false;
+  }
+  return true;
+}
+
 export async function getEvents(
   userId: string,
   start: Date | string,
   end: Date | string
 ): Promise<CalendarEvent[]> {
   try {
-    return await listUserEventsInRange(userId, start, end);
+    const rangeStart =
+      typeof start === "string" ? parseISO(start) : new Date(start);
+    const rangeEnd = typeof end === "string" ? parseISO(end) : new Date(end);
+    const timezone = await getUserTimezone(userId);
+
+    const rangeEvents = await listUserEventsInRange(userId, start, end);
+    const recurringMastersInRange = rangeEvents.filter((event) => event.recurrence);
+    const nonRecurring = rangeEvents.filter((event) => !event.recurrence);
+
+    const allEvents = await listUserEvents(userId);
+    const extraMasters = allEvents.filter(
+      (event) =>
+        event.recurrence &&
+        !recurringMastersInRange.some((master) => master.id === event.id) &&
+        masterMayOccurInRange(event as CalendarEvent, rangeStart, rangeEnd),
+    );
+
+    const expanded: CalendarEvent[] = [];
+    for (const master of [...recurringMastersInRange, ...extraMasters]) {
+      expanded.push(
+        ...generateRecurringInstances(
+          master as CalendarEvent,
+          rangeStart,
+          rangeEnd,
+          timezone,
+        ),
+      );
+    }
+
+    return [...nonRecurring, ...expanded].map((event) =>
+      adjustEventTimezone(event, timezone),
+    );
   } catch (error) {
     console.error("Error fetching events:", error);
     throw new Error("Failed to fetch events");
@@ -363,6 +350,7 @@ export async function createEvent(
       end: endTime.toISOString(),
       source: event.source || "local",
       allDay: event.allDay ?? false,
+      isRecurring: Boolean(event.recurrence),
     };
 
     await upsertUserEvent(newEvent);
@@ -398,6 +386,9 @@ export async function updateEvent(
       ...(typeof eventOrUserId === "string" ? updates : {}),
       id: event.id,
       userId: event.userId,
+      isRecurring: updates?.recurrence
+        ? Boolean(updates.recurrence)
+        : event.isRecurring ?? Boolean(event.recurrence),
     };
 
     await upsertUserEvent(updatedEvent);
@@ -407,6 +398,142 @@ export async function updateEvent(
     console.error("Error updating event:", error);
     throw new Error("Failed to update event");
   }
+}
+
+export async function updateRecurringEvent(
+  userId: string,
+  event: CalendarEvent,
+  updates: Partial<CalendarEvent>,
+  scope: RecurrenceEditScope,
+): Promise<CalendarEvent> {
+  const resolvedMasterId = masterEventId(event);
+  const master = await getUserEvent(userId, resolvedMasterId);
+
+  if (!master?.recurrence) {
+    return updateEvent(userId, event.id, updates);
+  }
+
+  const instanceStart = event.exceptionDate ?? event.start;
+
+  if (scope === "all") {
+    return updateEvent(userId, master.id, {
+      ...updates,
+      recurrence: updates.recurrence ?? master.recurrence,
+    });
+  }
+
+  if (scope === "this") {
+    const exceptions = [...(master.exceptions ?? [])];
+    const existingIndex = exceptions.findIndex(
+      (ex) => ex.date.slice(0, 10) === instanceStart.slice(0, 10),
+    );
+    const modifiedEvent: Omit<
+      CalendarEvent,
+      "id" | "userId" | "recurrence" | "exceptions"
+    > = {
+      title: updates.title ?? master.title,
+      description: updates.description ?? master.description,
+      start: updates.start ?? instanceStart,
+      end: updates.end ?? master.end,
+      location: updates.location ?? master.location,
+      conferenceUrl: updates.conferenceUrl ?? master.conferenceUrl,
+      allDay: updates.allDay ?? master.allDay,
+      color: updates.color ?? master.color,
+      attendees: updates.attendees ?? master.attendees,
+      calendarId: updates.calendarId ?? master.calendarId,
+    };
+
+    const entry = {
+      date: instanceStart,
+      status: "modified" as const,
+      modifiedEvent,
+    };
+
+    if (existingIndex >= 0) {
+      exceptions[existingIndex] = entry;
+    } else {
+      exceptions.push(entry);
+    }
+
+    return updateEvent(userId, master.id, { exceptions });
+  }
+
+  // scope === "following" — end master series before this instance, start new series
+  const instanceDate = parseISO(instanceStart);
+  const dayBefore = new Date(instanceDate);
+  dayBefore.setDate(dayBefore.getDate() - 1);
+  dayBefore.setHours(23, 59, 59, 999);
+
+  await updateEvent(userId, master.id, {
+    recurrence: {
+      ...master.recurrence,
+      until: dayBefore.toISOString(),
+      count: undefined,
+    },
+  });
+
+  const duration = parseISO(master.end).getTime() - parseISO(master.start).getTime();
+  const newStart = updates.start ?? instanceStart;
+  const newEnd =
+    updates.end ??
+    new Date(parseISO(newStart).getTime() + duration).toISOString();
+
+  const { id: _masterId, ...masterRest } = master;
+  return createEvent({
+    ...masterRest,
+    ...updates,
+    userId,
+    start: newStart,
+    end: newEnd,
+    recurrence: updates.recurrence ?? master.recurrence,
+    exceptions: undefined,
+    isRecurring: true,
+    isRecurringInstance: false,
+    originalEventId: undefined,
+    exceptionDate: undefined,
+  });
+}
+
+export async function deleteRecurringEvent(
+  userId: string,
+  event: CalendarEvent,
+  scope: RecurrenceEditScope,
+): Promise<void> {
+  const resolvedMasterId = masterEventId(event);
+  const master = await getUserEvent(userId, resolvedMasterId);
+
+  if (!master?.recurrence) {
+    await deleteEvent(userId, event.id);
+    return;
+  }
+
+  const instanceStart = event.exceptionDate ?? event.start;
+
+  if (scope === "all") {
+    await deleteEvent(userId, master.id);
+    return;
+  }
+
+  if (scope === "this") {
+    const exceptions = [...(master.exceptions ?? [])];
+    exceptions.push({ date: instanceStart, status: "cancelled" });
+    await updateEvent(userId, master.id, { exceptions });
+    return;
+  }
+
+  // following — truncate series before this instance
+  const instanceDate = parseISO(instanceStart);
+  const dayBefore = new Date(instanceDate);
+  dayBefore.setDate(dayBefore.getDate() - 1);
+  dayBefore.setHours(23, 59, 59, 999);
+
+  await updateEvent(userId, master.id, {
+    recurrence: {
+      ...master.recurrence,
+      until: dayBefore.toISOString(),
+      count: undefined,
+    },
+  });
 }
 
 export async function deleteEvent(

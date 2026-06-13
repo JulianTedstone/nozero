@@ -32,6 +32,16 @@ export interface CalendarEvent {
   source?: "google" | "local" | "microsoft" | "caldav";
   /** Google account email this event was synced from (multi-account). */
   accountEmail?: string;
+  /** Time-sheet account code assignment (optional). */
+  accountCodeId?: string;
+  accountCode?: string;
+  accountCodeLabel?: string;
+  /** Video conference join URL (Meet, Teams, Zoom, etc.). */
+  conferenceUrl?: string;
+  /** Event organiser email from the source calendar. */
+  organizerEmail?: string;
+  /** Event organiser display name from the source calendar. */
+  organizerName?: string;
   sourceId?: string;
   start: string;
   timezone?: string;

@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
+import { resolveAccountCodeAssignment } from "@/lib/account-codes";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import {
   syncDeletedEventToGoogle,
   syncUpdatedEventToGoogle,
 } from "@/lib/calendar-google-sync-server";
-import { deleteEvent, getEvent, updateEvent } from "@/lib/calendar";
+import {
+  deleteEvent,
+  deleteRecurringEvent,
+  getEvent,
+  updateEvent,
+  updateRecurringEvent,
+} from "@/lib/calendar";
+import type { RecurrenceEditScope } from "@/lib/recurrence";
+import type { RecurrenceRule } from "@/types/calendar";
 
 interface RouteContext {
   params: Promise<{
@@ -33,22 +42,41 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    const event = await updateEvent(user.id, eventId, {
+    const scope = (body.recurrenceScope as RecurrenceEditScope | undefined) ?? "all";
+    const codeFields = await resolveAccountCodeAssignment(
+      user.id,
+      body.accountCodeId as string | null | undefined,
+    );
+
+    const updates = {
       title: body.title,
       description: body.description,
       start: body.start,
       end: body.end,
       location: body.location,
+      conferenceUrl: body.conferenceUrl,
       attendees: body.attendees,
       calendarId: body.calendarId,
       color: body.color,
       categoryId: body.category,
       categories: body.category ? [body.category] : undefined,
       allDay: body.allDay,
-    });
+      recurrence: body.recurrence as RecurrenceRule | undefined,
+      accountEmail: body.accountEmail,
+      ...codeFields,
+    };
+
+    const isRecurringChange =
+      existingEvent.recurrence ||
+      existingEvent.isRecurringInstance ||
+      existingEvent.originalEventId;
+
+    const event = isRecurringChange
+      ? await updateRecurringEvent(user.id, existingEvent, updates, scope)
+      : await updateEvent(user.id, eventId, updates);
 
     const finalEvent = body.pushToGoogle
-      ? await syncUpdatedEventToGoogle(user.id, existingEvent, event)
+      ? await syncUpdatedEventToGoogle(user.id, existingEvent, event, scope)
       : event;
 
     return NextResponse.json({ event: finalEvent });
@@ -83,11 +111,25 @@ export async function DELETE(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
+    const scopeParam = searchParams.get("recurrenceScope") as
+      | RecurrenceEditScope
+      | null;
+    const scope = scopeParam ?? "all";
+
     if (pushToGoogle) {
-      await syncDeletedEventToGoogle(user.id, existingEvent);
+      await syncDeletedEventToGoogle(user.id, existingEvent, scope);
     }
 
-    await deleteEvent(user.id, eventId);
+    const isRecurring =
+      existingEvent.recurrence ||
+      existingEvent.isRecurringInstance ||
+      existingEvent.originalEventId;
+
+    if (isRecurring) {
+      await deleteRecurringEvent(user.id, existingEvent, scope);
+    } else {
+      await deleteEvent(user.id, eventId);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

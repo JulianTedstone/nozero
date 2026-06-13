@@ -3,6 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeftIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ClockIcon,
   PaletteIcon,
   PencilIcon,
@@ -34,6 +36,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth-client";
+import {
+  DEFAULT_EVENT_SECTION_ORDER,
+  EVENT_SECTION_LABELS,
+  type EventDetailSectionId,
+  moveSection,
+  parseEventSectionOrder,
+} from "@/lib/event-detail-layout";
+import { inferBindingsForEmail, githubRepoUrl } from "@/lib/context-accounts";
+import { AccountCodesSettings } from "@/components/account-codes-settings";
 import { cn } from "@/lib/utils";
 
 // Palette of distinct hues — derived deterministically from the name
@@ -361,6 +372,50 @@ function buildAccountList(
   return additional.length > 0 ? [primary, ...additional] : [primary];
 }
 
+function ContextBindingsHint({ accountEmail }: { accountEmail: string }) {
+  const bindings = inferBindingsForEmail(accountEmail);
+  if (bindings.length === 0) {
+    return (
+      <p className="mt-2 border-t border-border/60 pt-2 text-[10px] text-muted-foreground">
+        No context repo mapped for this account. Add context (GitHub) — coming
+        soon.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
+      <p className="text-[10px] font-medium text-muted-foreground">Context repos</p>
+      {bindings.map((b) => (
+        <div className="text-[10px] text-muted-foreground/90" key={b.id}>
+          <a
+            className="text-foreground/80 hover:underline"
+            href={githubRepoUrl(b.repos[0]?.fullName ?? "")}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            {b.repos[0]?.fullName}
+          </a>
+          {b.streams.length > 0 ? (
+            <span className="text-muted-foreground/70">
+              {" "}
+              → {b.streams.join(", ")}
+            </span>
+          ) : null}
+          {b.source === "rule" && !b.confirmed ? (
+            <span className="ml-1 text-muted-foreground/50">(inferred)</span>
+          ) : null}
+        </div>
+      ))}
+      <button
+        className="text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground/80 hover:underline"
+        type="button"
+      >
+        Add context…
+      </button>
+    </div>
+  );
+}
+
 export function ModernSettingsForm({
   initialPreferences,
   initialConnectedAccounts,
@@ -484,6 +539,9 @@ export function ModernSettingsForm({
 
   // User profile edit state
   const [displayName, setDisplayName] = useState(userName);
+  const [eventSectionOrder, setEventSectionOrder] = useState<
+    EventDetailSectionId[]
+  >(() => parseEventSectionOrder(initialPreferences.eventSectionOrder));
 
   const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -513,7 +571,10 @@ export function ModernSettingsForm({
       const response = await fetch("/api/preferences", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, preferences: values }),
+        body: JSON.stringify({
+          userId,
+          preferences: { ...values, eventSectionOrder },
+        }),
       });
 
       if (!response.ok) {
@@ -1375,6 +1436,77 @@ export function ModernSettingsForm({
                     />
                   </div>
 
+                  <div className={settingsCard}>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="font-medium text-sm text-foreground/90 md:text-xs">
+                          Event panel section order
+                        </p>
+                        <p className="text-muted-foreground text-xs md:text-[10px]">
+                          Reorder What, Where, and When for all calendars
+                        </p>
+                      </div>
+                      <ul className="space-y-2">
+                        {eventSectionOrder.map((sectionId, index) => (
+                          <li
+                            className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2"
+                            key={sectionId}
+                          >
+                            <span className="text-xs text-foreground/90">
+                              {EVENT_SECTION_LABELS[sectionId]}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                aria-label={`Move ${EVENT_SECTION_LABELS[sectionId]} up`}
+                                className="h-7 w-7"
+                                disabled={index === 0}
+                                onClick={() =>
+                                  setEventSectionOrder((current) =>
+                                    moveSection(current, sectionId, "up"),
+                                  )
+                                }
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <ChevronUpIcon className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                aria-label={`Move ${EVENT_SECTION_LABELS[sectionId]} down`}
+                                className="h-7 w-7"
+                                disabled={
+                                  index === eventSectionOrder.length - 1
+                                }
+                                onClick={() =>
+                                  setEventSectionOrder((current) =>
+                                    moveSection(current, sectionId, "down"),
+                                  )
+                                }
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <ChevronDownIcon className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <Button
+                        className="h-8 text-xs"
+                        onClick={() =>
+                          setEventSectionOrder([
+                            ...DEFAULT_EVENT_SECTION_ORDER,
+                          ])
+                        }
+                        type="button"
+                        variant="outline"
+                      >
+                        Reset to default
+                      </Button>
+                    </div>
+                  </div>
+
                   <Button
                     className={settingsPrimarySubmit}
                     disabled={isLoading}
@@ -1440,6 +1572,19 @@ export function ModernSettingsForm({
                 </div>
               </div>
 
+              <div className="liquid-glass-subtle rounded-2xl p-4">
+                <p className="mb-1 font-medium text-xs text-foreground">Krisp</p>
+                <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground">
+                  Connect Krisp for meeting transcripts and action items in Context.
+                </p>
+                <a
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-white/[0.1] transition-colors"
+                  href="/api/accounts/krisp/connect"
+                >
+                  Connect Krisp
+                </a>
+              </div>
+
               {/* Additional accounts */}
               <div>
                 <p className="mb-3 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Connected Accounts</p>
@@ -1493,6 +1638,9 @@ export function ModernSettingsForm({
                         </div>
                       </div>
                       {editingId === account.id && renderEditForm(account)}
+                      {account.connected ? (
+                        <ContextBindingsHint accountEmail={account.email} />
+                      ) : null}
                     </div>
                   ))}
 
@@ -1547,6 +1695,14 @@ export function ModernSettingsForm({
                 ) : null}
                 </div>
               </div>
+
+              <AccountCodesSettings
+                connectedAccounts={accounts
+                  .filter((a) => a.connected && a.email)
+                  .map((a) => ({ email: a.email, label: a.label }))}
+                userEmail={userEmail}
+                userId={userId}
+              />
             </div>
           )}
 

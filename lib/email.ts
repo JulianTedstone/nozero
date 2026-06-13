@@ -201,7 +201,42 @@ export async function sendInviteEmail(params: SendInviteParams) {
     const detail = await response.text().catch(() => "");
     console.error("[mxroute] Failed to send invite:", response.status, detail);
     throw new Error(
-      `Failed to send invite to ${toEmail}: ${response.status} ${detail}`,
+      `Failed to send invite to ${toEmail}: ${response.status} ${detail}`
     );
+  }
+}
+
+interface SendPlainEmailParams {
+  body: string;
+  cc?: string[];
+  replyTo?: string;
+  subject: string;
+  to: string | string[];
+}
+
+export async function sendPlainEmail(params: SendPlainEmailParams) {
+  const toList = Array.isArray(params.to) ? params.to : [params.to];
+  const ccList = params.cc ?? [];
+
+  const response = await fetch(SMTP_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      server: requireEnv("MXROUTE_SMTP_SERVER"),
+      username: requireEnv("MXROUTE_SMTP_USERNAME"),
+      password: requireEnv("MXROUTE_SMTP_PASSWORD"),
+      from: process.env.MXROUTE_FROM_EMAIL || "julian@nopilot.co",
+      to: toList.join(", "),
+      cc: ccList.length > 0 ? ccList.join(", ") : undefined,
+      replyto: params.replyTo,
+      subject: params.subject,
+      body: params.body.replace(/\n/g, "<br/>"),
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("[mxroute] Failed to send email:", response.status, detail);
+    throw new Error(`Failed to send email: ${response.status} ${detail}`);
   }
 }

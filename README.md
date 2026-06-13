@@ -32,7 +32,22 @@ bun install
 
 ### 2. Create your environment file
 
-Create `.env.local` and set the values your deployment needs:
+Copy the committed template and inject secrets from 1Password (`nopilot.nozero` + `nopilot.tower` vaults):
+
+```bash
+op inject -i .env.tpl -o .env.local
+```
+
+For production on Hetzner, use the same template with production URLs:
+
+```bash
+SITE_URL=https://zero.nopilot.co
+NEXT_PUBLIC_SITE_URL=https://zero.nopilot.co
+```
+
+Or maintain a host `.env` with `op inject -i .env.tpl -o .env` after setting those two lines in `.env.tpl` or exporting overrides.
+
+Manual setup (without 1Password) — set values your deployment needs:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
@@ -91,6 +106,16 @@ Open http://localhost:3000.
 | `MXROUTE_SMTP_USERNAME` | For emails | Full mailbox address used to authenticate to the MXroute SMTP API. |
 | `MXROUTE_SMTP_PASSWORD` | For emails | That mailbox's password. |
 | `MXROUTE_FROM_EMAIL` | Optional | Sender address (defaults to `julian@nopilot.co`). |
+| `NOZERO_SOMA_ANANSI_URL` / `NOZERO_SOMA_ANANSI_SECRET_API_KEY` | Context/email | Soma access (`nopilot.nozero.SOMA_ACCESS`). |
+| `NOZERO_SESSION_SECRET` | Yes | HMAC secret for OAuth state (Google/Krisp connect). |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional | Linked Google account connect (separate from Supabase Auth). |
+| `GITHUB_TOKEN` | Flightdeck board | Read-only GitHub token for Project #17 kanban. |
+| `FLIGHTDECK_PROJECT_OWNER` / `FLIGHTDECK_PROJECT_NUMBER` | Flightdeck board | GitHub project metadata (`nopilot.tower` vault). |
+| `NOZERO_TOWER_API_KEY` | Tower gateway | Bearer token for Tower MCP HTTP API (Bertrand actor). |
+| `NOZERO_CTX_GATEWAY_URL` / `NOZERO_CTX_API_KEY` | Context index | gbrain MCP at `https://ctx.nopilot.services/sse`; server uses `nozero` actor token (`nopilot.agents.GBRAIN_CTX_TOKEN`). |
+| `KRISP_MCP_*` / `KRISP_OAUTH_*` | Krisp | OAuth client + endpoints for meeting transcripts (`nopilot.nozero.KRISP`). |
+
+Use `.env.tpl` + `op inject` for all of the above except optional overrides (`SITE_URL`, `OPENROUTER_MODEL`, `SUPABASE_DB_URL`).
 
 ## Deploying to Hetzner
 

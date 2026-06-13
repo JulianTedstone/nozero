@@ -1,6 +1,12 @@
 import { getUserTimezone } from "@/lib/auth";
+import { conferenceUrlFromGoogleEvent } from "@/lib/conference-links";
 import { setConnectedAccountSyncToken } from "@/lib/connected-accounts";
 import type { CalendarEvent } from "@/lib/calendar";
+import {
+  type RecurrenceEditScope,
+  parseGoogleRecurrence,
+  recurrenceRuleToGoogleRRule,
+} from "@/lib/recurrence";
 import { getInitialSyncWindow } from "@/lib/sync-window";
 import {
   deleteUserEvent,
@@ -58,6 +64,9 @@ interface GoogleCalendarEvent {
     responseStatus?: "accepted" | "declined" | "tentative" | "needsAction";
   }>;
   colorId?: string;
+  conferenceData?: {
+    entryPoints?: Array<{ entryPointType?: string; uri?: string }>;
+  };
   created?: string;
   creator?: {
     email: string;
@@ -69,11 +78,13 @@ interface GoogleCalendarEvent {
     dateTime?: string;
     timeZone?: string;
   };
+  hangoutLink?: string;
   id: string;
   location?: string;
   organizer?: {
     email: string;
     displayName?: string;
+    self?: boolean;
   };
   start: {
     date?: string;
@@ -83,6 +94,13 @@ interface GoogleCalendarEvent {
   status?: string;
   summary: string;
   updated?: string;
+  recurrence?: string[];
+  recurringEventId?: string;
+  originalStartTime?: {
+    date?: string;
+    dateTime?: string;
+    timeZone?: string;
+  };
 }
 
 interface GoogleEventsResponse {
@@ -326,6 +344,19 @@ function convertGoogleEventToCalendarEvent(
     ? googleLocalEventId(accountEmail, googleId)
     : `google_${googleId}`;
 
+  const recurrence = parseGoogleRecurrence(googleEvent.recurrence);
+  const isRecurringInstance = Boolean(googleEvent.recurringEventId);
+  const originalEventId = googleEvent.recurringEventId
+    ? accountEmail
+      ? googleLocalEventId(accountEmail, googleEvent.recurringEventId)
+      : `google_${googleEvent.recurringEventId}`
+    : undefined;
+  const exceptionDate =
+    googleEvent.originalStartTime?.dateTime ??
+    (googleEvent.originalStartTime?.date
+      ? new Date(`${googleEvent.originalStartTime.date}T00:00:00.000Z`).toISOString()
+      : undefined);
+
   return {
     id,
     title: googleEvent.summary,
@@ -333,6 +364,10 @@ function convertGoogleEventToCalendarEvent(
     start,
     end,
     location: googleEvent.location,
+    conferenceUrl: conferenceUrlFromGoogleEvent(googleEvent) ?? undefined,
+    organizerEmail: googleEvent.organizer?.email,
+    organizerName:
+      googleEvent.organizer?.displayName ?? googleEvent.organizer?.email,
     color: googleEvent.colorId
       ? colorMap[googleEvent.colorId] || "#3b82f6"
       : "#3b82f6",
@@ -351,11 +386,17 @@ function convertGoogleEventToCalendarEvent(
     })),
     allDay: isAllDay,
     timezone: googleEvent.start.timeZone || "UTC",
+    recurrence,
+    isRecurring: Boolean(recurrence),
+    isRecurringInstance,
+    originalEventId,
+    exceptionDate,
   };
 }
 
 async function convertCalendarEventToGoogleEvent(
-  event: CalendarEvent
+  event: CalendarEvent,
+  options?: { includeRecurrence?: boolean },
 ): Promise<Partial<GoogleCalendarEvent>> {
   const googleEventId = event.sourceId
     ?? (event.id.startsWith("google_")
@@ -394,7 +435,23 @@ async function convertCalendarEventToGoogleEvent(
         },
     location: event.location,
     colorId: event.color ? reverseColorMap[event.color] || "1" : "1",
+    recurrence:
+      options?.includeRecurrence === false
+        ? undefined
+        : event.recurrence
+          ? [recurrenceRuleToGoogleRRule(event.recurrence, new Date(event.start))]
+          : undefined,
   };
+}
+
+function googleEventIdForScope(
+  event: CalendarEvent,
+  scope: RecurrenceEditScope = "all",
+): string {
+  if (scope === "all" && event.originalEventId) {
+    return googleEventIdFromLocalId(event.originalEventId);
+  }
+  return googleEventIdFromLocalEvent(event);
 }
 
 export async function getGoogleCalendarEvents(
@@ -465,7 +522,7 @@ export async function createGoogleCalendarEvent(
   calendarId: string = DEFAULT_CALENDAR_ID
 ): Promise<CalendarEvent | null> {
   try {
-    const googleEvent = convertCalendarEventToGoogleEvent(event);
+    const googleEvent = await convertCalendarEventToGoogleEvent(event);
 
     const data = await fetchGoogleCalendarJson<GoogleCalendarEvent>({
       userId,
@@ -499,16 +556,72 @@ export async function updateGoogleCalendarEvent(
   refreshToken: string,
   expiresAt: number,
   event: CalendarEvent,
-  calendarId: string = DEFAULT_CALENDAR_ID
+  calendarId: string = DEFAULT_CALENDAR_ID,
+  scope: RecurrenceEditScope = "all",
 ): Promise<CalendarEvent | null> {
   try {
     if (!event.id.startsWith("google_")) {
       throw new Error("Not a Google Calendar event");
     }
 
-    const googleEventId = googleEventIdFromLocalEvent(event);
+    const googleEventId = googleEventIdForScope(event, scope);
+    const googleEvent = await convertCalendarEventToGoogleEvent(event, {
+      includeRecurrence: scope === "all" || !event.isRecurringInstance,
+    });
 
-    const googleEvent = convertCalendarEventToGoogleEvent(event);
+    if (scope === "following" && event.originalEventId && event.exceptionDate) {
+      const masterId = googleEventIdFromLocalId(event.originalEventId);
+      const master = await fetchGoogleCalendarJson<GoogleCalendarEvent>({
+        userId,
+        accessToken: _accessToken,
+        refreshToken,
+        expiresAt,
+        input: `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${masterId}`,
+        context: "Failed to fetch recurring master event",
+      });
+
+      const instanceDate = new Date(event.exceptionDate);
+      const dayBefore = new Date(instanceDate);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+
+      const truncatedRecurrence = (master.recurrence ?? []).map((line) => {
+        if (!line.startsWith("RRULE:")) return line;
+        const withoutUntil = line.replace(/;UNTIL=[^;]+/, "");
+        const until = dayBefore.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+        return `${withoutUntil};UNTIL=${until}`;
+      });
+
+      await fetchGoogleCalendarJson({
+        userId,
+        accessToken: _accessToken,
+        refreshToken,
+        expiresAt,
+        input: `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${masterId}`,
+        init: {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recurrence: truncatedRecurrence }),
+        },
+        context: "Failed to truncate recurring series",
+      });
+
+      return createGoogleCalendarEvent(
+        userId,
+        _accessToken,
+        refreshToken,
+        expiresAt,
+        {
+          ...event,
+          start: event.start,
+          end: event.end,
+          recurrence: event.recurrence,
+          isRecurringInstance: false,
+          originalEventId: undefined,
+          exceptionDate: undefined,
+        },
+        calendarId,
+      );
+    }
 
     const data = await fetchGoogleCalendarJson<GoogleCalendarEvent>({
       userId,
@@ -542,14 +655,60 @@ export async function deleteGoogleCalendarEvent(
   refreshToken: string,
   expiresAt: number,
   eventId: string,
-  calendarId: string = DEFAULT_CALENDAR_ID
+  calendarId: string = DEFAULT_CALENDAR_ID,
+  scope: RecurrenceEditScope = "all",
+  event?: CalendarEvent,
 ): Promise<boolean> {
   try {
     if (!eventId.startsWith("google_")) {
       throw new Error("Not a Google Calendar event");
     }
 
-    const googleEventId = googleEventIdFromLocalId(eventId);
+    if (
+      scope === "following" &&
+      event?.originalEventId &&
+      event.exceptionDate
+    ) {
+      const masterId = googleEventIdFromLocalId(event.originalEventId);
+      const master = await fetchGoogleCalendarJson<GoogleCalendarEvent>({
+        userId,
+        accessToken: _accessToken,
+        refreshToken,
+        expiresAt,
+        input: `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${masterId}`,
+        context: "Failed to fetch recurring master for delete",
+      });
+
+      const instanceDate = new Date(event.exceptionDate);
+      const dayBefore = new Date(instanceDate);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+      const truncatedRecurrence = (master.recurrence ?? []).map((line) => {
+        if (!line.startsWith("RRULE:")) return line;
+        const withoutUntil = line.replace(/;UNTIL=[^;]+/, "");
+        const until = dayBefore.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+        return `${withoutUntil};UNTIL=${until}`;
+      });
+
+      await fetchGoogleCalendarJson({
+        userId,
+        accessToken: _accessToken,
+        refreshToken,
+        expiresAt,
+        input: `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${masterId}`,
+        init: {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recurrence: truncatedRecurrence }),
+        },
+        context: "Failed to truncate recurring series for delete",
+      });
+      return true;
+    }
+
+    const googleEventId =
+      scope === "all" && event?.originalEventId
+        ? googleEventIdFromLocalId(event.originalEventId)
+        : googleEventIdFromLocalId(eventId);
 
     const response = await fetchGoogleCalendarResponse({
       userId,

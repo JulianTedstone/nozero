@@ -189,6 +189,150 @@ export type Database = {
         }
         Relationships: []
       }
+      account_codes: {
+        Row: {
+          account_email: string
+          archived_at: string | null
+          code: string
+          created_at: string
+          id: string
+          label: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_email: string
+          archived_at?: string | null
+          code: string
+          created_at?: string
+          id?: string
+          label: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_email?: string
+          archived_at?: string | null
+          code?: string
+          created_at?: string
+          id?: string
+          label?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_threads: {
+        Row: {
+          account_email: string
+          ai_summary: string | null
+          created_at: string
+          external_id: string
+          id: string
+          is_archived: boolean
+          is_tracking: boolean
+          is_unread: boolean
+          last_message_at: string | null
+          message_count: number
+          participants: Json
+          sender_email: string | null
+          streams: Json
+          subject: string
+          thread_intent: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_email: string
+          ai_summary?: string | null
+          created_at?: string
+          external_id: string
+          id?: string
+          is_archived?: boolean
+          is_tracking?: boolean
+          is_unread?: boolean
+          last_message_at?: string | null
+          message_count?: number
+          participants?: Json
+          sender_email?: string | null
+          streams?: Json
+          subject?: string
+          thread_intent?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_email?: string
+          ai_summary?: string | null
+          created_at?: string
+          external_id?: string
+          id?: string
+          is_archived?: boolean
+          is_tracking?: boolean
+          is_unread?: boolean
+          last_message_at?: string | null
+          message_count?: number
+          participants?: Json
+          sender_email?: string | null
+          streams?: Json
+          subject?: string
+          thread_intent?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_messages: {
+        Row: {
+          account_email: string | null
+          ai_summary: Json | null
+          body_original: string | null
+          body_plain: string
+          cc_emails: Json
+          created_at: string
+          external_id: string
+          from_email: string | null
+          id: string
+          sent_at: string | null
+          subject: string | null
+          thread_external_id: string
+          to_emails: Json
+          user_id: string
+        }
+        Insert: {
+          account_email?: string | null
+          ai_summary?: Json | null
+          body_original?: string | null
+          body_plain?: string
+          cc_emails?: Json
+          created_at?: string
+          external_id: string
+          from_email?: string | null
+          id?: string
+          sent_at?: string | null
+          subject?: string | null
+          thread_external_id: string
+          to_emails?: Json
+          user_id: string
+        }
+        Update: {
+          account_email?: string | null
+          ai_summary?: Json | null
+          body_original?: string | null
+          body_plain?: string
+          cc_emails?: Json
+          created_at?: string
+          external_id?: string
+          from_email?: string | null
+          id?: string
+          sent_at?: string | null
+          subject?: string | null
+          thread_external_id?: string
+          to_emails?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

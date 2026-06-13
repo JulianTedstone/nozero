@@ -14,7 +14,11 @@ just attaches `nozero-web` to that Caddy's Docker network. Same pattern as
    git clone https://github.com/JulianTedstone/nozero.git
    cd nozero
    # main now carries the full Supabase migration + Hetzner deploy stack
-   $EDITOR .env
+   # Inject from 1Password (nopilot.nozero + nopilot.tower vaults):
+   op inject -i .env.tpl -o .env
+   # Then set production site URLs if not already in your template:
+   # SITE_URL=https://zero.nopilot.co
+   # NEXT_PUBLIC_SITE_URL=https://zero.nopilot.co
    ```
    `.env` needs:
    ```bash
