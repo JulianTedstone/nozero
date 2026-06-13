@@ -4,15 +4,17 @@ import {
   getConnectedAccounts,
   upsertConnectedAccountMeta,
 } from "@/lib/connected-accounts";
+import { getPublicOrigin } from "@/lib/oauth-redirect";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
+  const origin = getPublicOrigin(request);
   const settingsUrl = `${origin}/settings?section=accounts`;
 
   if (error || !code || !state) {
@@ -95,25 +97,22 @@ export async function GET(request: Request) {
 
   const prefs = (profile?.preferences ?? {}) as Record<string, unknown>;
   const connectedTokens = (prefs.connectedTokens ?? {}) as Record<string, unknown>;
+  const tokenEntry = {
+    accessToken: tokenData.access_token,
+    refreshToken: tokenData.refresh_token ?? null,
+    tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+    scope: tokenData.scope ?? null,
+    updatedAt: new Date().toISOString(),
+  };
+  connectedTokens[email] = tokenEntry;
+
   const isPrimaryEmail =
     email.toLowerCase() === (user.email ?? "").toLowerCase();
-
-  if (!isPrimaryEmail) {
-    connectedTokens[email] = {
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token ?? null,
-      tokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
-      scope: tokenData.scope ?? null,
-      updatedAt: new Date().toISOString(),
-    };
-  }
 
   const { error: saveErr } = await admin
     .from("profiles")
     .update({
-      preferences: isPrimaryEmail
-        ? prefs
-        : { ...prefs, connectedTokens },
+      preferences: { ...prefs, connectedTokens },
       ...(isPrimaryEmail
         ? {
             access_token: tokenData.access_token,
@@ -139,10 +138,11 @@ export async function GET(request: Request) {
     (a) => a.email.toLowerCase() === email.toLowerCase() && a.id !== "primary-google",
   );
 
-  const resolvedAccountId =
-    existingMeta?.id ??
-    byEmail?.id ??
-    (accountId !== "new" ? accountId : `acct-${Date.now()}`);
+  const resolvedAccountId = isPrimaryEmail
+    ? "primary-google"
+    : (existingMeta?.id ??
+      byEmail?.id ??
+      (accountId !== "new" ? accountId : `acct-${Date.now()}`));
 
   await upsertConnectedAccountMeta(user.id, {
     id: resolvedAccountId,

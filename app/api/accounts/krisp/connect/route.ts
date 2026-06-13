@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes } from "crypto";
 import { NextResponse } from "next/server";
+import { getKrispRedirectUri, getPublicOrigin } from "@/lib/oauth-redirect";
 import { createClient } from "@/lib/supabase/server";
 
 function pkceChallenge(verifier: string): string {
@@ -7,7 +8,7 @@ function pkceChallenge(verifier: string): string {
 }
 
 export async function GET(request: Request) {
-  const { origin } = new URL(request.url);
+  const origin = getPublicOrigin(request);
 
   const supabase = await createClient();
   const {
@@ -25,9 +26,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const redirectUri =
-    process.env.KRISP_MCP_REDIRECT_URI?.trim() ||
-    `${origin}/api/accounts/krisp/callback`;
+  const redirectUri = getKrispRedirectUri(request);
 
   const authorizeUrl =
     process.env.KRISP_OAUTH_AUTHORIZE_URL?.trim() ||

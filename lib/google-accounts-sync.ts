@@ -12,6 +12,10 @@ import {
   isSyncRangeFullyExtended,
 } from "@/lib/calendar-sync-range";
 import {
+  SYNC_MAX_FUTURE_YEARS,
+  SYNC_MAX_PAST_YEARS,
+} from "@/lib/sync-window";
+import {
   syncGoogleCalendarEventsIncrementally,
   syncGoogleCalendarEventsInRange,
 } from "@/lib/google-calendar";
@@ -47,12 +51,17 @@ export async function pullAllGoogleCalendarAccounts(
   for (const account of linked) {
     try {
       let accessToken = account.accessToken;
-      if (!account.isPrimary) {
-        const token = connectedByEmail.get(account.email.toLowerCase());
-        if (token) {
-          const refreshed = await getValidAccessToken(userId, token);
-          if (refreshed) accessToken = refreshed;
-        }
+      let refreshToken = account.refreshToken;
+      let expiresAt = account.expiresAt;
+
+      const token = connectedByEmail.get(account.email.toLowerCase());
+      if (token) {
+        const refreshed = await getValidAccessToken(userId, token);
+        if (refreshed) accessToken = refreshed;
+        refreshToken = token.refreshToken ?? refreshToken;
+        expiresAt = token.tokenExpiry
+          ? Math.floor(token.tokenExpiry.getTime() / 1000)
+          : expiresAt;
       }
 
       const accountId = account.isPrimary
@@ -80,8 +89,8 @@ export async function pullAllGoogleCalendarAccounts(
           const rangeResult = await syncGoogleCalendarEventsInRange({
             userId,
             accessToken,
-            refreshToken: account.refreshToken,
-            expiresAt: account.expiresAt,
+            refreshToken,
+            expiresAt,
             accountEmail: account.email,
             calendarId: cal.calendarId,
             start: windowRange.start,
@@ -94,8 +103,8 @@ export async function pullAllGoogleCalendarAccounts(
         const result = await syncGoogleCalendarEventsIncrementally({
           userId,
           accessToken,
-          refreshToken: account.refreshToken,
-          expiresAt: account.expiresAt,
+          refreshToken,
+          expiresAt,
           accountEmail: account.email,
           isPrimary: account.isPrimary,
           initialSyncToken:
@@ -236,4 +245,38 @@ export async function hasAnyCalendarLinked(userId: string): Promise<boolean> {
   return accounts.some(
     (a) => a.connected && (a.type === "google" || a.type === "caldav"),
   );
+}
+
+/** One-shot pull for a wide historical window (Google + CalDAV). */
+export async function backfillCalendarHistory(
+  userId: string,
+  yearsBack = SYNC_MAX_PAST_YEARS,
+): Promise<{
+  pulled: number;
+  deleted: number;
+  accounts: number;
+  errors: string[];
+}> {
+  const now = new Date();
+  const start = new Date(now);
+  start.setFullYear(start.getFullYear() - yearsBack);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setFullYear(end.getFullYear() + SYNC_MAX_FUTURE_YEARS);
+  end.setHours(23, 59, 59, 999);
+
+  const result = await pullAllCalendarAccounts(userId, {
+    timeRange: { start, end },
+  });
+
+  const { saveCalendarSyncRange } = await import("@/lib/calendar-sync-range");
+  await saveCalendarSyncRange(userId, {
+    syncedStart: start.toISOString(),
+    syncedEnd: end.toISOString(),
+    pastComplete: true,
+    futureComplete: true,
+    lastExtendedAt: now.toISOString(),
+  });
+
+  return result;
 }

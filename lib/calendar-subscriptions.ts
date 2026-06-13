@@ -128,6 +128,7 @@ export async function getSubscribedCalendarsForAccount(
   if (sourceType === "google") {
     return [{ calendarId: "primary", name: "Primary", color: "#4285F4", primary: true }];
   }
+  // CalDAV: empty means pullCalDavAccount syncs all server calendars.
   return [];
 }
 

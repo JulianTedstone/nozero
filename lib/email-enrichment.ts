@@ -110,3 +110,37 @@ Return plain text only.`;
     return null;
   }
 }
+
+export async function draftReplyForThread(input: {
+  subject: string;
+  persona?: string;
+  threadMessages: Array<{ from: string; body: string; isMine?: boolean }>;
+}): Promise<string | null> {
+  if (!process.env.OPENROUTER_API_KEY) return null;
+
+  const transcript = input.threadMessages
+    .slice(-6)
+    .map((m) => `${m.from}${m.isMine ? " (me)" : ""}:\n${m.body.slice(0, 1200)}`)
+    .join("\n\n---\n\n");
+
+  const agent = input.persona?.trim() || "Bertrand";
+  const prompt = `You are ${agent}, drafting an email reply on the user's behalf.
+
+Write a complete reply body only — no subject line, no markdown, no sign-off placeholders like [Your name].
+
+Subject: ${input.subject}
+
+Thread:
+${transcript || "(empty thread)"}`;
+
+  try {
+    const { text } = await generateText({
+      model: getOpenRouterModel(),
+      prompt,
+      maxTokens: 600,
+    });
+    return text.trim() || null;
+  } catch {
+    return null;
+  }
+}

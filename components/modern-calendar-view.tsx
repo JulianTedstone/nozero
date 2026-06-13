@@ -1385,34 +1385,39 @@ export function ModernCalendarView({
 
   /* ─── Sidebar Content (shared between mobile drawer & desktop) ── */
 
+  const appTabBar = (
+    <div className="liquid-glass-subtle flex flex-row items-center gap-0.5 rounded-xl p-1">
+      {([
+        { id: "email", icon: MailIcon },
+        { id: "calendar", icon: CalendarIcon },
+        { id: "board", icon: LayoutDashboardIcon },
+        { id: "context", icon: ContextIcon },
+      ] as const).map(({ id, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => {
+            setActiveTab(id);
+            if (id === "context" && contextFocus.type === "none") {
+              setContextFocus({ type: "none" });
+            }
+          }}
+          className={cn(
+            "flex flex-1 flex-col items-center gap-1 rounded-lg py-2 transition-colors",
+            activeTab === id
+              ? "bg-white/[0.08] text-white/80"
+              : "text-white/25 hover:text-white/40",
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </button>
+      ))}
+    </div>
+  );
+
   const sidebarInner = (
     <>
-      {/* Tab Bar */}
-      <div className="liquid-glass-subtle rounded-xl flex items-center p-1 gap-0.5">
-        {([
-          { id: "email", icon: MailIcon },
-          { id: "calendar", icon: CalendarIcon },
-          { id: "board", icon: LayoutDashboardIcon },
-          { id: "context", icon: ContextIcon },
-        ] as const).map(({ id, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => {
-              setActiveTab(id);
-              if (id === "context" && contextFocus.type === "none") {
-                setContextFocus({ type: "none" });
-              }
-            }}
-            className={cn(
-              "flex-1 flex flex-col items-center gap-1 rounded-lg py-2 transition-colors",
-              activeTab === id ? "bg-white/[0.08] text-white/80" : "text-white/25 hover:text-white/40"
-            )}
-          >
-            <Icon className="h-3.5 w-3.5" />
-          </button>
-        ))}
-      </div>
+      {appTabBar}
 
       {activeTab === "calendar" && (
         <>
@@ -1606,35 +1611,6 @@ export function ModernCalendarView({
         </div>
       )}
 
-      {activeTab === "board" && (
-        <div className="space-y-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-white/30">
-            Flightdeck
-          </p>
-          <p className="text-[11px] leading-relaxed text-white/25">
-            GitHub Project #17 — kanban in the main panel. Use stream filter
-            there to focus a lane.
-          </p>
-          {boardStreamFilter ? (
-            <p className="text-[10px] text-white/35">
-              Stream ·{" "}
-              <span className="text-white/55">{boardStreamFilter}</span>
-            </p>
-          ) : null}
-        </div>
-      )}
-
-      {activeTab === "email" && (
-        <div className="space-y-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-white/30">
-            Email
-          </p>
-          <p className="text-[11px] leading-relaxed text-white/25">
-            Threads and replies in the main panel. Context rail shows people,
-            companies, and Flightdeck tasks.
-          </p>
-        </div>
-      )}
     </>
   );
 
@@ -1783,12 +1759,14 @@ export function ModernCalendarView({
       </AnimatePresence>
 
       {/* ── Desktop Sidebar ── */}
-      <div className="hidden w-[260px] flex-shrink-0 flex-col overflow-hidden md:flex">
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          {sidebarInner}
+      {activeTab !== "email" && activeTab !== "board" ? (
+        <div className="hidden w-[260px] flex-shrink-0 flex-col overflow-hidden md:flex">
+          <div className="flex-1 space-y-4 overflow-y-auto p-4">
+            {sidebarInner}
+          </div>
+          {sidebarUserFooter}
         </div>
-        {sidebarUserFooter}
-      </div>
+      ) : null}
 
       {/* ── Main area (calendar | context takeover | …) ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -1940,12 +1918,18 @@ export function ModernCalendarView({
             userEmail={userEmail}
           />
         ) : activeTab === "board" ? (
-          <FlightdeckBoardView initialStream={boardStreamFilter} />
+          <FlightdeckBoardView
+            initialStream={boardStreamFilter}
+            tabBar={appTabBar}
+          />
         ) : activeTab === "email" ? (
           <EmailView
             initialThreadId={emailThreadId}
             mirrorVersion={emailMirrorVersion}
             onThreadIdChange={setEmailThreadId}
+            persona={persona}
+            sidebarFooter={sidebarUserFooter}
+            tabBar={appTabBar}
             userEmail={userEmail}
             userId={userId}
           />

@@ -1087,13 +1087,23 @@ export function ModernSettingsForm({
               )}
             </div>
             {isPrimary && (
-              <p className="text-[10px] text-emerald-400/70">Connected via Google OAuth (primary login)</p>
-            )}
-            {!isNew && account?.connected && (
-              <AccountCalendarSubscriptions
-                accountId={account.id}
-                connected={account.connected}
-              />
+              <div className="space-y-2">
+                <p className="text-[10px] text-muted-foreground">
+                  Primary login via Google. Use reconnect if calendar sync fails.
+                </p>
+                <a
+                  href={`/api/auth/google/connect?email=${encodeURIComponent(account?.email ?? "")}&accountId=primary-google`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#4285F4]/15 px-2.5 py-1.5 text-[10px] font-medium text-[#4285F4] hover:bg-[#4285F4]/25 transition-colors"
+                >
+                  Reconnect Google Calendar
+                </a>
+                {account?.connected && (
+                  <AccountCalendarSubscriptions
+                    accountId={account.id}
+                    connected={account.connected}
+                  />
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1745,8 +1755,16 @@ export function ModernSettingsForm({
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground/80">
-                  This is your nozero login account. Email is managed by Google OAuth and cannot be changed here.
+                  This is your nozero login account. Reconnect Google Calendar if sync fails for your primary Gmail.
                 </p>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`/api/auth/google/connect?email=${encodeURIComponent(userEmail)}&accountId=primary-google`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#4285F4]/15 px-3 py-2 text-[11px] font-medium text-[#4285F4] hover:bg-[#4285F4]/25 transition-colors"
+                  >
+                    Reconnect Google Calendar
+                  </a>
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="button"

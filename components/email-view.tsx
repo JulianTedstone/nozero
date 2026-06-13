@@ -19,6 +19,7 @@ import {
   ReplyIcon,
   SearchIcon,
   SendIcon,
+  SparklesIcon,
   XIcon,
 } from "lucide-react";
 import {
@@ -27,9 +28,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { formatSyncAge } from "@/lib/format-sync-age";
 import {
   readAllEmailThreads,
   readEmailAccounts,
@@ -57,8 +58,11 @@ interface EmailViewProps {
   initialThreadId?: string | null;
   mirrorVersion?: number;
   onThreadIdChange?: (threadId: string | null) => void;
+  persona?: "Bertrand" | "Pierre";
   userEmail?: string;
   userId?: string;
+  tabBar?: ReactNode;
+  sidebarFooter?: ReactNode;
 }
 
 const FILTER_TABS: Array<{
@@ -144,6 +148,9 @@ export function EmailView({
   initialThreadId = null,
   mirrorVersion = 0,
   onThreadIdChange,
+  persona = "Bertrand",
+  tabBar,
+  sidebarFooter,
 }: EmailViewProps) {
   const [accounts, setAccounts] = useState<EmailAccountView[]>([]);
   const [accountsExpanded, setAccountsExpanded] = useState(true);
@@ -173,6 +180,7 @@ export function EmailView({
 
   const [replyBody, setReplyBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [agentDraftLoading, setAgentDraftLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
   const [originalMessage, setOriginalMessage] = useState<EmailMessage | null>(
@@ -183,6 +191,7 @@ export function EmailView({
   const [mobileContextOpen, setMobileContextOpen] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
+  const composeRef = useRef<HTMLTextAreaElement>(null);
 
   const refreshLastSyncedAt = useCallback(async () => {
     if (!userId) return;
@@ -640,6 +649,50 @@ export function EmailView({
     }
   };
 
+  const focusCompose = () => {
+    composeRef.current?.focus();
+  };
+
+  const requestAgentDraft = async () => {
+    if (!detail) return;
+    setAgentDraftLoading(true);
+    setSendError(null);
+    try {
+      const res = await fetch("/api/email/draft-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: detail.thread.subject,
+          persona,
+          messages: detail.messages.map((msg) => ({
+            from: msg.from,
+            body: msg.body,
+            isMine: msg.isMine,
+          })),
+        }),
+      });
+      const data = (await res.json()) as { draft?: string; error?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not generate draft");
+      }
+      setReplyBody(data.draft ?? "");
+      composeRef.current?.focus();
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Draft failed");
+    } finally {
+      setAgentDraftLoading(false);
+    }
+  };
+
+  const startForwardDraft = () => {
+    if (!detail) return;
+    const last = detail.messages.at(-1);
+    setReplyBody(
+      `\n\n---------- Forwarded message ----------\nFrom: ${last?.from ?? ""}\nSubject: ${detail.thread.subject}\nDate: ${formatMessageDate(last?.date ?? null)}\n\n${last?.body ?? ""}`,
+    );
+    composeRef.current?.focus();
+  };
+
   const handleListScroll = () => {
     const el = listRef.current;
     if (!el || loadingMore || !nextCursor) return;
@@ -698,202 +751,212 @@ export function EmailView({
     );
   };
 
+  const handleNewMessage = () => {
+    setSelectedId(null);
+    setSelectedAccount(null);
+    setDetail(null);
+    setReplyBody("");
+    onThreadIdChange?.(null);
+    window.requestAnimationFrame(() => composeRef.current?.focus());
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 border-white/[0.06] border-b px-4 py-3 md:px-5">
-        <div className="flex items-center gap-2">
-          <MailIcon className="h-4 w-4 shrink-0 text-white/45" />
-          <div className="min-w-0 flex-1">
-            <h1 className="font-semibold text-sm text-white/85">Email</h1>
-            <p
-              className={cn(
-                "truncate text-[10px]",
-                syncError ? "text-amber-400/80" : "text-white/35",
-              )}
-            >
-              {listRefreshing && "Syncing mail…"}
-              {!listRefreshing && syncError && syncError}
-              {!listRefreshing &&
-                !syncError &&
-                (lastSyncedAt
-                  ? `Last sync ${formatSyncAge(lastSyncedAt)}`
-                  : "Waiting for first sync…")}
-              {!listRefreshing &&
-                typeof navigator !== "undefined" &&
-                !navigator.onLine &&
-                " · offline"}
-            </p>
-          </div>
-          <Button
-            className="h-8 gap-1.5 border-white/[0.08] bg-white/[0.04] text-[11px] text-white/60"
-            disabled={listRefreshing}
-            onClick={() => {
-              void runEmailSync();
-            }}
-            size="sm"
-            variant="outline"
-          >
-            <RefreshCwIcon
-              className={cn("h-3 w-3", listRefreshing && "animate-spin")}
-            />
-            Refresh
-          </Button>
-        </div>
-      </header>
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)_20rem]">
-        {/* Left column */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
+        {/* Left column — thread list */}
         <aside
           className={cn(
-            "flex min-h-0 flex-col border-white/[0.06] border-b lg:border-r lg:border-b-0",
+            "flex min-h-0 flex-col border-white/[0.06] border-b lg:w-[260px] lg:max-w-[260px] lg:border-r lg:border-b-0",
             selectedId && "hidden lg:flex",
           )}
         >
-          {accounts.length > 0 ? (
-            <div className="shrink-0 border-white/[0.06] border-b p-3">
-              <div className="liquid-glass-subtle rounded-xl p-3">
-                <button
-                  className="mb-2 flex w-full items-center justify-between gap-2 text-left"
-                  onClick={() => {
-                    const next = !accountsExpanded;
-                    setAccountsExpanded(next);
-                    fetch("/api/email/visibility", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ accountsExpanded: next }),
-                    }).catch(() => undefined);
-                  }}
-                  type="button"
-                >
-                  <span className="section-label">Email accounts</span>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="shrink-0 space-y-4 p-4 pb-2">
+              {tabBar}
+
+              <Button
+                className="h-9 w-full rounded-xl bg-white/95 font-medium text-black text-xs hover:bg-white"
+                onClick={handleNewMessage}
+                type="button"
+              >
+                <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                New Message
+              </Button>
+
+              {accounts.length > 0 ? (
+                <div className="liquid-glass-subtle rounded-xl p-3">
+                  <button
+                    className="mb-2 flex w-full items-center justify-between gap-2 text-left"
+                    onClick={() => {
+                      const next = !accountsExpanded;
+                      setAccountsExpanded(next);
+                      fetch("/api/email/visibility", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ accountsExpanded: next }),
+                      }).catch(() => undefined);
+                    }}
+                    type="button"
+                  >
+                    <span className="section-label">Email accounts</span>
+                    {accountsExpanded ? (
+                      <ChevronDownIcon className="h-3.5 w-3.5 text-white/30" />
+                    ) : (
+                      <ChevronRightIcon className="h-3.5 w-3.5 text-white/30" />
+                    )}
+                  </button>
                   {accountsExpanded ? (
-                    <ChevronDownIcon className="h-3.5 w-3.5 text-white/30" />
-                  ) : (
-                    <ChevronRightIcon className="h-3.5 w-3.5 text-white/30" />
-                  )}
-                </button>
-                {accountsExpanded ? (
-                  <div className="max-h-36 space-y-1.5 overflow-y-auto">
-                    {accounts.map((account) => (
-                      <div
-                        className="flex items-center justify-between gap-2 py-0.5"
-                        key={account.id}
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                          <button
-                            aria-label={
-                              account.visible ? "Hide account" : "Show account"
-                            }
-                            className="h-3.5 w-3.5 flex-shrink-0 rounded transition-opacity"
-                            onClick={() => {
-                              toggleAccountVisibility(
-                                account.email,
-                                !account.visible,
-                              ).catch(() => undefined);
-                            }}
-                            style={{
-                              backgroundColor: account.color,
-                              opacity: account.visible ? 1 : 0.25,
-                            }}
-                            type="button"
-                          />
-                          <span className="truncate text-[11px] text-white/50">
-                            {account.label}
-                            <span className="ml-1 text-white/25">
-                              ({friendlyAccountName(account.email)})
+                    <div className="max-h-36 space-y-1.5 overflow-y-auto">
+                      {accounts.map((account) => (
+                        <div
+                          className="flex items-center justify-between gap-2 py-0.5"
+                          key={account.id}
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <button
+                              aria-label={
+                                account.visible
+                                  ? "Hide account"
+                                  : "Show account"
+                              }
+                              className="h-3.5 w-3.5 flex-shrink-0 rounded transition-opacity"
+                              onClick={() => {
+                                toggleAccountVisibility(
+                                  account.email,
+                                  !account.visible,
+                                ).catch(() => undefined);
+                              }}
+                              style={{
+                                backgroundColor: account.color,
+                                opacity: account.visible ? 1 : 0.25,
+                              }}
+                              type="button"
+                            />
+                            <span className="truncate text-[11px] text-white/50">
+                              {account.label}
+                              <span className="ml-1 text-white/25">
+                                ({friendlyAccountName(account.email)})
+                              </span>
                             </span>
-                          </span>
+                          </div>
                         </div>
-                      </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-1">
+                  <div className="flex flex-1 gap-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
+                    {FILTER_TABS.map(({ id, label, icon: Icon }) => (
+                      <button
+                        className={cn(
+                          "flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[9px] transition-colors",
+                          filter === id
+                            ? "bg-white/[0.08] text-white/75"
+                            : "text-white/35 hover:text-white/50",
+                        )}
+                        key={id}
+                        onClick={() => setFilter(id)}
+                        title={label}
+                        type="button"
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                      </button>
                     ))}
+                  </div>
+                  <button
+                    aria-label="Refresh mail"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/45 hover:bg-white/[0.06] hover:text-white/65 disabled:opacity-50"
+                    disabled={listRefreshing}
+                    onClick={() => {
+                      void runEmailSync();
+                    }}
+                    title={
+                      syncError ??
+                      (listRefreshing
+                        ? "Syncing…"
+                        : lastSyncedAt
+                          ? "Refresh mail"
+                          : "Refresh mail")
+                    }
+                    type="button"
+                  >
+                    <RefreshCwIcon
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        listRefreshing && "animate-spin",
+                      )}
+                    />
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
+                  <input
+                    aria-busy={searchQuery !== debouncedSearch}
+                    className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-8 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter mail…"
+                    value={searchQuery}
+                  />
+                  {searchQuery ? (
+                    <button
+                      aria-label="Clear search"
+                      className="absolute top-1/2 right-2 -translate-y-1/2 text-white/30 hover:text-white/55"
+                      onClick={() => setSearchQuery("")}
+                      type="button"
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </button>
+                  ) : null}
+                </div>
+
+                {boardStreams.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {boardStreams.map((stream) => {
+                      const active = streamFilter === stream;
+                      return (
+                        <button
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[9px] transition-colors",
+                            active
+                              ? "border-white/20 bg-white/10 text-white/75"
+                              : "border-white/[0.06] text-white/35 hover:text-white/55",
+                          )}
+                          key={stream}
+                          onClick={() =>
+                            setStreamFilter(active ? null : stream)
+                          }
+                          type="button"
+                        >
+                          {stream}
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
             </div>
-          ) : null}
 
-          <div className="shrink-0 space-y-2 border-white/[0.06] border-b p-3">
-            <div className="flex gap-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
-              {FILTER_TABS.map(({ id, label, icon: Icon }) => (
-                <button
-                  className={cn(
-                    "flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[9px] transition-colors",
-                    filter === id
-                      ? "bg-white/[0.08] text-white/75"
-                      : "text-white/35 hover:text-white/50",
-                  )}
-                  key={id}
-                  onClick={() => setFilter(id)}
-                  title={label}
-                  type="button"
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative">
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
-              <input
-                aria-busy={searchQuery !== debouncedSearch}
-                className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-8 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter mail…"
-                value={searchQuery}
-              />
-              {searchQuery ? (
-                <button
-                  aria-label="Clear search"
-                  className="absolute top-1/2 right-2 -translate-y-1/2 text-white/30 hover:text-white/55"
-                  onClick={() => setSearchQuery("")}
-                  type="button"
-                >
-                  <XIcon className="h-3 w-3" />
-                </button>
-              ) : null}
-            </div>
-
-            {boardStreams.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {boardStreams.map((stream) => {
-                  const active = streamFilter === stream;
-                  return (
-                    <button
-                      className={cn(
-                        "rounded-full border px-2 py-0.5 text-[9px] transition-colors",
-                        active
-                          ? "border-white/20 bg-white/10 text-white/75"
-                          : "border-white/[0.06] text-white/35 hover:text-white/55",
-                      )}
-                      key={stream}
-                      onClick={() =>
-                        setStreamFilter(active ? null : stream)
-                      }
-                      type="button"
-                    >
-                      {stream}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-
-          <div
-            className="min-h-0 flex-1 overflow-y-auto"
-            onScroll={handleListScroll}
-            ref={listRef}
-          >
+            <div
+              className="min-h-0 flex-1 overflow-y-auto"
+              onScroll={handleListScroll}
+              ref={listRef}
+            >
             {listLoading && threads.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-12 text-[11px] text-white/30">
                 <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                 Loading…
               </div>
             ) : threads.length === 0 ? (
-              <p className="px-3 py-8 text-center text-[11px] text-white/25">
-                {listError ?? "No conversations yet."}
-              </p>
+              listError ? (
+                <p className="px-3 py-8 text-center text-[11px] text-amber-400/80">
+                  {listError}
+                </p>
+              ) : null
             ) : (
               <ul className="divide-y divide-white/[0.04]">
                 {threads.map((thread) => {
@@ -996,56 +1059,60 @@ export function EmailView({
                 <Loader2Icon className="h-3 w-3 animate-spin" />
               </div>
             ) : null}
+            </div>
+            {sidebarFooter}
           </div>
         </aside>
 
-        {/* Center — chat thread */}
+        {/* Center — thread + compose */}
         <main className="flex min-h-0 min-w-0 flex-col border-white/[0.06] border-b lg:border-r lg:border-b-0">
-          {selectedId ? (
-            detailLoading && !detail ? (
-              <div className="flex flex-1 items-center justify-center gap-2 text-[11px] text-white/30">
-                <Loader2Icon className="h-4 w-4 animate-spin" />
-                Loading thread…
-              </div>
-            ) : detailError ? (
-              <div className="flex flex-1 items-center justify-center p-6 text-center text-[11px] text-amber-400/80">
-                {detailError}
-              </div>
-            ) : detail ? (
-              <>
-                <div className="shrink-0 border-white/[0.06] border-b px-4 py-3 md:px-5">
-                  <div className="flex items-start gap-2">
-                    <button
-                      aria-label="Back to inbox"
-                      className="mt-0.5 shrink-0 rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70 lg:hidden"
-                      onClick={() => {
-                        setSelectedId(null);
-                        setMobileContextOpen(false);
-                        onThreadIdChange?.(null);
-                      }}
-                      type="button"
-                    >
-                      <ArrowLeftIcon className="h-4 w-4" />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="font-semibold text-sm text-white/85">
-                        {detail.thread.subject}
-                      </h2>
-                      <p className="mt-1 text-[10px] text-white/35">
-                        {detail.thread.participants.join(" · ")}
-                      </p>
-                    </div>
-                    <button
-                      className="shrink-0 rounded-md border border-white/[0.08] px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.04] xl:hidden"
-                      onClick={() => setMobileContextOpen(true)}
-                      type="button"
-                    >
-                      Context
-                    </button>
-                  </div>
+          {selectedId && detail && !detailLoading && !detailError ? (
+            <div className="shrink-0 border-white/[0.06] border-b px-4 py-3 md:px-5">
+              <div className="flex items-start gap-2">
+                <button
+                  aria-label="Back to inbox"
+                  className="mt-0.5 shrink-0 rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70 lg:hidden"
+                  onClick={() => {
+                    setSelectedId(null);
+                    setMobileContextOpen(false);
+                    onThreadIdChange?.(null);
+                  }}
+                  type="button"
+                >
+                  <ArrowLeftIcon className="h-4 w-4" />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-semibold text-sm text-white/85">
+                    {detail.thread.subject}
+                  </h2>
+                  <p className="mt-1 text-[10px] text-white/35">
+                    {detail.thread.participants.join(" · ")}
+                  </p>
                 </div>
+                <button
+                  className="shrink-0 rounded-md border border-white/[0.08] px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.04] lg:hidden"
+                  onClick={() => setMobileContextOpen(true)}
+                  type="button"
+                >
+                  Context
+                </button>
+              </div>
+            </div>
+          ) : null}
 
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 md:p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {selectedId ? (
+              detailLoading && !detail ? (
+                <div className="flex h-full items-center justify-center gap-2 text-[11px] text-white/30">
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                  Loading thread…
+                </div>
+              ) : detailError ? (
+                <div className="flex h-full items-center justify-center p-6 text-center text-[11px] text-amber-400/80">
+                  {detailError}
+                </div>
+              ) : detail ? (
+                <div className="space-y-3 p-4 md:p-5">
                   {detail.messages.map((msg) => {
                     const mine = msg.isMine;
                     const bubbleColor =
@@ -1142,72 +1209,117 @@ export function EmailView({
                     );
                   })}
                 </div>
+              ) : null
+            ) : null}
+          </div>
 
-                <div className="shrink-0 border-white/[0.06] border-t p-4 md:p-5">
-                  {replyRecipients.length > 0 ? (
-                    <p className="mb-2 text-[10px] text-white/30">
-                      Reply to {replyRecipients.join(", ")}
-                    </p>
-                  ) : null}
-                  <textarea
-                    className="min-h-[5rem] w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-[12px] text-white/75 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (
-                        (e.metaKey || e.ctrlKey) &&
-                        e.key === "Enter" &&
-                        !sending &&
-                        replyBody.trim()
-                      ) {
-                        e.preventDefault();
-                        sendReply().catch(() => undefined);
-                      }
-                    }}
-                    placeholder="Write a reply… (⌘↵ to send)"
-                    value={replyBody}
-                  />
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    {sendError ? (
-                      <p className="text-[10px] text-amber-400/80">
-                        {sendError}
-                      </p>
-                    ) : (
-                      <span />
-                    )}
-                    <Button
-                      className="h-8 gap-1.5 bg-white/[0.08] text-[11px] text-white/75 hover:bg-white/[0.12]"
-                      disabled={sending || !replyBody.trim()}
-                      onClick={() => {
-                        sendReply().catch(() => undefined);
-                      }}
-                      size="sm"
-                    >
-                      {sending ? (
-                        <Loader2Icon className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <SendIcon className="h-3 w-3" />
-                      )}
-                      Send
-                    </Button>
-                  </div>
-                </div>
-              </>
-            ) : null
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-              <MailIcon className="h-8 w-8 text-white/15" />
-              <p className="text-[12px] text-white/30">
-                Select a thread or compose a new message.
+          <div className="mt-auto shrink-0 border-white/[0.06] border-t px-4 py-3">
+            {replyRecipients.length > 0 ? (
+              <p className="mb-2 text-[10px] text-white/30">
+                Reply to {replyRecipients.join(", ")}
               </p>
+            ) : null}
+            <div className="liquid-glass-input flex flex-col gap-2 rounded-xl px-3 py-2.5">
+              <textarea
+                className="min-h-[7.5rem] w-full resize-none bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!detail || sending || agentDraftLoading}
+                onChange={(e) => setReplyBody(e.target.value)}
+                onKeyDown={(e) => {
+                  if (
+                    (e.metaKey || e.ctrlKey) &&
+                    e.key === "Enter" &&
+                    !sending &&
+                    !agentDraftLoading &&
+                    replyBody.trim() &&
+                    detail
+                  ) {
+                    e.preventDefault();
+                    sendReply().catch(() => undefined);
+                  }
+                }}
+                placeholder={
+                  detail ? "Write a reply… (⌘↵ to send)" : undefined
+                }
+                ref={composeRef}
+                rows={5}
+                value={replyBody}
+              />
+              <div className="flex items-center justify-between gap-2">
+                {sendError ? (
+                  <p className="min-w-0 truncate text-[10px] text-amber-400/80">
+                    {sendError}
+                  </p>
+                ) : (
+                  <span className="min-w-0 flex-1" />
+                )}
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    aria-label="Draft reply"
+                    className="rounded-lg p-1.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30"
+                    disabled={!detail}
+                    onClick={focusCompose}
+                    title="Draft reply"
+                    type="button"
+                  >
+                    <ReplyIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    aria-label={`Ask ${persona} to draft a reply`}
+                    className="rounded-lg p-1.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30"
+                    disabled={!detail || agentDraftLoading}
+                    onClick={() => {
+                      void requestAgentDraft();
+                    }}
+                    title={`Ask ${persona} to draft`}
+                    type="button"
+                  >
+                    {agentDraftLoading ? (
+                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <SparklesIcon className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <button
+                    aria-label="Forward"
+                    className="rounded-lg p-1.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30"
+                    disabled={!detail}
+                    onClick={startForwardDraft}
+                    title="Forward"
+                    type="button"
+                  >
+                    <ForwardIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <Button
+                    className="h-7 w-7 rounded-lg bg-blue-500/80 text-white hover:bg-blue-500 disabled:opacity-30"
+                    disabled={
+                      sending ||
+                      agentDraftLoading ||
+                      !replyBody.trim() ||
+                      !detail
+                    }
+                    onClick={() => {
+                      sendReply().catch(() => undefined);
+                    }}
+                    size="icon"
+                    title="Send"
+                  >
+                    {sending ? (
+                      <Loader2Icon className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <SendIcon className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
-          )}
+          </div>
         </main>
 
         {/* Right context rail */}
         {mobileContextOpen ? (
           <button
             aria-label="Close context panel"
-            className="fixed inset-0 z-40 bg-black/50 xl:hidden"
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
             onClick={() => setMobileContextOpen(false)}
             type="button"
           />
@@ -1217,11 +1329,11 @@ export function EmailView({
             "min-h-0 flex-col overflow-y-auto p-3 md:p-4",
             mobileContextOpen
               ? "fixed inset-y-0 right-0 z-50 flex w-full max-w-sm border-white/[0.08] border-l bg-[#0a0a0a] shadow-2xl"
-              : "hidden xl:flex",
+              : "hidden lg:flex",
           )}
         >
           {mobileContextOpen ? (
-            <div className="mb-3 flex items-center justify-between xl:hidden">
+            <div className="mb-3 flex items-center justify-between lg:hidden">
               <span className="font-semibold text-[11px] text-white/60 uppercase tracking-wider">
                 Context
               </span>
@@ -1239,11 +1351,7 @@ export function EmailView({
               <Loader2Icon className="h-3 w-3 animate-spin" />
               Loading context…
             </div>
-          ) : !detail ? (
-            <p className="py-6 text-[11px] text-white/25">
-              Select a thread to see connected context.
-            </p>
-          ) : (
+          ) : !detail ? null : (
             <div className="space-y-3">
               <ContextSection title="Thread purpose">
                 <p className="text-white/60 leading-relaxed">

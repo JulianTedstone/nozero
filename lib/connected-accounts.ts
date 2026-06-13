@@ -134,20 +134,36 @@ export async function listGoogleAccountsForSync(userId: string): Promise<
   }> = [];
 
   const primaryEmail = user?.email?.toLowerCase();
-  if (
-    user?.accessToken &&
-    user.refreshToken &&
-    user.email &&
-    user.provider === "google"
-  ) {
-    accounts.push({
-      email: user.email,
-      accessToken: user.accessToken,
-      refreshToken: user.refreshToken,
-      expiresAt: user.expiresAt ? Math.floor(user.expiresAt / 1000) : 0,
-      isPrimary: true,
-      googleSyncToken: user.googleSyncToken,
-    });
+  const primaryConnected =
+    primaryEmail &&
+    (connectedTokens[user.email!] ?? connectedTokens[primaryEmail]);
+
+  if (user?.email && user.provider === "google") {
+    const useConnected =
+      primaryConnected?.accessToken && primaryConnected.refreshToken;
+
+    if (useConnected) {
+      accounts.push({
+        email: user.email,
+        accessToken: primaryConnected.accessToken,
+        refreshToken: primaryConnected.refreshToken,
+        expiresAt: primaryConnected.tokenExpiry
+          ? Math.floor(new Date(primaryConnected.tokenExpiry).getTime() / 1000)
+          : 0,
+        isPrimary: true,
+        googleSyncToken:
+          primaryConnected.googleSyncToken ?? user.googleSyncToken,
+      });
+    } else if (user.accessToken && user.refreshToken) {
+      accounts.push({
+        email: user.email,
+        accessToken: user.accessToken,
+        refreshToken: user.refreshToken,
+        expiresAt: user.expiresAt ? Math.floor(user.expiresAt / 1000) : 0,
+        isPrimary: true,
+        googleSyncToken: user.googleSyncToken,
+      });
+    }
   }
 
   for (const [email, token] of Object.entries(connectedTokens)) {

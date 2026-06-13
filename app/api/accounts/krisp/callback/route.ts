@@ -1,5 +1,6 @@
 import { createHmac } from "crypto";
 import { NextResponse } from "next/server";
+import { getKrispRedirectUri } from "@/lib/oauth-redirect";
 import { saveKrispTokens } from "@/lib/krisp-tokens";
 import { createClient } from "@/lib/supabase/server";
 
@@ -51,9 +52,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${settingsUrl}&krisp_error=not_configured`);
   }
 
-  const redirectUri =
-    process.env.KRISP_MCP_REDIRECT_URI?.trim() ||
-    `${origin}/api/accounts/krisp/callback`;
+  const redirectUri = getKrispRedirectUri(request);
 
   const tokenUrl =
     process.env.KRISP_OAUTH_TOKEN_URL?.trim() ||

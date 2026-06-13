@@ -1,12 +1,14 @@
 import { createHmac } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { getPublicOrigin } from "@/lib/oauth-redirect";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const emailHint = searchParams.get("email") ?? "";
   const accountId = searchParams.get("accountId") ?? "";
+  const origin = getPublicOrigin(request);
 
   const cookieStore = await cookies();
   void cookieStore; // accessed via createClient's cookie handler

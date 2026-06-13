@@ -2,13 +2,12 @@
 
 import {
   ExternalLinkIcon,
-  LayoutDashboardIcon,
   Loader2Icon,
   RefreshCwIcon,
   SearchIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
@@ -19,6 +18,7 @@ import type {
 
 interface FlightdeckBoardViewProps {
   initialStream?: string | null;
+  tabBar?: ReactNode;
 }
 
 function itemKey(item: FlightdeckBoardItem): string {
@@ -44,6 +44,7 @@ function actionsForStatus(status: string): FlightdeckBoardVerb[] {
 
 export function FlightdeckBoardView({
   initialStream = null,
+  tabBar,
 }: FlightdeckBoardViewProps) {
   const [payload, setPayload] = useState<FlightdeckBoardPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,76 +152,65 @@ export function FlightdeckBoardView({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 border-white/[0.06] border-b px-4 py-4 md:px-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <LayoutDashboardIcon className="h-4 w-4 shrink-0 text-white/45" />
-            <div className="min-w-0">
-              <h1 className="font-semibold text-sm text-white/85">
-                Flightdeck
-              </h1>
-              <p className="text-[10px] text-white/35">
-                Project #{payload?.projectNumber ?? 17}
-                {payload?.source ? ` · ${payload.source}` : ""}
-                {payload?.source === "github" ? " · read-only" : ""}
-              </p>
+      <header className="shrink-0 border-white/[0.06] border-b px-3 py-3 md:px-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {tabBar ? (
+            <div className="w-full max-w-[260px] shrink-0 md:w-[260px]">
+              {tabBar}
             </div>
+          ) : null}
+          <div className="relative min-w-[10rem] flex-1">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
+              <input
+                className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-3 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search board…"
+                value={search}
+              />
+            </div>
+            <select
+              className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
+              onChange={(e) => setStreamFilter(e.target.value || null)}
+              value={streamFilter ?? ""}
+            >
+              <option value="">All streams</option>
+              {(payload?.streams ?? []).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1.5 text-[10px] text-white/40">
+              <input
+                checked={hideComplete}
+                className="rounded border-white/20"
+                onChange={(e) => setHideComplete(e.target.checked)}
+                type="checkbox"
+              />
+              Hide complete
+            </label>
+            <Button
+              className="h-8 gap-1.5 border-white/[0.08] bg-white/[0.04] text-[11px] text-white/60"
+              disabled={refreshing}
+              onClick={() => {
+                load(true);
+              }}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCwIcon
+                className={cn("h-3 w-3", refreshing && "animate-spin")}
+              />
+              Refresh
+            </Button>
           </div>
-          <Button
-            className="h-8 gap-1.5 border-white/[0.08] bg-white/[0.04] text-[11px] text-white/60"
-            disabled={refreshing}
-            onClick={() => {
-              load(true);
-            }}
-            size="sm"
-            variant="outline"
-          >
-            <RefreshCwIcon
-              className={cn("h-3 w-3", refreshing && "animate-spin")}
-            />
-            Refresh
-          </Button>
-        </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[12rem] flex-1">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
-            <input
-              className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-3 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search board…"
-              value={search}
-            />
-          </div>
-          <select
-            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
-            onChange={(e) => setStreamFilter(e.target.value || null)}
-            value={streamFilter ?? ""}
-          >
-            <option value="">All streams</option>
-            {(payload?.streams ?? []).map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-1.5 text-[10px] text-white/40">
-            <input
-              checked={hideComplete}
-              className="rounded border-white/20"
-              onChange={(e) => setHideComplete(e.target.checked)}
-              type="checkbox"
-            />
-            Hide complete
-          </label>
-        </div>
+          {error ? (
+            <p className="mt-2 text-[11px] text-amber-400/80">{error}</p>
+          ) : null}
+        </header>
 
-        {error ? (
-          <p className="mt-2 text-[11px] text-amber-400/80">{error}</p>
-        ) : null}
-      </header>
-
-      <div className="relative min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1">
         {loading && !payload ? (
           <div className="flex h-full items-center justify-center gap-2 text-white/35 text-xs">
             <Loader2Icon className="h-4 w-4 animate-spin" />
@@ -369,7 +359,7 @@ export function FlightdeckBoardView({
             </div>
           </aside>
         ) : null}
-      </div>
+        </div>
     </div>
   );
 }

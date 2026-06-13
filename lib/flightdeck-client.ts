@@ -49,9 +49,11 @@ interface GraphqlItem {
 async function flightdeckGraphql(
   query: string,
   variables: Record<string, unknown>,
-): Promise<unknown | null> {
+): Promise<{ data: unknown | null; error?: string }> {
   const token = githubToken();
-  if (!token) return null;
+  if (!token) {
+    return { data: null, error: "GITHUB_TOKEN not configured" };
+  }
 
   const res = await fetch("https://api.github.com/graphql", {
     method: "POST",
@@ -63,10 +65,24 @@ async function flightdeckGraphql(
     signal: AbortSignal.timeout(20000),
   });
 
-  if (!res.ok) return null;
-  const data = (await res.json()) as { data?: unknown; errors?: unknown[] };
-  if (data.errors?.length) return null;
-  return data.data;
+  if (!res.ok) {
+    return { data: null, error: `GitHub GraphQL HTTP ${res.status}` };
+  }
+
+  const payload = (await res.json()) as {
+    data?: unknown;
+    errors?: Array<{ message?: string }>;
+  };
+
+  if (payload.errors?.length) {
+    const message = payload.errors
+      .map((entry) => entry.message)
+      .filter(Boolean)
+      .join("; ");
+    return { data: payload.data ?? null, error: message || "GraphQL error" };
+  }
+
+  return { data: payload.data ?? null };
 }
 
 function fieldText(
@@ -75,11 +91,12 @@ function fieldText(
 ): string | null {
   const nodes = item.fieldValues?.nodes ?? [];
   for (const node of nodes) {
-    const name = node.field?.name ?? node.name;
-    if (name?.toLowerCase() === fieldName.toLowerCase()) {
-      if (node.text) return node.text;
-      if (node.name) return node.name;
+    const fname = node.field?.name;
+    if (fname?.toLowerCase() !== fieldName.toLowerCase()) {
+      continue;
     }
+    if (node.text) return node.text;
+    if (node.name) return node.name;
   }
   return null;
 }
@@ -103,6 +120,108 @@ function graphqlItemToBoard(item: GraphqlItem): FlightdeckBoardItem {
   };
 }
 
+const ITEMS_PAGE_FRAGMENT = `
+  items(first: 100, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      id
+      fieldValues(first: 30) {
+        nodes {
+          ... on ProjectV2ItemFieldTextValue {
+            text
+            field { ... on ProjectV2FieldCommon { name } }
+          }
+          ... on ProjectV2ItemFieldSingleSelectValue {
+            name
+            field { ... on ProjectV2FieldCommon { name } }
+          }
+        }
+      }
+      content {
+        ... on Issue {
+          title
+          url
+          body
+          number
+        }
+        ... on DraftIssue {
+          title
+          body
+        }
+      }
+    }
+  }
+`;
+
+type ItemsPage = {
+  pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+  nodes?: GraphqlItem[];
+};
+
+async function paginateProjectItems(
+  owner: string,
+  number: number,
+  ownerKind: "organization" | "user",
+): Promise<{ items: GraphqlItem[]; error?: string; found: boolean }> {
+  const root = ownerKind === "organization" ? "organization" : "user";
+  const query = `
+    query FlightdeckBoard($owner: String!, $number: Int!, $after: String) {
+      ${root}(login: $owner) {
+        projectV2(number: $number) {
+          ${ITEMS_PAGE_FRAGMENT}
+        }
+      }
+    }
+  `;
+
+  const collected: GraphqlItem[] = [];
+  let cursor: string | null = null;
+  let hasNext = true;
+  let lastError: string | undefined;
+  let found = false;
+
+  while (hasNext) {
+    const { data, error } = await flightdeckGraphql(query, {
+      owner,
+      number,
+      after: cursor,
+    });
+
+    if (error) {
+      lastError = error;
+    }
+
+    const rootData = data as
+      | {
+          organization?: { projectV2?: { items?: ItemsPage } | null };
+          user?: { projectV2?: { items?: ItemsPage } | null };
+        }
+      | null;
+
+    const project =
+      ownerKind === "organization"
+        ? rootData?.organization?.projectV2
+        : rootData?.user?.projectV2;
+
+    if (!project) {
+      break;
+    }
+
+    found = true;
+    const page = project.items;
+    const nodes = page?.nodes ?? [];
+    for (const node of nodes) {
+      collected.push(node);
+    }
+
+    hasNext = Boolean(page?.pageInfo?.hasNextPage);
+    cursor = page?.pageInfo?.endCursor ?? null;
+    if (!hasNext) break;
+  }
+
+  return { items: collected, error: lastError, found };
+}
+
 export async function listFlightdeckBoard(): Promise<{
   items: FlightdeckBoardItem[];
   error?: string;
@@ -114,125 +233,37 @@ export async function listFlightdeckBoard(): Promise<{
 
   const owner = projectOwner();
   const number = projectNumber();
-  const items: FlightdeckBoardItem[] = [];
-  let cursor: string | null = null;
-  let hasNext = true;
 
-  const query = `
-    query FlightdeckBoard($owner: String!, $number: Int!, $after: String) {
-      organization(login: $owner) {
-        projectV2(number: $number) {
-          items(first: 100, after: $after) {
-            pageInfo { hasNextPage endCursor }
-            nodes {
-              id
-              fieldValues(first: 30) {
-                nodes {
-                  ... on ProjectV2ItemFieldTextValue {
-                    text
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    name
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                }
-              }
-              content {
-                ... on Issue {
-                  title
-                  url
-                  body
-                  number
-                }
-                ... on DraftIssue {
-                  title
-                  body
-                }
-              }
-            }
-          }
-        }
-      }
-      user(login: $owner) {
-        projectV2(number: $number) {
-          items(first: 100, after: $after) {
-            pageInfo { hasNextPage endCursor }
-            nodes {
-              id
-              fieldValues(first: 30) {
-                nodes {
-                  ... on ProjectV2ItemFieldTextValue {
-                    text
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    name
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                }
-              }
-              content {
-                ... on Issue {
-                  title
-                  url
-                  body
-                  number
-                }
-                ... on DraftIssue {
-                  title
-                  body
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  while (hasNext) {
-    const data = (await flightdeckGraphql(query, {
-      owner,
-      number,
-      after: cursor,
-    })) as {
-      organization?: {
-        projectV2?: {
-          items?: {
-            pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
-            nodes?: GraphqlItem[];
-          };
-        };
-      };
-      user?: {
-        projectV2?: {
-          items?: {
-            pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
-            nodes?: GraphqlItem[];
-          };
-        };
-      };
-    } | null;
-
-    if (!data) {
-      return { items: [], error: "Flightdeck GraphQL failed" };
-    }
-
-    const page =
-      data.organization?.projectV2?.items ??
-      data.user?.projectV2?.items;
-    const nodes = page?.nodes ?? [];
-    for (const node of nodes) {
-      items.push(graphqlItemToBoard(node));
-    }
-
-    hasNext = Boolean(page?.pageInfo?.hasNextPage);
-    cursor = page?.pageInfo?.endCursor ?? null;
-    if (!hasNext) break;
+  let orgResult = await paginateProjectItems(owner, number, "organization");
+  if (orgResult.found && orgResult.items.length > 0) {
+    return {
+      items: orgResult.items.map(graphqlItemToBoard),
+      error: orgResult.error,
+    };
   }
 
-  return { items };
+  const userResult = await paginateProjectItems(owner, number, "user");
+  if (userResult.found) {
+    return {
+      items: userResult.items.map(graphqlItemToBoard),
+      error: userResult.error,
+    };
+  }
+
+  if (orgResult.found) {
+    return {
+      items: orgResult.items.map(graphqlItemToBoard),
+      error: orgResult.error,
+    };
+  }
+
+  const detail = userResult.error ?? orgResult.error;
+  return {
+    items: [],
+    error: detail
+      ? `Flightdeck GraphQL failed: ${detail}`
+      : `Flightdeck project #${number} not found for ${owner}`,
+  };
 }
 
 function itemMatches(
@@ -270,93 +301,26 @@ export async function searchFlightdeckTasks(input: {
     (input.streams ?? []).map((s) => s.toLowerCase()),
   );
 
-  const query = `
-    query FlightdeckItems($owner: String!, $number: Int!) {
-      organization(login: $owner) {
-        projectV2(number: $number) {
-          items(first: 100) {
-            nodes {
-              id
-              fieldValues(first: 30) {
-                nodes {
-                  ... on ProjectV2ItemFieldTextValue {
-                    text
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    name
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                }
-              }
-              content {
-                ... on Issue {
-                  title
-                  url
-                  body
-                  number
-                }
-                ... on DraftIssue {
-                  title
-                  body
-                }
-              }
-            }
-          }
-        }
-      }
-      user(login: $owner) {
-        projectV2(number: $number) {
-          items(first: 100) {
-            nodes {
-              id
-              fieldValues(first: 30) {
-                nodes {
-                  ... on ProjectV2ItemFieldTextValue {
-                    text
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    name
-                    field { ... on ProjectV2FieldCommon { name } }
-                  }
-                }
-              }
-              content {
-                ... on Issue {
-                  title
-                  url
-                  body
-                  number
-                }
-                ... on DraftIssue {
-                  title
-                  body
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
+  const orgResult = await paginateProjectItems(owner, number, "organization");
+  const userResult = orgResult.found
+    ? { items: [] as GraphqlItem[], found: false, error: undefined }
+    : await paginateProjectItems(owner, number, "user");
 
-  const data = (await flightdeckGraphql(query, {
-    owner,
-    number,
-  })) as {
-    organization?: { projectV2?: { items?: { nodes?: GraphqlItem[] } } };
-    user?: { projectV2?: { items?: { nodes?: GraphqlItem[] } } };
-  } | null;
+  const nodes = orgResult.found
+    ? orgResult.items
+    : userResult.found
+      ? userResult.items
+      : [];
 
-  if (!data) {
-    return { tasks: [], error: "Flightdeck GraphQL failed" };
+  if (nodes.length === 0) {
+    const detail = userResult.error ?? orgResult.error;
+    return {
+      tasks: [],
+      error: detail
+        ? `Flightdeck GraphQL failed: ${detail}`
+        : `Flightdeck project #${number} not found for ${owner}`,
+    };
   }
-
-  const nodes =
-    data.organization?.projectV2?.items?.nodes ??
-    data.user?.projectV2?.items?.nodes ??
-    [];
 
   const emails = input.participantEmails ?? [];
   const tasks: ContextTask[] = [];

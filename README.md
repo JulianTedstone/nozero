@@ -138,8 +138,7 @@ Before the app is usable on the box, make sure you also:
 5. Configure the Google provider in the Supabase Auth dashboard (client ID + secret + redirect URI).
 6. Configure Resend if you want invitation emails enabled.
 
-> The deploy artifacts (`Dockerfile`, `docker-compose.host.yml`, host-Caddy snippet, CI workflow)
-> still need to be added to this repo, mirroring `nopilot-co-www`.
+> Deploy is automated via `.github/workflows/deploy.yml` on push to `main` (see [DEPLOY.md](./DEPLOY.md)).
 
 
 ## License

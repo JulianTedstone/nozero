@@ -1,0 +1,56 @@
+name: ci-deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://zero.nopilot.co' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+
+  deploy:
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check deploy is configured
+        id: cfg
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+        run: |
+          if [ -n "$HETZNER_HOST" ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
+          else echo "ready=false" >> "$GITHUB_OUTPUT"; echo "::notice::Deploy secrets not set — skipping deploy (CI only)."; fi
+      - name: Deploy to Hetzner over SSH
+        if: steps.cfg.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin https://github.com/JulianTedstone/nozero.git
+              git fetch origin main
+              git checkout -B main origin/main
+            else
+              git pull --ff-only origin main
+            fi
+            docker compose -f docker-compose.host.yml up -d --build
+            docker image prune -f

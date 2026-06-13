@@ -1,6 +1,11 @@
 import ical from "node-ical";
 import { createDAVClient } from "tsdav";
 import type { CalendarEvent } from "@/types/calendar";
+import {
+  calDavCalendarIdsMatch,
+  normalizeCalDavCalendarId,
+} from "@/lib/calendar-id-match";
+import { getCalendarSyncRange } from "@/lib/calendar-sync-range";
 import { getInitialSyncWindow } from "@/lib/sync-window";
 import { upsertUserEvent } from "@/lib/store";
 
@@ -108,17 +113,27 @@ export async function pullCalDavAccount(params: {
 
     const calendars = await client.fetchCalendars();
     const subscribedIds = params.calendarIds?.length
-      ? new Set(params.calendarIds)
+      ? params.calendarIds.map(normalizeCalDavCalendarId)
       : null;
-    const selected = subscribedIds
-      ? calendars.filter((cal) => {
-          const id = cal.url ?? cal.displayName ?? "default";
-          return subscribedIds.has(id);
-        })
-      : calendars;
+    let selected =
+      subscribedIds && subscribedIds.length > 0
+        ? calendars.filter((cal) => {
+            const id = cal.url ?? cal.displayName ?? "default";
+            return subscribedIds.some((subId) =>
+              calDavCalendarIdsMatch(subId, id),
+            );
+          })
+        : calendars;
+
+    if (selected.length === 0 && calendars.length > 0) {
+      selected = calendars;
+      errors.push(
+        "Subscribed calendar IDs did not match server — synced all calendars on account",
+      );
+    }
 
     if (selected.length === 0) {
-      return { pulled: 0, errors: ["No subscribed calendars found on server"] };
+      return { pulled: 0, errors: ["No calendars found on CalDAV server"] };
     }
 
     const defaultWindow = getInitialSyncWindow();
@@ -190,6 +205,14 @@ export async function pullAllCalDavAccounts(
   const errors: string[] = [];
   let accountCount = 0;
 
+  const syncRange = timeRange
+    ? null
+    : await getCalendarSyncRange(userId).catch(() => null);
+  const defaultPullRange = syncRange
+    ? { start: new Date(syncRange.syncedStart), end: new Date(syncRange.syncedEnd) }
+    : getInitialSyncWindow();
+  const effectiveRange = timeRange ?? defaultPullRange;
+
   for (const account of accounts) {
     if (account.type !== "caldav" || !account.connected) continue;
     const creds = credsByEmail.get(account.email.toLowerCase());
@@ -215,7 +238,7 @@ export async function pullAllCalDavAccounts(
       username: creds.username,
       password: creds.password,
       calendarIds: subscribed.map((s) => s.calendarId),
-      timeRange,
+      timeRange: effectiveRange,
     });
     pulled += result.pulled;
     errors.push(...result.errors.map((e) => `${account.email}: ${e}`));

@@ -5,7 +5,7 @@ export const SYNC_INITIAL_WINDOW_MONTHS = 3;
 export const SYNC_EXTEND_CHUNK_MONTHS = 3;
 
 /** Stop extending further than this many years into the past. */
-export const SYNC_MAX_PAST_YEARS = 10;
+export const SYNC_MAX_PAST_YEARS = 25;
 
 /** Stop extending further than this many years into the future. */
 export const SYNC_MAX_FUTURE_YEARS = 2;
