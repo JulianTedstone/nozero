@@ -184,6 +184,18 @@ export async function saveUserPreferences(
   if (!("calendarSyncRange" in preferences)) {
     merged.calendarSyncRange = existing.calendarSyncRange;
   }
+  if (!("krispTokens" in preferences)) {
+    merged.krispTokens = existing.krispTokens;
+  }
+  if (!("contextBindings" in preferences)) {
+    merged.contextBindings = existing.contextBindings;
+  }
+  if (!("emailAccountVisibility" in preferences)) {
+    merged.emailAccountVisibility = existing.emailAccountVisibility;
+  }
+  if (!("emailAccountsExpanded" in preferences)) {
+    merged.emailAccountsExpanded = existing.emailAccountsExpanded;
+  }
   await upsertUserRecord({ userId, preferences: merged });
 }
 

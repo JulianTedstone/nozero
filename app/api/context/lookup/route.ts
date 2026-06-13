@@ -1,8 +1,7 @@
 import "server-only";
 
-import { generateText } from "ai";
-import { getOpenRouterModel } from "@/lib/openrouter";
-import { searchSomaContactsByEmail } from "@/lib/soma-client";
+import { NextResponse } from "next/server";
+import { getCurrentAuthUser } from "@/lib/auth-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -37,43 +36,6 @@ export interface LookupResult {
   links: ContextLink[];
 }
 
-async function fetchSomaContext(
-  participants: string[],
-  title: string
-): Promise<string> {
-  const somaUrl = process.env.NOZERO_SOMA_ANANSI_URL;
-  const somaKey = process.env.NOZERO_SOMA_ANANSI_SECRET_API_KEY;
-  if (!somaUrl || !somaKey || participants.length === 0) return "";
-
-  try {
-    const results = await Promise.allSettled(
-      participants.map((email) => searchSomaContactsByEmail(email))
-    );
-
-    const found = results
-      .filter((r): r is PromiseFulfilledResult<unknown> => r.status === "fulfilled" && r.value != null)
-      .map((r) => r.value);
-
-    if (found.length > 0) {
-      return `Soma CRM data:\n${JSON.stringify(found, null, 2)}`;
-    }
-
-    const dealRes = await fetch(`${somaUrl}/api/deals/search?q=${encodeURIComponent(title)}`, {
-      headers: { Authorization: `Bearer ${somaKey}` },
-      signal: AbortSignal.timeout(4000),
-    });
-    if (dealRes.ok) {
-      const deals = await dealRes.json();
-      if (deals?.length > 0) {
-        return `Soma deals:\n${JSON.stringify(deals, null, 2)}`;
-      }
-    }
-  } catch {
-    // soma unavailable
-  }
-  return "";
-}
-
 const emptyResult = (participants: string[]): LookupResult => ({
   background: null,
   participants: participants.map((email) => ({
@@ -89,6 +51,7 @@ const emptyResult = (participants: string[]): LookupResult => ({
   links: [],
 });
 
+/** Delegates to the structured meeting context bundle (legacy LLM lookup shape). */
 export async function POST(request: Request) {
   const { title, participants = [], startDate } = (await request.json()) as {
     title?: string;
@@ -100,56 +63,56 @@ export async function POST(request: Request) {
     return Response.json(emptyResult([]));
   }
 
-  const somaContext = await fetchSomaContext(participants, title ?? "");
-  const somaBase = process.env.NOZERO_SOMA_ANANSI_URL ?? "https://soma.nopilot.co";
+  const user = await getCurrentAuthUser();
+  if (!user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const prompt = `You are a meeting preparation assistant for NoPilot. Given a meeting title and participants, synthesize context.
+  const origin = new URL(request.url).origin;
+  const res = await fetch(`${origin}/api/context/meeting`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: request.headers.get("cookie") ?? "",
+    },
+    body: JSON.stringify({
+      title: title ?? "",
+      start: startDate ?? null,
+      attendees: participants,
+    }),
+  });
 
-Meeting title: "${title || "Untitled"}"
-Participants: ${participants.length > 0 ? participants.join(", ") : "none"}
-Date: ${startDate || "unspecified"}
-${somaContext ? `\n${somaContext}\n` : ""}
-
-Return ONLY valid JSON matching this exact shape (no markdown fences):
-{
-  "background": "<1–2 sentences on likely meeting purpose, or null>",
-  "participants": [
-    {
-      "email": "<email>",
-      "name": "<full name or null>",
-      "company": "<company name or null>",
-      "role": "<job title or null>",
-      "somaContactId": "<soma contact id or null>",
-      "somaCompanyId": "<soma company id or null>"
-    }
-  ],
-  "deals": [
-    { "name": "<deal name>", "stage": "<stage or null>", "value": "<formatted value or null>", "id": "<id or null>" }
-  ],
-  "desiredOutput": "<what this meeting should produce, or null>",
-  "links": [
-    { "label": "<label>", "url": "<url>", "type": "contact|company|deal|general" }
-  ]
-}
-
-Rules:
-- One participant object per email address.
-- If you have soma IDs, build links: contacts → ${somaBase}/contacts/<id>, companies → ${somaBase}/companies/<id>.
-- If no information is known for a field, use null or [].
-- Be concise. Background ≤ 40 words. desiredOutput ≤ 20 words.`;
-
-  try {
-    const { text } = await generateText({
-      model: getOpenRouterModel(),
-      prompt,
-      maxTokens: 600,
-    });
-
-    // Strip possible markdown fences
-    const cleaned = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-    const parsed = JSON.parse(cleaned) as LookupResult;
-    return Response.json(parsed);
-  } catch {
+  if (!res.ok) {
     return Response.json(emptyResult(participants));
   }
+
+  const bundle = (await res.json()) as {
+    summary?: { purpose?: string | null };
+    people?: ContextParticipant[];
+    related?: { deals?: ContextDeal[] };
+    links?: Array<{ label: string; url: string; type: string }>;
+  };
+
+  const result: LookupResult = {
+    background: bundle.summary?.purpose ?? null,
+    participants: bundle.people ?? [],
+    deals: bundle.related?.deals ?? [],
+    desiredOutput: null,
+    links: (bundle.links ?? []).map((l) => ({
+      label: l.label,
+      url: l.url,
+      type:
+        l.type === "contact" ||
+        l.type === "company" ||
+        l.type === "deal"
+          ? l.type
+          : "general",
+    })),
+  };
+
+  if (result.participants.length === 0 && participants.length > 0) {
+    return Response.json(emptyResult(participants));
+  }
+
+  return Response.json(result);
 }

@@ -12,7 +12,9 @@
     "start": "bun --bun next start",
     "check": "ultracite check",
     "fix": "ultracite fix",
-    "types:gen": "bunx supabase gen types typescript --db-url \"$SUPABASE_DB_URL\" --schema nozero > types/database.ts"
+    "types:gen": "bunx supabase gen types typescript --db-url \"$SUPABASE_DB_URL\" --schema nozero > types/database.ts",
+    "db:url": "bash scripts/supabase-db-url.sh",
+    "test:dry-run": "bun test scripts/dry-run.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.50",
@@ -61,6 +63,7 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "12.38.0",
     "ical-generator": "10.1.0",
+    "idb": "^8.0.3",
     "input-otp": "^1.4.2",
     "lucide-react": "1.7.0",
     "nanoid": "5.1.7",

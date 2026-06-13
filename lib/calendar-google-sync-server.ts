@@ -1,4 +1,5 @@
 import { deleteEvent, type CalendarEvent } from "@/lib/calendar";
+import type { RecurrenceEditScope } from "@/lib/recurrence";
 import {
   createGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
@@ -77,7 +78,8 @@ export async function syncCreatedLocalEventToGoogle(
 export async function syncUpdatedEventToGoogle(
   userId: string,
   existingBeforeUpdate: CalendarEvent,
-  updatedEvent: CalendarEvent
+  updatedEvent: CalendarEvent,
+  scope: RecurrenceEditScope = "all",
 ): Promise<CalendarEvent> {
   let finalEvent = updatedEvent;
   const auth = await getGoogleCalendarAuthForUser(userId);
@@ -93,7 +95,8 @@ export async function syncUpdatedEventToGoogle(
         auth.refreshToken,
         auth.expiresAt,
         updatedEvent,
-        updatedEvent.calendarId ?? existingBeforeUpdate.calendarId
+        updatedEvent.calendarId ?? existingBeforeUpdate.calendarId,
+        scope,
       );
 
       if (syncedEvent) {
@@ -129,7 +132,8 @@ export async function syncUpdatedEventToGoogle(
  */
 export async function syncDeletedEventToGoogle(
   userId: string,
-  existingEvent: CalendarEvent
+  existingEvent: CalendarEvent,
+  scope: RecurrenceEditScope = "all",
 ): Promise<void> {
   if (!(existingEvent.source === "google" || existingEvent.sourceId)) {
     return;
@@ -149,7 +153,9 @@ export async function syncDeletedEventToGoogle(
       existingEvent.source === "google"
         ? existingEvent.id
         : `google_${existingEvent.sourceId}`,
-      existingEvent.calendarId
+      existingEvent.calendarId,
+      scope,
+      existingEvent,
     );
   } catch (error) {
     console.error("[calendar-google-sync] Failed to delete Google Calendar event:", error);

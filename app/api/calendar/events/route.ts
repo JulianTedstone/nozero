@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { resolveAccountCodeAssignment } from "@/lib/account-codes";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { syncCreatedLocalEventToGoogle } from "@/lib/calendar-google-sync-server";
 import { createEvent, getEvents } from "@/lib/calendar";
+import type { RecurrenceRule } from "@/types/calendar";
 
 export async function GET(request: Request) {
   try {
@@ -43,6 +45,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const codeFields = await resolveAccountCodeAssignment(
+      user.id,
+      body.accountCodeId as string | undefined,
+    );
+
     const event = await createEvent({
       userId: user.id,
       title: body.title,
@@ -50,6 +57,7 @@ export async function POST(request: Request) {
       start: body.start,
       end: body.end,
       location: body.location,
+      conferenceUrl: body.conferenceUrl,
       attendees: body.attendees,
       calendarId: body.calendarId,
       color: body.color,
@@ -57,6 +65,9 @@ export async function POST(request: Request) {
       categories: body.category ? [body.category] : undefined,
       allDay: body.allDay ?? false,
       source: "local",
+      recurrence: body.recurrence as RecurrenceRule | undefined,
+      accountEmail: body.accountEmail,
+      ...codeFields,
     });
 
     const finalEvent = body.pushToGoogle

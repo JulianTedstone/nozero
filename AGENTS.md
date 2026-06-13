@@ -127,6 +127,8 @@ No automated test suite is currently configured. There are no test files or test
 
 The project requires environment variables for Supabase (URL, anon key, service-role key), OpenRouter, and Resend. Google OAuth is configured in the Supabase dashboard rather than the app env. `.env*` is gitignored; see `README.md` for the full variable list.
 
+**gbrain / ctx gateway (agent auth):** Per-actor bearer tokens live in 1Password `nopilot.agents.GBRAIN_CTX_TOKEN` (same roster as `FLIGHTDECK_TOWER_TOKEN`: `ted`, `claude`, `pierre`, `bertrand`, `cecil`, `geoffrey`, `hilda`, `rosamund`, `beatrice`, plus `nozero` for this app). Resolve with `op read "op://nopilot.agents/iju5zrdkpmqz7y3yqp37d7zc54/<actor>"` using the `nopilot-tower` service account. Server token allowlist: `nopilot.agents.GBRAIN_ACTOR_TOKENS` notesPlain → `GBRAIN_ACTOR_TOKENS` on Jupiter. Tenant scopes: `nopilot.agents.GBRAIN_ACTOR_TENANTS` notesPlain → `GBRAIN_ACTOR_TENANTS` (`nozero:npt`, `bertrand:npt+coh`, `ted:*`, …). Operator OAuth consent still uses `GBRAIN_AUTH_TOKEN` on the box only.
+
 ## Learned User Preferences
 
 - Primary Supabase login account is separate from linked calendar accounts; multiple Google and CalDAV accounts must coexist without overwriting prior connections.
@@ -136,7 +138,10 @@ The project requires environment variables for Supabase (URL, anon key, service-
 - Do not list connected accounts under the My Calendars sidebar; account management belongs in Settings.
 - CalDAV credential edits must retain stored passwords without forcing re-entry on Save/Reconnect.
 - Calendar sync should use a bounded date window (±3 months initially), not full history pulls.
-- Event UI: participant fields need Soma/message-history contact autocomplete; notes should render plain text; time picker supports 5-minute increments; pill colors match subscribed calendar colors without side accent stripes.
+- Event UI: participant fields need Soma/message-history contact autocomplete; notes render plain text; time picker uses 5-minute increments; event pills use subscribed calendar colors on flat/2D panels without left accent borders.
+- Event detail: group fields into toggleable What / Where / When sections (default order What → Where → When, globally configurable in settings); replace the Edit Event header with a HuD (title, organizer status, friendly datetime, map/video launchers, countdown); lock non-owned meetings with padlock + organizer tooltip; extract Teams/Zoom/Meet/Slack links from invite body into the meeting URL field.
+- Recurring meetings should follow Google Calendar recurrence rules and edit scope (this/ following / all).
+- Optional meeting Assign uses per-account account codes for time-sheeting; codes are CRUD-managed in Settings, upsertable from the event form, and archive-only (never deleted).
 
 ## Learned Workspace Facts
 
@@ -148,3 +153,7 @@ The project requires environment variables for Supabase (URL, anon key, service-
 - Contact autocomplete: `/api/contacts/suggest` (Soma client in `lib/soma-client.ts`) plus local invitation/event attendee fallbacks.
 - Calendar page slowness risk: `modern-calendar-view.tsx` mount runs full sync, repeated `refreshEvents()`, and up to ~24 background extend API calls per load.
 - Settings form saves must merge `preferences` blobs so OAuth/calendar token fields are not wiped when updating appearance/time prefs.
+- iCloud Calendar connects via a Settings preset on the CalDAV stack (`https://caldav.icloud.com`, app-specific password); stored internally as `type: "caldav"`.
+- Account codes: `nozero.account_codes` table plus `/api/account-codes` and `lib/account-codes.ts`; scoped to linked account email; archived codes stay out of pickers but are never hard-deleted.
+- Event detail support modules: `lib/event-detail-layout.ts`, `lib/conference-links.ts`, `lib/recurrence.ts`, `components/event-detail-hud.tsx`.
+- `getEvents` still loads all user events to expand recurring masters into the requested range — a major query cost until masters are indexed/filtered.

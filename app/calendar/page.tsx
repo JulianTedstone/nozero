@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { ModernCalendarView } from "@/components/modern-calendar-view";
 import { getCurrentAuthUser } from "@/lib/auth-server";
+import { getUserPreferences } from "@/lib/auth";
 import { getEvents } from "@/lib/calendar";
+import { parseEventSectionOrder } from "@/lib/event-detail-layout";
 import type { CalendarEvent } from "@/types/calendar";
 
 export default async function CalendarPage() {
@@ -23,20 +26,34 @@ export default async function CalendarPage() {
     endOfMonth,
   );
 
+  const preferences = await getUserPreferences(user.id);
+  const eventSectionOrder = parseEventSectionOrder(
+    preferences.eventSectionOrder,
+  );
+
   const persona =
     process.env.NEXT_PUBLIC_DEVICE_NAME === "europa" ? "Pierre" : "Bertrand";
 
   return (
     <div className="h-dvh overflow-hidden bg-background">
-      <ModernCalendarView
-        initialEvents={events}
-        persona={persona}
-        userEmail={user.email}
-        userId={user.id}
-        userImage={user.image ?? undefined}
-        userName={user.name}
-        userProvider="google"
-      />
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center text-sm text-white/30">
+            Loading…
+          </div>
+        }
+      >
+        <ModernCalendarView
+          eventSectionOrder={eventSectionOrder}
+          initialEvents={events}
+          persona={persona}
+          userEmail={user.email}
+          userId={user.id}
+          userImage={user.image ?? undefined}
+          userName={user.name}
+          userProvider="google"
+        />
+      </Suspense>
     </div>
   );
 }

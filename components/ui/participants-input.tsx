@@ -18,6 +18,7 @@ interface ContactSuggestion {
 
 interface ParticipantsInputProps {
   className?: string;
+  disabled?: boolean;
   icon?: React.ReactNode;
   inputClassName?: string;
   onChange: (value: Participant[]) => void;
@@ -53,6 +54,7 @@ const STATUS_STYLES: Record<
 
 export function ParticipantsInput({
   className,
+  disabled = false,
   icon,
   inputClassName,
   placeholder = "Add email and press Enter",
@@ -210,16 +212,18 @@ export function ParticipantsInput({
                     <span className="min-w-0 truncate text-[11px] text-white/80">
                       {participant.email}
                     </span>
-                    <button
-                      className="shrink-0 rounded-full p-0.5 text-white/30 transition-colors hover:bg-white/[0.08] hover:text-white/70"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeParticipant(participant.email);
-                      }}
-                      type="button"
-                    >
-                      <XIcon className="h-3 w-3" />
-                    </button>
+                    {!disabled ? (
+                      <button
+                        className="shrink-0 rounded-full p-0.5 text-white/30 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeParticipant(participant.email);
+                        }}
+                        type="button"
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </button>
+                    ) : null}
                   </span>
                 );
               })}
@@ -231,8 +235,11 @@ export function ParticipantsInput({
               autoComplete="off"
               className={cn(
                 "w-full bg-transparent text-white/85 text-xs outline-none placeholder:text-white/25",
+                disabled && "cursor-not-allowed opacity-70",
                 inputClassName,
               )}
+              disabled={disabled}
+              readOnly={disabled}
               onBlur={() => {
                 window.setTimeout(() => {
                   setOpen(false);

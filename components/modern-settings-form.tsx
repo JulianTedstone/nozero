@@ -3,6 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeftIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ClockIcon,
   PaletteIcon,
   PencilIcon,
@@ -34,6 +36,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth-client";
+import {
+  DEFAULT_EVENT_SECTION_ORDER,
+  EVENT_SECTION_LABELS,
+  type EventDetailSectionId,
+  moveSection,
+  parseEventSectionOrder,
+} from "@/lib/event-detail-layout";
+import { inferBindingsForEmail, githubRepoUrl } from "@/lib/context-accounts";
+import { AccountCodesSettings } from "@/components/account-codes-settings";
 import { cn } from "@/lib/utils";
 
 // Palette of distinct hues — derived deterministically from the name
@@ -152,6 +163,35 @@ const ACCOUNT_COLORS = [
   "#EF4444",
   "#EC4899",
 ];
+
+const ICLOUD_CALDAV_SERVER = "https://caldav.icloud.com";
+
+type AccountPickerOption = "google" | "icloud" | "caldav" | "imap";
+
+const ACCOUNT_PICKER_OPTIONS: {
+  id: AccountPickerOption;
+  label: string;
+}[] = [
+  { id: "google", label: "Google" },
+  { id: "icloud", label: "iCloud" },
+  { id: "caldav", label: "CalDAV" },
+  { id: "imap", label: "IMAP" },
+];
+
+function isICloudCalDav(account?: Partial<Account>): boolean {
+  const url = (account?.serverUrl ?? "").trim().replace(/\/$/, "");
+  return url === ICLOUD_CALDAV_SERVER;
+}
+
+function newAccountTypeLabel(
+  type: AccountType,
+  icloud: boolean,
+): string {
+  if (type === "google") return "Google";
+  if (icloud) return "iCloud";
+  if (type === "caldav") return "CalDAV";
+  return "IMAP";
+}
 
 type CalendarOption = {
   calendarId: string;
@@ -332,6 +372,50 @@ function buildAccountList(
   return additional.length > 0 ? [primary, ...additional] : [primary];
 }
 
+function ContextBindingsHint({ accountEmail }: { accountEmail: string }) {
+  const bindings = inferBindingsForEmail(accountEmail);
+  if (bindings.length === 0) {
+    return (
+      <p className="mt-2 border-t border-border/60 pt-2 text-[10px] text-muted-foreground">
+        No context repo mapped for this account. Add context (GitHub) — coming
+        soon.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
+      <p className="text-[10px] font-medium text-muted-foreground">Context repos</p>
+      {bindings.map((b) => (
+        <div className="text-[10px] text-muted-foreground/90" key={b.id}>
+          <a
+            className="text-foreground/80 hover:underline"
+            href={githubRepoUrl(b.repos[0]?.fullName ?? "")}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            {b.repos[0]?.fullName}
+          </a>
+          {b.streams.length > 0 ? (
+            <span className="text-muted-foreground/70">
+              {" "}
+              → {b.streams.join(", ")}
+            </span>
+          ) : null}
+          {b.source === "rule" && !b.confirmed ? (
+            <span className="ml-1 text-muted-foreground/50">(inferred)</span>
+          ) : null}
+        </div>
+      ))}
+      <button
+        className="text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground/80 hover:underline"
+        type="button"
+      >
+        Add context…
+      </button>
+    </div>
+  );
+}
+
 export function ModernSettingsForm({
   initialPreferences,
   initialConnectedAccounts,
@@ -448,12 +532,16 @@ export function ModernSettingsForm({
   const [isConnectingCalDav, setIsConnectingCalDav] = useState(false);
   // For the add-account form
   const [newAccountType, setNewAccountType] = useState<AccountType | null>(null);
+  const [calDavPreset, setCalDavPreset] = useState<"icloud" | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<Account>>({});
 
   const { theme, setTheme } = useTheme();
 
   // User profile edit state
   const [displayName, setDisplayName] = useState(userName);
+  const [eventSectionOrder, setEventSectionOrder] = useState<
+    EventDetailSectionId[]
+  >(() => parseEventSectionOrder(initialPreferences.eventSectionOrder));
 
   const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -483,7 +571,10 @@ export function ModernSettingsForm({
       const response = await fetch("/api/preferences", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, preferences: values }),
+        body: JSON.stringify({
+          userId,
+          preferences: { ...values, eventSectionOrder },
+        }),
       });
 
       if (!response.ok) {
@@ -509,12 +600,41 @@ export function ModernSettingsForm({
     setEditingId(account.id);
     setEditDraft({ ...account });
     setNewAccountType(null);
+    setCalDavPreset(isICloudCalDav(account) ? "icloud" : null);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditDraft({});
     setNewAccountType(null);
+    setCalDavPreset(null);
+  }
+
+  function selectNewAccountType(option: AccountPickerOption) {
+    if (option === "icloud") {
+      setNewAccountType("caldav");
+      setCalDavPreset("icloud");
+      setEditDraft({
+        type: "caldav",
+        color: "#0071E3",
+        label: "iCloud Calendar",
+        serverUrl: ICLOUD_CALDAV_SERVER,
+      });
+      return;
+    }
+    if (option === "caldav") {
+      setNewAccountType("caldav");
+      setCalDavPreset(null);
+      setEditDraft({ type: "caldav", color: "#8B5CF6", label: "CalDAV" });
+      return;
+    }
+    setCalDavPreset(null);
+    setNewAccountType(option);
+    setEditDraft({
+      type: option,
+      color: "#4285F4",
+      label: option === "google" ? "Google Calendar & Gmail" : "IMAP",
+    });
   }
 
   async function saveEdit() {
@@ -607,7 +727,7 @@ export function ModernSettingsForm({
       id: `acct-${Date.now()}`,
       email: draft.email || "",
       type: newAccountType,
-      label: draft.label || (newAccountType === "google" ? "Google Calendar & Gmail" : newAccountType === "caldav" ? "CalDAV" : "IMAP"),
+      label: draft.label || (newAccountType === "google" ? "Google Calendar & Gmail" : newAccountType === "caldav" ? (calDavPreset === "icloud" ? "iCloud Calendar" : "CalDAV") : "IMAP"),
       connected: false,
       color: draft.color || "#4285F4",
       serverUrl: draft.serverUrl || "",
@@ -622,7 +742,14 @@ export function ModernSettingsForm({
   }
 
   async function connectCalDavAccount(account: Account) {
-    const serverUrl = editDraft.serverUrl ?? account.serverUrl ?? "";
+    const isICloud =
+      calDavPreset === "icloud" ||
+      isICloudCalDav(account) ||
+      isICloudCalDav(editDraft);
+    const serverUrl =
+      editDraft.serverUrl ??
+      account.serverUrl ??
+      (isICloud ? ICLOUD_CALDAV_SERVER : "");
     const username = editDraft.username ?? account.username ?? "";
     const passwordInput = (editDraft.password ?? account.password ?? "").trim();
     const canReuseStoredPassword = account.connected && !passwordInput;
@@ -686,8 +813,12 @@ export function ModernSettingsForm({
           ];
       setAccounts(next);
       await persistAccounts(next);
+      const connectedICloud = isICloudCalDav({
+        serverUrl,
+        label: editDraft.label ?? account.label,
+      });
       toast({
-        title: "CalDAV connected",
+        title: connectedICloud ? "iCloud connected" : "CalDAV connected",
         description: `Found ${data.calendarCount ?? 0} calendar(s). Syncing events…`,
       });
       cancelEdit();
@@ -709,6 +840,12 @@ export function ModernSettingsForm({
     const isNew = !account;
     const type = isNew ? newAccountType! : account!.type;
     const isPrimary = account?.id === "primary-google";
+    const isICloud =
+      calDavPreset === "icloud" ||
+      isICloudCalDav(isNew ? editDraft : { ...account, ...editDraft });
+    const connectAccent = isICloud
+      ? "bg-sky-600 hover:bg-sky-700"
+      : "bg-violet-500 hover:bg-violet-600";
 
     return (
       <div className="mt-3 space-y-3 border-t border-border pt-3">
@@ -776,44 +913,80 @@ export function ModernSettingsForm({
 
         {(type === "caldav" || type === "imap") && (
           <div className="space-y-2">
+            {isICloud && type === "caldav" && (
+              <div className="space-y-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-[10px] text-muted-foreground">
+                <p className="font-medium text-foreground/90">
+                  Use an Apple app-specific password
+                </p>
+                <p>
+                  Your normal Apple ID password will not work. Create one at{" "}
+                  <a
+                    className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                    href="https://appleid.apple.com/account/manage"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    appleid.apple.com
+                  </a>{" "}
+                  under Sign-In and Security → App-Specific Passwords.
+                </p>
+              </div>
+            )}
             {isNew && (
               <div className="space-y-1">
                 <label className="text-[10px] text-muted-foreground">Email</label>
                 <input
                   className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
-                  onChange={(e) => setEditDraft((d) => ({ ...d, email: e.target.value }))}
-                  placeholder="email@domain.com"
+                  onChange={(e) => {
+                    const email = e.target.value;
+                    setEditDraft((d) => ({
+                      ...d,
+                      email,
+                      ...(isICloud ? { username: email } : {}),
+                    }));
+                  }}
+                  placeholder={isICloud ? "you@icloud.com" : "email@domain.com"}
                   value={editDraft.email ?? ""}
                 />
               </div>
             )}
             <div className="space-y-1">
               <label className="text-[10px] text-muted-foreground">Server URL</label>
-              <input
-                className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
-                onChange={(e) => setEditDraft((d) => ({ ...d, serverUrl: e.target.value }))}
-                placeholder={type === "caldav" ? "https://caldav.example.com" : "imap.example.com"}
-                value={editDraft.serverUrl ?? account?.serverUrl ?? ""}
-              />
+              {isICloud && type === "caldav" ? (
+                <p className="flex h-8 items-center rounded-lg border border-border bg-muted/30 px-3 text-xs text-muted-foreground">
+                  {ICLOUD_CALDAV_SERVER}
+                </p>
+              ) : (
+                <input
+                  className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
+                  onChange={(e) => setEditDraft((d) => ({ ...d, serverUrl: e.target.value }))}
+                  placeholder={type === "caldav" ? "https://caldav.example.com" : "imap.example.com"}
+                  value={editDraft.serverUrl ?? account?.serverUrl ?? ""}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-[10px] text-muted-foreground">Username</label>
               <input
                 className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
                 onChange={(e) => setEditDraft((d) => ({ ...d, username: e.target.value }))}
-                placeholder="username"
+                placeholder={isICloud ? "Apple ID email" : "username"}
                 value={editDraft.username ?? account?.username ?? ""}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">Password</label>
+              <label className="text-[10px] text-muted-foreground">
+                {isICloud && type === "caldav" ? "App-specific password" : "Password"}
+              </label>
               <input
                 className={settingsInput}
                 onChange={(e) => setEditDraft((d) => ({ ...d, password: e.target.value }))}
                 placeholder={
                   !isNew && account?.connected
                     ? "Leave blank to keep current password"
-                    : "••••••••"
+                    : isICloud && type === "caldav"
+                      ? "xxxx-xxxx-xxxx-xxxx"
+                      : "••••••••"
                 }
                 type="password"
                 value={editDraft.password ?? ""}
@@ -866,16 +1039,19 @@ export function ModernSettingsForm({
                     id: `acct-${Date.now()}`,
                     email,
                     type: "caldav",
-                    label: editDraft.label || "CalDAV",
+                    label: editDraft.label || (isICloud ? "iCloud Calendar" : "CalDAV"),
                     connected: false,
-                    color: editDraft.color ?? "#8B5CF6",
-                    serverUrl: editDraft.serverUrl,
-                    username: editDraft.username,
+                    color: editDraft.color ?? (isICloud ? "#0071E3" : "#8B5CF6"),
+                    serverUrl: editDraft.serverUrl ?? (isICloud ? ICLOUD_CALDAV_SERVER : undefined),
+                    username: editDraft.username ?? (isICloud ? email : undefined),
                   };
                   setAccounts((prev) => [...prev, newAcct]);
                   await connectCalDavAccount(newAcct);
                 }}
-                className="h-8 flex-1 rounded-lg bg-violet-500 text-xs font-medium text-white hover:bg-violet-600 transition-colors disabled:opacity-50"
+                className={cn(
+                  "h-8 flex-1 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50",
+                  connectAccent,
+                )}
               >
                 {isConnectingCalDav ? "Connecting…" : "Test & Connect"}
               </button>
@@ -897,7 +1073,10 @@ export function ModernSettingsForm({
                 type="button"
                 disabled={isConnectingCalDav}
                 onClick={() => connectCalDavAccount(account!)}
-                className="h-8 flex-1 rounded-lg bg-violet-500 text-xs font-medium text-white hover:bg-violet-600 transition-colors disabled:opacity-50"
+                className={cn(
+                  "h-8 flex-1 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50",
+                  connectAccent,
+                )}
               >
                 {isConnectingCalDav ? "Connecting…" : account?.connected ? "Reconnect" : "Test & Connect"}
               </button>
@@ -1257,6 +1436,77 @@ export function ModernSettingsForm({
                     />
                   </div>
 
+                  <div className={settingsCard}>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="font-medium text-sm text-foreground/90 md:text-xs">
+                          Event panel section order
+                        </p>
+                        <p className="text-muted-foreground text-xs md:text-[10px]">
+                          Reorder What, Where, and When for all calendars
+                        </p>
+                      </div>
+                      <ul className="space-y-2">
+                        {eventSectionOrder.map((sectionId, index) => (
+                          <li
+                            className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2"
+                            key={sectionId}
+                          >
+                            <span className="text-xs text-foreground/90">
+                              {EVENT_SECTION_LABELS[sectionId]}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                aria-label={`Move ${EVENT_SECTION_LABELS[sectionId]} up`}
+                                className="h-7 w-7"
+                                disabled={index === 0}
+                                onClick={() =>
+                                  setEventSectionOrder((current) =>
+                                    moveSection(current, sectionId, "up"),
+                                  )
+                                }
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <ChevronUpIcon className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                aria-label={`Move ${EVENT_SECTION_LABELS[sectionId]} down`}
+                                className="h-7 w-7"
+                                disabled={
+                                  index === eventSectionOrder.length - 1
+                                }
+                                onClick={() =>
+                                  setEventSectionOrder((current) =>
+                                    moveSection(current, sectionId, "down"),
+                                  )
+                                }
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <ChevronDownIcon className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <Button
+                        className="h-8 text-xs"
+                        onClick={() =>
+                          setEventSectionOrder([
+                            ...DEFAULT_EVENT_SECTION_ORDER,
+                          ])
+                        }
+                        type="button"
+                        variant="outline"
+                      >
+                        Reset to default
+                      </Button>
+                    </div>
+                  </div>
+
                   <Button
                     className={settingsPrimarySubmit}
                     disabled={isLoading}
@@ -1322,6 +1572,19 @@ export function ModernSettingsForm({
                 </div>
               </div>
 
+              <div className="liquid-glass-subtle rounded-2xl p-4">
+                <p className="mb-1 font-medium text-xs text-foreground">Krisp</p>
+                <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground">
+                  Connect Krisp for meeting transcripts and action items in Context.
+                </p>
+                <a
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-white/[0.1] transition-colors"
+                  href="/api/accounts/krisp/connect"
+                >
+                  Connect Krisp
+                </a>
+              </div>
+
               {/* Additional accounts */}
               <div>
                 <p className="mb-3 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Connected Accounts</p>
@@ -1375,6 +1638,9 @@ export function ModernSettingsForm({
                         </div>
                       </div>
                       {editingId === account.id && renderEditForm(account)}
+                      {account.connected ? (
+                        <ContextBindingsHint accountEmail={account.email} />
+                      ) : null}
                     </div>
                   ))}
 
@@ -1382,7 +1648,7 @@ export function ModernSettingsForm({
                   {editingId === "new" && newAccountType && (
                     <div className="liquid-glass-subtle rounded-2xl p-4">
                       <p className="font-medium text-xs text-foreground/90 mb-3">
-                        New {newAccountType === "google" ? "Google" : newAccountType === "caldav" ? "CalDAV" : "IMAP"} Account
+                        New {newAccountTypeLabel(newAccountType, calDavPreset === "icloud")} Account
                       </p>
                       {renderEditForm()}
                     </div>
@@ -1395,6 +1661,7 @@ export function ModernSettingsForm({
                     onClick={() => {
                       setEditingId("new");
                       setNewAccountType(null);
+                      setCalDavPreset(null);
                       setEditDraft({});
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-3 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground/80"
@@ -1405,18 +1672,15 @@ export function ModernSettingsForm({
                 ) : !newAccountType ? (
                   <div className="liquid-glass-subtle rounded-2xl p-4 space-y-3">
                     <p className="text-xs text-muted-foreground font-medium">Select account type</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["google", "caldav", "imap"] as AccountType[]).map((t) => (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {ACCOUNT_PICKER_OPTIONS.map((option) => (
                         <button
-                          key={t}
+                          key={option.id}
                           type="button"
-                          onClick={() => {
-                            setNewAccountType(t);
-                            setEditDraft({ type: t, color: "#4285F4", label: t === "google" ? "Google Calendar & Gmail" : t === "caldav" ? "CalDAV" : "IMAP" });
-                          }}
-                          className="rounded-xl border border-border bg-muted/40 py-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground/90 transition-colors capitalize"
+                          onClick={() => selectNewAccountType(option.id)}
+                          className="rounded-xl border border-border bg-muted/40 py-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground/90 transition-colors"
                         >
-                          {t === "google" ? "Google" : t.toUpperCase()}
+                          {option.label}
                         </button>
                       ))}
                     </div>
@@ -1431,6 +1695,14 @@ export function ModernSettingsForm({
                 ) : null}
                 </div>
               </div>
+
+              <AccountCodesSettings
+                connectedAccounts={accounts
+                  .filter((a) => a.connected && a.email)
+                  .map((a) => ({ email: a.email, label: a.label }))}
+                userEmail={userEmail}
+                userId={userId}
+              />
             </div>
           )}
 
