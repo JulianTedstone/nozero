@@ -159,16 +159,16 @@ export function AccountCodeAssignSelect({
         value={selectValue}
       >
         <SelectTrigger className="!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-white/80 text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-white/40">
-          <SelectValue placeholder="None">
+          <SelectValue placeholder="Project code">
             {selected
               ? `${selected.code} — ${selected.label}`
               : value
                 ? "Assigned code unavailable"
-                : "None"}
+                : "Project code"}
           </SelectValue>
         </SelectTrigger>
         <SelectContent className="max-w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-white/[0.12] shadow-2xl">
-          <SelectItem value={NONE_VALUE}>None</SelectItem>
+          <SelectItem value={NONE_VALUE}>Project code</SelectItem>
           {codes.map((code) => (
             <SelectItem key={code.id} value={code.id}>
               <span className="font-mono text-xs">{code.code}</span>

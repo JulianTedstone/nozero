@@ -11,7 +11,13 @@ function capitalizeWord(value: string): string {
 }
 
 /** e.g. julian.tedstone@coherence.digital → "Julian, Coherence" */
-export function friendlyAccountName(email: string): string {
+export function friendlyAccountName(
+  email: string,
+  label?: string | null,
+): string {
+  const trimmedLabel = label?.trim();
+  if (trimmedLabel) return trimmedLabel;
+
   const trimmed = email.trim()
   const at = trimmed.indexOf("@")
   if (at <= 0) return trimmed

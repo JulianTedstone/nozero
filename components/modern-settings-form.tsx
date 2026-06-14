@@ -6,9 +6,11 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ClockIcon,
+  Link2Icon,
   PaletteIcon,
   PencilIcon,
   PlusIcon,
+  Settings2Icon,
   TrashIcon,
   UsersIcon,
 } from "lucide-react";
@@ -114,7 +116,12 @@ const formSchema = z.object({
   timezone: z.string().default("UTC"),
 });
 
-type SettingsSection = "appearance" | "time" | "accounts";
+type SettingsSection =
+  | "appearance"
+  | "time"
+  | "preferences"
+  | "accounts"
+  | "connections";
 
 const NAV_ITEMS: {
   id: SettingsSection;
@@ -123,7 +130,9 @@ const NAV_ITEMS: {
 }[] = [
   { id: "appearance", label: "Appearance", icon: PaletteIcon },
   { id: "time", label: "Time & Events", icon: ClockIcon },
+  { id: "preferences", label: "Preferences", icon: Settings2Icon },
   { id: "accounts", label: "Accounts", icon: UsersIcon },
+  { id: "connections", label: "Connections", icon: Link2Icon },
 ];
 
 type AccountType = "google" | "caldav" | "imap";
@@ -146,10 +155,11 @@ type Account = {
 interface ModernSettingsFormProps {
   initialPreferences: any;
   initialConnectedAccounts?: Account[];
-  initialSection?: "appearance" | "time" | "accounts";
+  initialSection?: SettingsSection;
   connectedAccountId?: string;
   connectedEmail?: string;
   oauthError?: string;
+  gmailWarning?: boolean;
   triggerSync?: boolean;
   userEmail: string;
   userId: string;
@@ -169,7 +179,7 @@ const ACCOUNT_COLORS = [
 
 const ICLOUD_CALDAV_SERVER = "https://caldav.icloud.com";
 
-type AccountPickerOption = "google" | "icloud" | "caldav" | "imap";
+type AccountPickerOption = "google" | "icloud" | "caldav-smtp";
 
 const ACCOUNT_PICKER_OPTIONS: {
   id: AccountPickerOption;
@@ -177,9 +187,57 @@ const ACCOUNT_PICKER_OPTIONS: {
 }[] = [
   { id: "google", label: "Google" },
   { id: "icloud", label: "iCloud" },
-  { id: "caldav", label: "CalDAV" },
-  { id: "imap", label: "IMAP" },
+  { id: "caldav-smtp", label: "CalDAV / SMTP" },
 ];
+
+function accountListStorageKey(userId: string): string {
+  return `nozero:connected-accounts:${userId}`;
+}
+
+function normalizeConnectedAccounts(accounts: Account[]): Account[] {
+  return accounts.filter((a) => a.id !== "primary-google");
+}
+
+function imapSiblingId(caldavAccountId: string): string {
+  return `${caldavAccountId}-mail`;
+}
+
+/** Hide IMAP rows that are paired with a CalDAV account on the same email. */
+function visibleAccounts(accounts: Account[]): Account[] {
+  const normalized = normalizeConnectedAccounts(accounts);
+  return normalized.filter((account) => {
+    if (account.type !== "imap") return true;
+    return !normalized.some(
+      (other) =>
+        other.type === "caldav" &&
+        other.email.toLowerCase() === account.email.toLowerCase(),
+    );
+  });
+}
+
+function buildAccountList(serverAccounts?: Account[]): Account[] {
+  return normalizeConnectedAccounts(serverAccounts ?? []);
+}
+
+/** Merge connected account lists — later sources win on conflict. */
+function mergeConnectedOnly(...sources: (Account[] | undefined)[]): Account[] {
+  const byId = new Map<string, Account>();
+  for (const source of sources) {
+    if (!source?.length) continue;
+    for (const account of source) {
+      if (!account?.id || account.id === "primary-google") continue;
+      const prev = byId.get(account.id);
+      const { password: _dropPassword, ...rest } = account;
+      byId.set(
+        account.id,
+        prev
+          ? { ...prev, ...rest, password: undefined }
+          : { ...rest, password: undefined },
+      );
+    }
+  }
+  return [...byId.values()];
+}
 
 function isICloudCalDav(account?: Partial<Account>): boolean {
   const url = (account?.serverUrl ?? "").trim().replace(/\/$/, "");
@@ -189,9 +247,11 @@ function isICloudCalDav(account?: Partial<Account>): boolean {
 function newAccountTypeLabel(
   type: AccountType,
   icloud: boolean,
+  combinedMail: boolean,
 ): string {
   if (type === "google") return "Google";
   if (icloud) return "iCloud";
+  if (type === "caldav" && combinedMail) return "CalDAV / SMTP";
   if (type === "caldav") return "CalDAV";
   return "IMAP";
 }
@@ -357,48 +417,6 @@ function AccountCalendarSubscriptions({
   );
 }
 
-function buildAccountList(
-  userEmail: string,
-  serverAccounts?: Account[],
-): Account[] {
-  const primary = primaryGoogleAccount(userEmail);
-  const additional = (serverAccounts ?? []).filter(
-    (a) => a.id !== "primary-google",
-  );
-  return additional.length > 0 ? [primary, ...additional] : [primary];
-}
-
-function primaryGoogleAccount(userEmail: string): Account {
-  return {
-    id: "primary-google",
-    email: userEmail,
-    type: "google",
-    label: "Google Calendar & Gmail",
-    connected: true,
-    color: "#4285F4",
-  };
-}
-
-/** Merge account lists from server, API, and localStorage — later sources win on conflict. */
-function mergeAccountLists(
-  userEmail: string,
-  ...sources: (Account[] | undefined)[]
-): Account[] {
-  const primary = primaryGoogleAccount(userEmail);
-  const byId = new Map<string, Account>();
-  for (const source of sources) {
-    if (!source?.length) continue;
-    for (const account of source) {
-      if (account.id === "primary-google") continue;
-      const prev = byId.get(account.id);
-      const { password: _dropPassword, ...rest } = account;
-      byId.set(account.id, prev ? { ...prev, ...rest, password: undefined } : { ...rest, password: undefined });
-    }
-  }
-  const additional = [...byId.values()];
-  return additional.length > 0 ? [primary, ...additional] : [primary];
-}
-
 function migrateLegacyAccountStorage(
   accountsKey: string,
   userId: string,
@@ -510,6 +528,7 @@ export function ModernSettingsForm({
   connectedAccountId,
   connectedEmail,
   oauthError,
+  gmailWarning,
   triggerSync,
   userId,
   userEmail,
@@ -522,23 +541,35 @@ export function ModernSettingsForm({
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(initialSection ?? "appearance");
 
-  // Fixed key — no user/email scoping. The user may log in via different Google
-  // accounts; scoping by email means a different login wipes all added accounts.
-  // localStorage is already per-origin so no scoping is needed.
-  const ACCOUNTS_KEY = "nozero:connected-accounts";
+  const ACCOUNTS_KEY = accountListStorageKey(userId);
 
   const [accounts, setAccounts] = useState<Account[]>(() =>
-    buildAccountList(userEmail, initialConnectedAccounts),
+    buildAccountList(initialConnectedAccounts),
   );
 
   async function persistAccounts(next: Account[]) {
-    const stripped = stripPasswordsForStorage(next);
+    let toSave = stripPasswordsForStorage(normalizeConnectedAccounts(next));
     try {
-      window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(stripped));
+      const res = await fetch("/api/accounts");
+      if (res.ok) {
+        const data = (await res.json()) as { accounts?: Account[] };
+        const serverAccounts = buildAccountList(data.accounts);
+        if (serverAccounts.length > toSave.length) {
+          toSave = stripPasswordsForStorage(
+            mergeConnectedOnly(serverAccounts, toSave),
+          );
+        }
+      }
+    } catch {
+      // Proceed with client list
+    }
+    try {
+      window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(toSave));
     } catch {}
-    const payload = stripped
-      .filter((a) => a.id !== "primary-google")
-      .map(({ hasStoredCredentials: _hasStoredCredentials, ...rest }) => rest);
+    const payload = toSave.map(
+      ({ hasStoredCredentials: _hasStoredCredentials, password: _password, ...rest }) =>
+        rest,
+    );
     try {
       await fetch("/api/accounts", {
         method: "PUT",
@@ -592,6 +623,45 @@ export function ModernSettingsForm({
     }
   }
 
+  async function reconnectStoredImapAccounts(accountList: Account[]) {
+    const targets = accountList.filter(
+      (a) =>
+        a.type === "imap" &&
+        a.hasStoredCredentials &&
+        a.email &&
+        a.serverUrl &&
+        a.username,
+    );
+    if (targets.length === 0) return;
+
+    let anyConnected = false;
+    for (const account of targets) {
+      try {
+        const res = await fetch("/api/accounts/imap/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountId: account.id,
+            email: account.email,
+            serverUrl: account.serverUrl,
+            username: account.username,
+            label: account.label,
+            color: account.color,
+          }),
+        });
+        if (res.ok) anyConnected = true;
+      } catch {
+        // Best-effort reconnect on load
+      }
+    }
+
+    if (anyConnected) {
+      try {
+        await fetch("/api/email/sync", { method: "POST" });
+      } catch {}
+    }
+  }
+
   async function triggerCalendarSync() {
     try {
       const res = await fetch("/api/calendar/sync", { method: "POST" });
@@ -618,49 +688,98 @@ export function ModernSettingsForm({
   }
 
   // After returning from Google OAuth, mark the account as connected and clean URL.
-  // Read directly from localStorage (not React state) to avoid stale-closure/Strict-Mode issues.
   useEffect(() => {
     if (oauthError) {
-      toast({ title: "Google connection failed", description: oauthError, variant: "destructive" });
+      toast({
+        title: "Google connection failed",
+        description: oauthError,
+        variant: "destructive",
+      });
       window.history.replaceState({}, "", "/settings?section=accounts");
       return;
     }
-    if (!connectedAccountId) return;
-    const email = connectedEmail ?? "";
+    if (!connectedAccountId || connectedAccountId === "primary-google") return;
 
-    let current = readAccountsFromLocalStorage(ACCOUNTS_KEY);
-    if (current.length === 0) {
-      current = [primaryGoogleAccount(userEmail)];
-    }
+    void (async () => {
+      const email = connectedEmail ?? "";
 
-    const byId = connectedAccountId !== "new" ? current.find((a) => a.id === connectedAccountId) : undefined;
-    const byEmail = email ? current.find((a) => a.email === email && a.id !== "primary-google") : undefined;
-    const target = byId ?? byEmail;
+      let serverAccounts: Account[] = [];
+      try {
+        const res = await fetch("/api/accounts");
+        if (res.ok) {
+          const data = (await res.json()) as { accounts?: Account[] };
+          serverAccounts = buildAccountList(data.accounts);
+        }
+      } catch {
+        // Fall back to SSR props + local cache
+      }
 
-    let next: Account[];
-    if (target) {
-      next = current.map((a) => a.id === target.id ? { ...a, connected: true, email: email || a.email } : a);
-    } else {
-      next = [...current, { id: `acct-${Date.now()}`, email, type: "google" as AccountType, label: "Google Calendar & Gmail", connected: true, color: "#4285F4" }];
-    }
+      const fromStorage = readAccountsFromLocalStorage(ACCOUNTS_KEY);
+      let current = mergeConnectedOnly(
+        initialConnectedAccounts,
+        serverAccounts,
+        fromStorage,
+      );
 
-    next = mergeAccountLists(userEmail, initialConnectedAccounts, next);
+      const byId =
+        connectedAccountId !== "new"
+          ? current.find((a) => a.id === connectedAccountId)
+          : undefined;
+      const byEmail = email
+        ? current.find(
+            (a) => a.email.toLowerCase() === email.toLowerCase(),
+          )
+        : undefined;
+      const target = byId ?? byEmail;
 
-    persistAccounts(next);
-    setAccounts(next);
-    toast({ title: "Google account connected" });
-    window.history.replaceState({}, "", "/settings?section=accounts");
-    if (triggerSync) {
-      void triggerCalendarSync();
-    }
+      let next: Account[];
+      if (target) {
+        next = current.map((a) =>
+          a.id === target.id
+            ? { ...a, connected: true, email: email || a.email }
+            : a,
+        );
+      } else {
+        next = [
+          ...current,
+          {
+            id: connectedAccountId !== "new" ? connectedAccountId : `acct-${Date.now()}`,
+            email,
+            type: "google" as AccountType,
+            label: email.split("@")[0] || "Google",
+            connected: true,
+            color: "#4285F4",
+          },
+        ];
+      }
+
+      await persistAccounts(next);
+      setAccounts(next);
+      toast({ title: "Google account connected" });
+      if (gmailWarning) {
+        toast({
+          title: "Gmail access not granted",
+          description:
+            "Calendar connected, but Google did not approve Gmail read access. Enable the Gmail API and gmail.readonly on your OAuth consent screen, revoke app access at myaccount.google.com, then reconnect.",
+          variant: "destructive",
+        });
+      }
+      window.history.replaceState({}, "", "/settings?section=accounts");
+      if (triggerSync) {
+        void triggerCalendarSync();
+        void fetch("/api/email/sync", { method: "POST" });
+      }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedAccountId, oauthError, triggerSync]);
+  }, [connectedAccountId, oauthError, gmailWarning, triggerSync]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isConnectingCalDav, setIsConnectingCalDav] = useState(false);
   // For the add-account form
   const [newAccountType, setNewAccountType] = useState<AccountType | null>(null);
   const [calDavPreset, setCalDavPreset] = useState<"icloud" | null>(null);
+  const [combinedMail, setCombinedMail] = useState(false);
+  const [smtpServerUrl, setSmtpServerUrl] = useState("");
   const [editDraft, setEditDraft] = useState<Partial<Account>>({});
 
   const { theme, setTheme } = useTheme();
@@ -693,8 +812,7 @@ export function ModernSettingsForm({
         // Fall back to SSR props + localStorage
       }
 
-      const merged = mergeAccountLists(
-        userEmail,
+      const merged = mergeConnectedOnly(
         initialConnectedAccounts,
         fromStorage,
         fromApi,
@@ -709,18 +827,10 @@ export function ModernSettingsForm({
         return merged;
       });
 
-      const serverBase = fromApi.length ? fromApi : initialConnectedAccounts;
-      const serverFp = accountsMetadataFingerprint(
-        buildAccountList(userEmail, serverBase),
-      );
-      const mergedMetaFp = accountsMetadataFingerprint(merged);
-      if (mergedMetaFp !== serverFp) {
-        void persistAccounts(merged);
-      }
-
       if (!didReconnectRef.current) {
         didReconnectRef.current = true;
         void reconnectStoredCalDavAccounts(merged);
+        void reconnectStoredImapAccounts(merged);
       }
     }
 
@@ -733,6 +843,9 @@ export function ModernSettingsForm({
 
   // User profile edit state
   const [displayName, setDisplayName] = useState(userName);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const isGoogleLogin = userProvider === "google";
   const [eventSectionOrder, setEventSectionOrder] = useState<
     EventDetailSectionId[]
   >(() => parseEventSectionOrder(initialPreferences.eventSectionOrder));
@@ -749,6 +862,41 @@ export function ModernSettingsForm({
       timezone: initialPreferences.timezone || detectedTimezone,
     },
   });
+
+  async function saveProfile() {
+    if (!userId) return;
+    setIsSavingProfile(true);
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName,
+          ...(passwordInput ? { password: passwordInput } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Failed to save profile",
+        );
+      }
+      setPasswordInput("");
+      toast({
+        title: "Profile saved",
+        description: "Your login preferences have been updated",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not save profile",
+        description:
+          error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!userId) {
@@ -795,6 +943,19 @@ export function ModernSettingsForm({
     setEditDraft({ ...account });
     setNewAccountType(null);
     setCalDavPreset(isICloudCalDav(account) ? "icloud" : null);
+    if (account.type === "caldav") {
+      const mailSibling = accounts.find((a) => a.id === imapSiblingId(account.id));
+      if (mailSibling) {
+        setCombinedMail(true);
+        setSmtpServerUrl(mailSibling.serverUrl ?? "");
+      } else {
+        setCombinedMail(false);
+        setSmtpServerUrl("");
+      }
+    } else {
+      setCombinedMail(false);
+      setSmtpServerUrl("");
+    }
   }
 
   function cancelEdit() {
@@ -802,32 +963,40 @@ export function ModernSettingsForm({
     setEditDraft({});
     setNewAccountType(null);
     setCalDavPreset(null);
+    setCombinedMail(false);
+    setSmtpServerUrl("");
   }
 
   function selectNewAccountType(option: AccountPickerOption) {
     if (option === "icloud") {
       setNewAccountType("caldav");
       setCalDavPreset("icloud");
+      setCombinedMail(false);
+      setSmtpServerUrl("");
       setEditDraft({
         type: "caldav",
         color: "#0071E3",
-        label: "iCloud Calendar",
+        label: "iCloud",
         serverUrl: ICLOUD_CALDAV_SERVER,
       });
       return;
     }
-    if (option === "caldav") {
+    if (option === "caldav-smtp") {
       setNewAccountType("caldav");
       setCalDavPreset(null);
-      setEditDraft({ type: "caldav", color: "#8B5CF6", label: "CalDAV" });
+      setCombinedMail(true);
+      setSmtpServerUrl("");
+      setEditDraft({ type: "caldav", color: "#8B5CF6", label: "Email & Calendar" });
       return;
     }
     setCalDavPreset(null);
+    setCombinedMail(false);
+    setSmtpServerUrl("");
     setNewAccountType(option);
     setEditDraft({
       type: option,
       color: "#4285F4",
-      label: option === "google" ? "Google Calendar & Gmail" : "IMAP",
+      label: "Google",
     });
   }
 
@@ -842,7 +1011,7 @@ export function ModernSettingsForm({
     };
 
     const passwordInput = editDraft.password?.trim() ?? "";
-    const credsChanged =
+    const caldavCredsChanged =
       account.type === "caldav" &&
       account.connected &&
       (Boolean(passwordInput) ||
@@ -852,7 +1021,17 @@ export function ModernSettingsForm({
           editDraft.username !== account.username) ||
         (editDraft.email !== undefined && editDraft.email !== account.email));
 
-    if (credsChanged) {
+    const imapCredsChanged =
+      account.type === "imap" &&
+      account.connected &&
+      (Boolean(passwordInput) ||
+        (editDraft.serverUrl !== undefined &&
+          editDraft.serverUrl !== account.serverUrl) ||
+        (editDraft.username !== undefined &&
+          editDraft.username !== account.username) ||
+        (editDraft.email !== undefined && editDraft.email !== account.email));
+
+    if (caldavCredsChanged) {
       setIsConnectingCalDav(true);
       try {
         const res = await fetch("/api/accounts/caldav/connect", {
@@ -888,28 +1067,86 @@ export function ModernSettingsForm({
       }
     }
 
+    if (imapCredsChanged) {
+      setIsConnectingCalDav(true);
+      try {
+        const res = await fetch("/api/accounts/imap/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountId: account.id,
+            email: merged.email,
+            serverUrl: merged.serverUrl ?? "",
+            username: merged.username ?? "",
+            ...(passwordInput ? { password: passwordInput } : {}),
+            label: merged.label,
+            color: merged.color,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string" ? data.error : "Failed to update IMAP",
+          );
+        }
+        merged.connected = true;
+        merged.hasStoredCredentials = true;
+      } catch (error) {
+        toast({
+          title: "IMAP update failed",
+          description:
+            error instanceof Error ? error.message : "Could not update credentials",
+          variant: "destructive",
+        });
+        return;
+      } finally {
+        setIsConnectingCalDav(false);
+      }
+    }
+
     const next = accounts.map((a) => (a.id === editingId ? merged : a));
-    setAccounts(next);
-    await persistAccounts(next);
+    const mailId = imapSiblingId(editingId);
+    const withSibling =
+      account.type === "caldav" && accounts.some((a) => a.id === mailId)
+        ? next.map((a) =>
+            a.id === mailId
+              ? {
+                  ...a,
+                  email: merged.email,
+                  label: merged.label,
+                  color: merged.color,
+                  username: merged.username,
+                }
+              : a,
+          )
+        : next;
+    setAccounts(withSibling);
+    await persistAccounts(withSibling);
     toast({ title: "Account updated" });
     cancelEdit();
   }
 
   async function deleteAccount(id: string) {
     const target = accounts.find((a) => a.id === id);
-    const next = accounts.filter((a) => a.id !== id);
+    const mailId = imapSiblingId(id);
+    const next = accounts.filter((a) => a.id !== id && a.id !== mailId);
     setAccounts(next);
-    void persistAccounts(next);
-    if (id !== "primary-google") {
-      try {
+    try {
+      await fetch(
+        `/api/accounts?accountId=${encodeURIComponent(id)}&email=${encodeURIComponent(target?.email ?? "")}`,
+        { method: "DELETE" },
+      );
+      if (accounts.some((a) => a.id === mailId)) {
+        const mailTarget = accounts.find((a) => a.id === mailId);
         await fetch(
-          `/api/accounts?accountId=${encodeURIComponent(id)}&email=${encodeURIComponent(target?.email ?? "")}`,
+          `/api/accounts?accountId=${encodeURIComponent(mailId)}&email=${encodeURIComponent(mailTarget?.email ?? target?.email ?? "")}`,
           { method: "DELETE" },
         );
-      } catch (error) {
-        console.error("Failed to remove account tokens:", error);
       }
+    } catch (error) {
+      console.error("Failed to remove account tokens:", error);
     }
+    await persistAccounts(next);
     toast({ title: "Account removed" });
     if (editingId === id) cancelEdit();
   }
@@ -1008,6 +1245,11 @@ export function ModernSettingsForm({
         title: connectedICloud ? "iCloud connected" : "CalDAV connected",
         description: `Found ${data.calendarCount ?? 0} calendar(s). Syncing events…`,
       });
+
+      if (combinedMail && smtpServerUrl.trim()) {
+        await connectImapSibling(connectedAccount, smtpServerUrl.trim());
+      }
+
       cancelEdit();
       await triggerCalendarSync();
     } catch (error) {
@@ -1022,11 +1264,174 @@ export function ModernSettingsForm({
     }
   }
 
+  async function connectImapAccount(account: Account) {
+    const serverUrl = editDraft.serverUrl ?? account.serverUrl ?? "";
+    const username = editDraft.username ?? account.username ?? "";
+    const passwordInput = (editDraft.password ?? account.password ?? "").trim();
+    const canReuseStoredPassword =
+      !passwordInput &&
+      (account.hasStoredCredentials === true || account.connected);
+
+    if (!serverUrl || !username || (!passwordInput && !canReuseStoredPassword)) {
+      toast({
+        title: "Missing IMAP details",
+        description: account.connected
+          ? "Server URL and username are required."
+          : "Server URL, username, and password are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsConnectingCalDav(true);
+    try {
+      const res = await fetch("/api/accounts/imap/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: account.id,
+          email: editDraft.email ?? account.email,
+          serverUrl,
+          username,
+          ...(passwordInput ? { password: passwordInput } : {}),
+          label: editDraft.label ?? account.label,
+          color: editDraft.color ?? account.color,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "IMAP connection failed",
+        );
+      }
+
+      const connectedAccount: Account = {
+        ...account,
+        ...editDraft,
+        connected: true,
+        hasStoredCredentials: true,
+        serverUrl,
+        username,
+        password: "",
+      };
+
+      let nextAccounts: Account[] = [];
+      setAccounts((prev) => {
+        nextAccounts = prev.some((a) => a.id === account.id)
+          ? prev.map((a) => (a.id === account.id ? connectedAccount : a))
+          : [...prev, connectedAccount];
+        return nextAccounts;
+      });
+      await persistAccounts(nextAccounts);
+      toast({
+        title: "IMAP connected",
+        description: `Found ${data.mailboxCount ?? 0} mailbox(es). Syncing mail…`,
+      });
+      cancelEdit();
+      try {
+        await fetch("/api/email/sync", { method: "POST" });
+      } catch {}
+    } catch (error) {
+      toast({
+        title: "IMAP connection failed",
+        description:
+          error instanceof Error ? error.message : "Could not connect to server",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnectingCalDav(false);
+    }
+  }
+
+  async function beginGoogleOAuth() {
+    const email = editDraft.email?.trim();
+    if (!email) {
+      toast({
+        title: "Email required",
+        description: "Enter the Google account email before connecting.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const pendingId = `acct-${Date.now()}`;
+    const pending: Account = {
+      id: pendingId,
+      email,
+      type: "google",
+      label: editDraft.label?.trim() || "Google",
+      connected: false,
+      color: editDraft.color ?? "#4285F4",
+    };
+    const staged = [...accounts, pending];
+    setAccounts(staged);
+    await persistAccounts(staged);
+    const params = new URLSearchParams({
+      email,
+      accountId: pendingId,
+      label: pending.label,
+    });
+    window.location.href = `/api/auth/google/connect?${params.toString()}`;
+  }
+
+  async function connectImapSibling(caldavAccount: Account, serverUrl: string) {
+    const mailId = imapSiblingId(caldavAccount.id);
+    const passwordInput = (editDraft.password ?? caldavAccount.password ?? "").trim();
+    const username = caldavAccount.username ?? caldavAccount.email;
+
+    const res = await fetch("/api/accounts/imap/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accountId: mailId,
+        email: caldavAccount.email,
+        serverUrl,
+        username,
+        ...(passwordInput ? { password: passwordInput } : {}),
+        label: caldavAccount.label,
+        color: caldavAccount.color,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        typeof data.error === "string" ? data.error : "SMTP/IMAP connection failed",
+      );
+    }
+
+    const mailAccount: Account = {
+      id: mailId,
+      email: caldavAccount.email,
+      type: "imap",
+      label: caldavAccount.label,
+      connected: true,
+      hasStoredCredentials: true,
+      color: caldavAccount.color,
+      serverUrl,
+      username,
+      password: "",
+    };
+
+    let nextAccounts: Account[] = [];
+    setAccounts((prev) => {
+      nextAccounts = prev.some((a) => a.id === mailId)
+        ? prev.map((a) => (a.id === mailId ? mailAccount : a))
+        : [...prev, mailAccount];
+      return nextAccounts;
+    });
+    await persistAccounts(nextAccounts);
+    toast({
+      title: "Email connected",
+      description: `Found ${data.mailboxCount ?? 0} mailbox(es). Syncing mail…`,
+    });
+    try {
+      await fetch("/api/email/sync", { method: "POST" });
+    } catch {}
+  }
+
   // Inline edit form for an account
   function renderEditForm(account?: Account) {
     const isNew = !account;
     const type = isNew ? newAccountType! : account!.type;
-    const isPrimary = account?.id === "primary-google";
     const isICloud =
       calDavPreset === "icloud" ||
       isICloudCalDav(isNew ? editDraft : { ...account, ...editDraft });
@@ -1086,24 +1491,11 @@ export function ModernSettingsForm({
                 </p>
               )}
             </div>
-            {isPrimary && (
-              <div className="space-y-2">
-                <p className="text-[10px] text-muted-foreground">
-                  Primary login via Google. Use reconnect if calendar sync fails.
-                </p>
-                <a
-                  href={`/api/auth/google/connect?email=${encodeURIComponent(account?.email ?? "")}&accountId=primary-google`}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#4285F4]/15 px-2.5 py-1.5 text-[10px] font-medium text-[#4285F4] hover:bg-[#4285F4]/25 transition-colors"
-                >
-                  Reconnect Google Calendar
-                </a>
-                {account?.connected && (
-                  <AccountCalendarSubscriptions
-                    accountId={account.id}
-                    connected={account.connected}
-                  />
-                )}
-              </div>
+            {!isNew && account?.connected && (
+              <AccountCalendarSubscriptions
+                accountId={account.id}
+                connected={account.connected}
+              />
             )}
           </div>
         )}
@@ -1148,7 +1540,9 @@ export function ModernSettingsForm({
               </div>
             )}
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">Server URL</label>
+              <label className="text-[10px] text-muted-foreground">
+                {type === "caldav" ? "CalDAV server URL" : "IMAP server"}
+              </label>
               {isICloud && type === "caldav" ? (
                 <p className="flex h-8 items-center rounded-lg border border-border bg-muted/30 px-3 text-xs text-muted-foreground">
                   {ICLOUD_CALDAV_SERVER}
@@ -1162,6 +1556,23 @@ export function ModernSettingsForm({
                 />
               )}
             </div>
+            {(combinedMail || type === "imap") && (
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground">
+                  SMTP / IMAP server
+                </label>
+                <input
+                  className="h-8 w-full rounded-lg border border-border bg-muted/50 px-3 text-xs text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
+                  onChange={(e) => setSmtpServerUrl(e.target.value)}
+                  placeholder="imap.example.com or mail.example.com"
+                  value={
+                    type === "imap"
+                      ? (editDraft.serverUrl ?? account?.serverUrl ?? "")
+                      : smtpServerUrl
+                  }
+                />
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-[10px] text-muted-foreground">Username</label>
               <input
@@ -1201,8 +1612,9 @@ export function ModernSettingsForm({
         <div className="flex gap-2 pt-1">
           {isNew && type === "google" ? (
             <>
-              <a
-                href={`/api/auth/google/connect?email=${encodeURIComponent(editDraft.email ?? "")}&accountId=new`}
+              <button
+                type="button"
+                onClick={() => void beginGoogleOAuth()}
                 className="flex flex-1 items-center justify-center gap-1.5 h-8 rounded-lg bg-[#4285F4] text-xs font-medium text-white hover:bg-[#3b78e0] transition-colors"
               >
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -1211,8 +1623,8 @@ export function ModernSettingsForm({
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
-                Connect with Google
-              </a>
+                Connect
+              </button>
               <button type="button" onClick={cancelEdit} className="h-8 px-3 rounded-lg border border-border bg-muted/40 text-xs text-muted-foreground hover:bg-muted/60 transition-colors">
                 Cancel
               </button>
@@ -1236,7 +1648,7 @@ export function ModernSettingsForm({
                     id: `acct-${Date.now()}`,
                     email,
                     type: "caldav",
-                    label: editDraft.label || (isICloud ? "iCloud Calendar" : "CalDAV"),
+                    label: editDraft.label || (isICloud ? "iCloud" : "Email & Calendar"),
                     connected: false,
                     color: editDraft.color ?? (isICloud ? "#0071E3" : "#8B5CF6"),
                     serverUrl: editDraft.serverUrl ?? (isICloud ? ICLOUD_CALDAV_SERVER : undefined),
@@ -1255,6 +1667,48 @@ export function ModernSettingsForm({
                   "h-8 flex-1 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50",
                   connectAccent,
                 )}
+              >
+                {isConnectingCalDav ? "Connecting…" : "Connect"}
+              </button>
+              <button type="button" onClick={cancelEdit} className="h-8 px-3 rounded-lg border border-border bg-muted/40 text-xs text-muted-foreground hover:bg-muted/60 transition-colors">
+                Cancel
+              </button>
+            </>
+          ) : isNew && type === "imap" ? (
+            <>
+              <button
+                type="button"
+                disabled={isConnectingCalDav}
+                onClick={async () => {
+                  const email = editDraft.email?.trim();
+                  if (!email) {
+                    toast({
+                      title: "Email required",
+                      description: "Enter the email address for this IMAP account.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  const newAcct: Account = {
+                    id: `acct-${Date.now()}`,
+                    email,
+                    type: "imap",
+                    label: editDraft.label || "IMAP",
+                    connected: false,
+                    color: editDraft.color ?? "#4285F4",
+                    serverUrl: editDraft.serverUrl ?? "",
+                    username: editDraft.username ?? email,
+                    password: editDraft.password ?? "",
+                  };
+                  let staged: Account[] = [];
+                  setAccounts((prev) => {
+                    staged = [...prev, newAcct];
+                    return staged;
+                  });
+                  void persistAccounts(staged);
+                  await connectImapAccount(newAcct);
+                }}
+                className="h-8 flex-1 rounded-lg bg-[#4285F4] text-xs font-medium text-white transition-colors disabled:opacity-50 hover:bg-[#3b78e0]"
               >
                 {isConnectingCalDav ? "Connecting…" : "Test & Connect"}
               </button>
@@ -1281,7 +1735,25 @@ export function ModernSettingsForm({
                   connectAccent,
                 )}
               >
-                {isConnectingCalDav ? "Connecting…" : account?.connected ? "Reconnect" : "Test & Connect"}
+                {isConnectingCalDav ? "Connecting…" : account?.connected ? "Reconnect" : "Connect"}
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="h-8 px-3 rounded-lg border border-border bg-muted/40 text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
+              >
+                Save
+              </button>
+            </>
+          ) : type === "imap" ? (
+            <>
+              <button
+                type="button"
+                disabled={isConnectingCalDav}
+                onClick={() => connectImapAccount(account!)}
+                className="h-8 flex-1 rounded-lg bg-[#4285F4] text-xs font-medium text-white transition-colors disabled:opacity-50 hover:bg-[#3b78e0]"
+              >
+                {isConnectingCalDav ? "Connecting…" : account?.connected ? "Reconnect" : "Connect"}
               </button>
               <button
                 type="button"
@@ -1300,7 +1772,7 @@ export function ModernSettingsForm({
               Save
             </button>
           )}
-          {!isNew || (type !== "google" && type !== "caldav") ? (
+          {!isNew || (type !== "google" && type !== "caldav" && type !== "imap") ? (
             <button
               type="button"
               onClick={cancelEdit}
@@ -1646,7 +2118,7 @@ export function ModernSettingsForm({
                           Event panel section order
                         </p>
                         <p className="text-muted-foreground text-xs md:text-[10px]">
-                          Reorder What, Where, and When for all calendars
+                          Reorder What, Where, When, and Who for all calendars
                         </p>
                       </div>
                       <ul className="space-y-2">
@@ -1722,56 +2194,64 @@ export function ModernSettingsForm({
             </form>
           </Form>
 
-          {/* Accounts Section (CRUD) */}
-          {activeSection === "accounts" && (
+          {/* Preferences Section */}
+          {activeSection === "preferences" && (
             <div className="space-y-6">
               <div>
-                <h2 className="font-bold text-lg md:text-base">Accounts</h2>
+                <h2 className="font-bold text-lg md:text-base">Preferences</h2>
                 <p className="mt-1 text-sm text-muted-foreground md:text-xs">
-                  Your login account and connected email &amp; calendar accounts
+                  Your login identity and account security
                 </p>
               </div>
 
-              {/* Primary (login) account */}
               <div className="liquid-glass-subtle rounded-2xl p-4 md:p-5 space-y-4">
                 <div className="flex items-center gap-3">
-                  <InitialsAvatar name={userName} image={userImage} size="lg" />
+                  <InitialsAvatar name={displayName} image={userImage} size="lg" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-xs text-foreground">{userName}</p>
+                    <p className="truncate font-medium text-xs text-foreground">{displayName}</p>
                     <p className="truncate text-[10px] text-muted-foreground">{userEmail}</p>
                   </div>
-                  <span className="flex-shrink-0 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400 flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />
-                    Primary
+                  <span className="flex-shrink-0 rounded-lg bg-muted/50 px-2 py-0.5 text-[10px] text-muted-foreground capitalize">
+                    {isGoogleLogin ? "Google sign-in" : "Email & password"}
                   </span>
                 </div>
                 <div className="h-px bg-muted/40" />
                 <div className="space-y-1.5">
-                  <label className="text-[10px] text-muted-foreground font-medium">Display Name</label>
+                  <label className="text-[10px] text-muted-foreground font-medium">Friendly name</label>
                   <input
                     className="h-9 w-full rounded-xl border border-border bg-muted/50 px-3 text-sm text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30 md:text-xs"
                     onChange={(e) => setDisplayName(e.target.value)}
                     value={displayName}
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground/80">
-                  This is your nozero login account. Reconnect Google Calendar if sync fails for your primary Gmail.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <a
-                    href={`/api/auth/google/connect?email=${encodeURIComponent(userEmail)}&accountId=primary-google`}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#4285F4]/15 px-3 py-2 text-[11px] font-medium text-[#4285F4] hover:bg-[#4285F4]/25 transition-colors"
-                  >
-                    Reconnect Google Calendar
-                  </a>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-muted-foreground font-medium">Password</label>
+                  <input
+                    className={cn(
+                      settingsInput,
+                      "h-9 rounded-xl md:text-xs",
+                      isGoogleLogin && "cursor-not-allowed opacity-60",
+                    )}
+                    disabled={isGoogleLogin}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder={
+                      isGoogleLogin
+                        ? "Managed by Google — sign in with Google"
+                        : "Leave blank to keep current password"
+                    }
+                    type="password"
+                    value={passwordInput}
+                    autoComplete="new-password"
+                  />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => toast({ title: "Name updated" })}
-                    className="h-8 flex-1 rounded-xl bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                    disabled={isSavingProfile}
+                    onClick={() => void saveProfile()}
+                    className="h-8 flex-1 rounded-xl bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
-                    Save Changes
+                    {isSavingProfile ? "Saving…" : "Save Changes"}
                   </button>
                   <button
                     type="button"
@@ -1782,31 +2262,34 @@ export function ModernSettingsForm({
                   </button>
                 </div>
               </div>
+            </div>
+          )}
 
-              <div className="liquid-glass-subtle rounded-2xl p-4">
-                <p className="mb-1 font-medium text-xs text-foreground">Krisp</p>
-                <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground">
-                  Connect Krisp for meeting transcripts and action items in Context.
+          {/* Accounts Section (CRUD) */}
+          {activeSection === "accounts" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="font-bold text-lg md:text-base">Accounts</h2>
+                <p className="mt-1 text-sm text-muted-foreground md:text-xs">
+                  Connect email and calendar accounts for sync. No accounts means no email or calendar pull.
                 </p>
-                <a
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-white/[0.1] transition-colors"
-                  href="/api/accounts/krisp/connect"
-                >
-                  Connect Krisp
-                </a>
               </div>
 
-              {/* Additional accounts */}
               <div>
-                <p className="mb-3 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Connected Accounts</p>
+                <p className="mb-3 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Connected accounts</p>
                 <div className="space-y-3">
-                  {accounts.filter((a) => a.id !== "primary-google").map((account) => (
+                  {visibleAccounts(accounts).length === 0 && editingId !== "new" ? (
+                    <div className="liquid-glass-subtle rounded-2xl p-4 text-center text-xs text-muted-foreground">
+                      No email or calendar accounts connected yet.
+                    </div>
+                  ) : null}
+                  {visibleAccounts(accounts).map((account) => (
                     <div key={account.id} className="liquid-glass-subtle rounded-2xl p-4">
                       <div className="flex items-center gap-3">
                         <div className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: account.color }} />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium text-xs text-foreground">{account.email || account.label}</p>
-                          <p className="text-[10px] text-muted-foreground">{account.label}</p>
+                          <p className="truncate font-medium text-xs text-foreground">{account.label || account.email}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{account.email}</p>
                         </div>
                         <div className="flex items-center gap-1.5">
                           {account.connected ? (
@@ -1859,7 +2342,7 @@ export function ModernSettingsForm({
                   {editingId === "new" && newAccountType && (
                     <div className="liquid-glass-subtle rounded-2xl p-4">
                       <p className="font-medium text-xs text-foreground/90 mb-3">
-                        New {newAccountTypeLabel(newAccountType, calDavPreset === "icloud")} Account
+                        New {newAccountTypeLabel(newAccountType, calDavPreset === "icloud", combinedMail)} Account
                       </p>
                       {renderEditForm()}
                     </div>
@@ -1873,6 +2356,8 @@ export function ModernSettingsForm({
                       setEditingId("new");
                       setNewAccountType(null);
                       setCalDavPreset(null);
+                      setCombinedMail(false);
+                      setSmtpServerUrl("");
                       setEditDraft({});
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-3 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground/80"
@@ -1883,7 +2368,7 @@ export function ModernSettingsForm({
                 ) : !newAccountType ? (
                   <div className="liquid-glass-subtle rounded-2xl p-4 space-y-3">
                     <p className="text-xs text-muted-foreground font-medium">Select account type</p>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       {ACCOUNT_PICKER_OPTIONS.map((option) => (
                         <button
                           key={option.id}
@@ -1906,9 +2391,34 @@ export function ModernSettingsForm({
                 ) : null}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Connections Section */}
+          {activeSection === "connections" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="font-bold text-lg md:text-base">Connections</h2>
+                <p className="mt-1 text-sm text-muted-foreground md:text-xs">
+                  Third-party integrations and project metadata
+                </p>
+              </div>
+
+              <div className="liquid-glass-subtle rounded-2xl p-4">
+                <p className="mb-1 font-medium text-xs text-foreground">Krisp</p>
+                <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground">
+                  Connect Krisp for meeting transcripts and action items in Context.
+                </p>
+                <a
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-white/[0.1] transition-colors"
+                  href="/api/accounts/krisp/connect"
+                >
+                  Connect Krisp
+                </a>
+              </div>
 
               <AccountCodesSettings
-                connectedAccounts={accounts
+                connectedAccounts={visibleAccounts(accounts)
                   .filter((a) => a.connected && a.email)
                   .map((a) => ({ email: a.email, label: a.label }))}
                 userEmail={userEmail}

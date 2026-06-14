@@ -19,13 +19,33 @@ import {
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const DEFAULT_CALENDAR_ID = "primary";
 
+/** Slug embedded in scoped Google local event ids. */
+export function googleAccountSlug(accountEmail: string): string {
+  return accountEmail.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
 /** Stable local event id scoped to a Google account (avoids cross-account collisions). */
 export function googleLocalEventId(
   accountEmail: string,
   googleEventId: string,
 ): string {
-  const slug = accountEmail.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return `google_${slug}_${googleEventId}`;
+  return `google_${googleAccountSlug(accountEmail)}_${googleEventId}`;
+}
+
+/** Reverse {@link googleLocalEventId} when the account email is among known candidates. */
+export function accountEmailFromGoogleLocalId(
+  localId: string,
+  candidateEmails: string[],
+): string | undefined {
+  if (!localId.startsWith("google_")) return undefined;
+  const rest = localId.slice("google_".length);
+  const lastUnderscore = rest.lastIndexOf("_");
+  if (lastUnderscore <= 0) return undefined;
+  const slug = rest.slice(0, lastUnderscore);
+  for (const email of candidateEmails) {
+    if (googleAccountSlug(email) === slug) return email;
+  }
+  return undefined;
 }
 
 function eventBelongsToGoogleAccount(

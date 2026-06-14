@@ -76,31 +76,46 @@ export async function listEmailAccountViews(
   const visibility = await getEmailAccountVisibility(userId);
   const views: EmailAccountView[] = [];
   let colorIndex = 0;
-
-  if (user?.email) {
-    views.push({
-      id: "primary",
-      email: user.email,
-      label: "Primary",
-      color: colorForIndex(colorIndex++),
-      connected: user.provider === "google",
-      visible: visibility[user.email.toLowerCase()] !== false,
-      isPrimary: true,
-    });
-  }
+  const loginEmail = user?.email?.toLowerCase() ?? "";
 
   const connected = await getConnectedAccounts(userId);
-  for (const account of connected) {
-    if (account.type !== "google" && account.type !== "imap") continue;
-    if (!account.connected) continue;
+  const mailAccounts = connected.filter(
+    (account) =>
+      account.connected && (account.type === "google" || account.type === "imap"),
+  );
+
+  // Google sign-in: login email is a mail identity only when not already in connectedAccounts.
+  if (user?.email && user.provider === "google") {
+    const hasLinkedSlot = mailAccounts.some(
+      (account) => account.email.toLowerCase() === loginEmail,
+    );
+    if (!hasLinkedSlot) {
+      views.push({
+        id: "primary",
+        email: user.email,
+        label: "Primary",
+        color: colorForIndex(colorIndex++),
+        connected: true,
+        visible: visibility[loginEmail] !== false,
+        isPrimary: true,
+      });
+    }
+  }
+
+  for (const account of mailAccounts) {
+    const emailKey = account.email.toLowerCase();
+    const isLoginGoogle =
+      user?.provider === "google" && emailKey === loginEmail;
     views.push({
       id: account.id,
       email: account.email,
-      label: account.label || account.email,
+      label: isLoginGoogle
+        ? account.label || "Primary"
+        : account.label || account.email,
       color: account.color || colorForIndex(colorIndex++),
       connected: true,
-      visible: visibility[account.email.toLowerCase()] !== false,
-      isPrimary: false,
+      visible: visibility[emailKey] !== false,
+      isPrimary: isLoginGoogle,
     });
   }
 

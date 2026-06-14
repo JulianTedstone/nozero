@@ -5,8 +5,12 @@ import { format } from "date-fns";
 import { motion } from "framer-motion";
 import {
   CalendarIcon,
+  CircleUserIcon,
   ClockIcon,
+  HashIcon,
+  LayoutDashboardIcon,
   MapPinIcon,
+  RepeatIcon,
   TextIcon,
   Trash2Icon,
   UsersIcon,
@@ -45,10 +49,12 @@ import {
   type RecurrenceEditScope,
   type RecurrencePreset,
   presetFromRecurrenceRule,
+  recurrenceLabel,
   recurrenceRuleFromPreset,
 } from "@/lib/recurrence";
 import { RecurrenceSelect } from "@/components/recurrence-select";
 import { AccountCodeAssignSelect } from "@/components/account-code-assign-select";
+import { FlightdeckStreamSelect } from "@/components/flightdeck-stream-select";
 import { ContextIcon } from "@/components/context-icon";
 import { EventDetailHud } from "@/components/event-detail-hud";
 import { EventDetailSection } from "@/components/event-detail-section";
@@ -64,6 +70,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   conferenceProviderLabel,
+  conferenceJoinUrl,
   detectConferenceProvider,
   extractConferenceUrl,
 } from "@/lib/conference-links";
@@ -76,6 +83,9 @@ import {
   isUserEventOrganizer,
   organizerDisplayName,
 } from "@/lib/event-organizer";
+import { resolveEventAccountEmail } from "@/lib/event-account";
+import { getEventEditCapabilities } from "@/lib/event-permissions";
+import { cn, friendlyAccountName } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { CalendarEvent, RecurrenceRule } from "@/types/calendar";
 
@@ -128,6 +138,12 @@ const spring = { type: "spring", stiffness: 300, damping: 30 };
 const glassRow =
   "liquid-glass-input flex h-10 min-h-10 min-w-0 shrink-0 items-center gap-3 rounded-xl px-3";
 
+type CalendarAccountOption = {
+  email: string;
+  label: string;
+  type: "google" | "caldav";
+};
+
 export function EventDetailPanel({
   event,
   mode,
@@ -154,6 +170,7 @@ export function EventDetailPanel({
     what: true,
     where: true,
     when: true,
+    who: true,
   });
 
   const [recurrencePreset, setRecurrencePreset] =
@@ -164,19 +181,32 @@ export function EventDetailPanel({
   const [accountCodeId, setAccountCodeId] = useState<string | undefined>(
     undefined,
   );
+  const [flightdeckStream, setFlightdeckStream] = useState<string | undefined>(
+    undefined,
+  );
+  const [eventAccountEmail, setEventAccountEmail] = useState("");
+  const [calendarAccounts, setCalendarAccounts] = useState<
+    CalendarAccountOption[]
+  >([]);
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [scopeDialogMode, setScopeDialogMode] = useState<"save" | "delete">(
     "save",
   );
   const pendingFormValuesRef = useRef<z.infer<typeof formSchema> | null>(null);
+  const initialParticipantEmailsRef = useRef<string[]>([]);
 
   const isCreating = mode === "create";
   const isEditing = mode === "edit";
-  const isOrganizer = isUserEventOrganizer(event, userEmail, { isCreating });
-  const fieldsLocked = !isOrganizer;
-  const lockTooltip = fieldsLocked
-    ? `Organised by ${organizerDisplayName(event)} — only they can edit this`
+  const capabilities = getEventEditCapabilities(event, userEmail, { isCreating });
+  const isOrganizer = capabilities.canEditOrganizerFields;
+  const organizerFieldsLocked = !isOrganizer;
+  const lockTooltip = organizerFieldsLocked
+    ? `Organised by ${organizerDisplayName(event)} — only they can change time, title, and remove guests`
     : undefined;
+  const isRecurringSeries =
+    Boolean(event?.recurrence) ||
+    Boolean(event?.isRecurringInstance) ||
+    Boolean(event?.originalEventId);
   const defaultGoogleCalendarId =
     googleCalendars.find((calendar) => calendar.primary)?.id ??
     googleCalendars[0]?.id ??
@@ -226,9 +256,147 @@ export function EventDetailPanel({
     ? detectConferenceProvider(conferenceUrl)
     : null;
 
-  const lockedInputClass = fieldsLocked
+  const lockedInputClass = organizerFieldsLocked
     ? "cursor-not-allowed opacity-70"
     : undefined;
+
+  async function persistGuestInvites(participants: Participant[]) {
+    if (
+      isOrganizer ||
+      !capabilities.canAddParticipants ||
+      !event?.id ||
+      !userId
+    ) {
+      return;
+    }
+
+    const initial = new Set(initialParticipantEmailsRef.current);
+    const nextEmails = participants.map((p) => p.email.toLowerCase());
+
+    for (const email of initial) {
+      if (!nextEmails.includes(email)) {
+        return;
+      }
+    }
+
+    const added = nextEmails.filter((email) => !initial.has(email));
+    if (added.length === 0) return;
+
+    try {
+      const response = await fetch(`/api/calendar/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          guestInviteOnly: true,
+          pushToGoogle: true,
+          attendees: participants.map((p) => ({
+            email: p.email,
+            status: p.status ?? "pending",
+          })),
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to invite");
+      }
+      initialParticipantEmailsRef.current = nextEmails;
+      toast({
+        title: "Invite sent",
+        description: `Added ${added.length} participant${added.length > 1 ? "s" : ""} to this meeting`,
+      });
+      onEventUpdated();
+    } catch {
+      toast({
+        title: "Could not add participant",
+        description: "Google may restrict guest invites on this meeting",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function persistAccountChange(nextAccountEmail: string) {
+    setEventAccountEmail(nextAccountEmail);
+
+    const calendarId = primaryCalendarIdForAccount(nextAccountEmail);
+    if (calendarId) {
+      form.setValue("calendarId", calendarId, { shouldDirty: true });
+    }
+
+    if (!event?.id || !userId || isCreating) return;
+    if (!isOrganizer) return;
+
+    try {
+      const response = await fetch(`/api/calendar/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          accountOnly: true,
+          pushToGoogle: true,
+          accountEmail: nextAccountEmail,
+          calendarId,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to save account");
+      }
+      toast({
+        title: "Calendar account updated",
+        description: `This meeting is now on ${friendlyAccountName(nextAccountEmail)}`,
+      });
+      onEventUpdated();
+    } catch {
+      setEventAccountEmail(
+        resolveEventAccountEmail({
+          connectedAccountEmails: calendarAccounts.map((account) => account.email),
+          event,
+          googleCalendars,
+          loginEmail: userEmail,
+        }),
+      );
+      const revertCalendarId =
+        event?.calendarId ||
+        primaryCalendarIdForAccount(event?.accountEmail ?? "") ||
+        form.getValues("calendarId");
+      if (revertCalendarId) {
+        form.setValue("calendarId", revertCalendarId, { shouldDirty: false });
+      }
+      toast({
+        title: "Could not change account",
+        description: "The calendar account was not updated",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function saveUserMetadata(
+    nextAccountCodeId: string | undefined,
+    nextStream: string | undefined,
+  ) {
+    if (!capabilities.canEditUserMetadata || !event?.id || !userId) return;
+
+    try {
+      const response = await fetch(`/api/calendar/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          metadataOnly: true,
+          accountCodeId: nextAccountCodeId ?? null,
+          flightdeckStream: nextStream ?? null,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to save");
+      }
+    } catch {
+      toast({
+        title: "Could not save",
+        description: "Project code and stream were not saved",
+        variant: "destructive",
+      });
+    }
+  }
 
   useEffect(() => {
     if (event && (mode === "edit" || mode === "view")) {
@@ -267,7 +435,10 @@ export function EventDetailPanel({
           : null,
       );
       setAccountCodeId(event.accountCodeId);
-      setSectionOpen({ what: true, where: false, when: false });
+      setFlightdeckStream(event.flightdeckStream);
+      initialParticipantEmailsRef.current =
+        event.attendees?.map((a) => a.email.toLowerCase()) ?? [];
+      setSectionOpen({ what: true, where: false, when: false, who: false });
     } else if (mode === "create") {
       form.reset({
         title: "",
@@ -284,7 +455,8 @@ export function EventDetailPanel({
       setRecurrencePreset("none");
       setCustomRecurrence(null);
       setAccountCodeId(undefined);
-      setSectionOpen({ what: true, where: true, when: true });
+      setFlightdeckStream(undefined);
+      setSectionOpen({ what: true, where: true, when: true, who: true });
     }
   }, [
     event,
@@ -312,14 +484,134 @@ export function EventDetailPanel({
   }, [defaultGoogleCalendarId, form, isCreating]);
 
   const watchedCalendarId = form.watch("calendarId");
+  const connectedAccountEmails = calendarAccounts.map((account) => account.email);
+  const resolvedEventAccountEmail = resolveEventAccountEmail({
+    connectedAccountEmails,
+    event,
+    googleCalendars,
+    isCreating,
+    loginEmail: userEmail,
+  });
   const assignAccountEmail =
+    eventAccountEmail ||
     googleCalendars.find(
       (calendar) =>
         calendar.id === (watchedCalendarId || defaultGoogleCalendarId),
-    )?.accountEmail ??
-    event?.accountEmail ??
-    userEmail ??
+    )?.accountEmail ||
+    resolvedEventAccountEmail ||
     "";
+
+  const meetJoinUrl = conferenceUrl
+    ? conferenceJoinUrl(conferenceUrl, assignAccountEmail)
+    : "";
+
+  function primaryCalendarIdForAccount(email: string): string | undefined {
+    const normalized = email.toLowerCase();
+    return (
+      googleCalendars.find(
+        (calendar) =>
+          calendar.accountEmail?.toLowerCase() === normalized && calendar.primary,
+      )?.id ??
+      googleCalendars.find(
+        (calendar) => calendar.accountEmail?.toLowerCase() === normalized,
+      )?.id
+    );
+  }
+
+  useEffect(() => {
+    if (!userId) {
+      setCalendarAccounts([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/accounts");
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          accounts?: Array<{
+            email: string;
+            label?: string;
+            type: string;
+            connected?: boolean;
+          }>;
+        };
+
+        const options: CalendarAccountOption[] = [];
+        const seen = new Set<string>();
+
+        for (const account of data.accounts ?? []) {
+          if (account.type !== "google" && account.type !== "caldav") continue;
+          if (account.connected === false) continue;
+          const email = account.email.trim();
+          if (!email) continue;
+          const key = email.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          options.push({
+            email,
+            label: account.label?.trim() || friendlyAccountName(email),
+            type: account.type as "google" | "caldav",
+          });
+        }
+
+        for (const calendar of googleCalendars) {
+          const email = calendar.accountEmail?.trim();
+          if (!email) continue;
+          const key = email.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          options.push({
+            email,
+            label: friendlyAccountName(email),
+            type: "google",
+          });
+        }
+
+        if (!cancelled) {
+          setCalendarAccounts(options);
+        }
+      } catch {
+        if (!cancelled) {
+          setCalendarAccounts([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [googleCalendars, userId]);
+
+  useEffect(() => {
+    const next = resolveEventAccountEmail({
+      connectedAccountEmails: calendarAccounts.map((account) => account.email),
+      event,
+      googleCalendars,
+      isCreating,
+      loginEmail: userEmail,
+    });
+    setEventAccountEmail(next);
+  }, [
+    calendarAccounts,
+    event,
+    googleCalendars,
+    isCreating,
+    userEmail,
+  ]);
+
+  useEffect(() => {
+    if (!isCreating || !eventAccountEmail) return;
+    const calendarId = primaryCalendarIdForAccount(eventAccountEmail);
+    if (!calendarId) return;
+    form.setValue("calendarId", calendarId, {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }, [eventAccountEmail, form, isCreating]);
 
   useEffect(() => {
     if (isCreating && titleRef.current) {
@@ -369,8 +661,9 @@ export function EventDetailPanel({
           pushToGoogle: true,
           recurrence,
           recurrenceScope,
-          accountEmail: assignAccountEmail || undefined,
+          ...(isCreating ? { accountEmail: assignAccountEmail || undefined } : {}),
           accountCodeId: accountCodeId ?? null,
+          flightdeckStream: flightdeckStream ?? null,
         }),
       });
 
@@ -445,8 +738,8 @@ export function EventDetailPanel({
 
     if (!isOrganizer) {
       toast({
-        title: "Read-only event",
-        description: `Only ${organizerDisplayName(event)} can edit this meeting`,
+        title: "Organiser fields are read-only",
+        description: `Only ${organizerDisplayName(event)} can change time, title, or remove guests. You can still set project code, stream, and add participants.`,
         variant: "destructive",
       });
       return;
@@ -560,6 +853,7 @@ export function EventDetailPanel({
           pushToGoogle: true,
           accountEmail: deletedEvent.accountEmail,
           accountCodeId: deletedEvent.accountCodeId ?? null,
+          flightdeckStream: deletedEvent.flightdeckStream ?? null,
         }),
       });
 
@@ -594,9 +888,9 @@ export function EventDetailPanel({
                   <TextIcon className="size-4 shrink-0 text-white/30" />
                   <Input
                     className={`h-full min-h-0 flex-1 rounded-none border-0 bg-transparent px-0 font-medium text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 ${lockedInputClass ?? ""}`}
-                    disabled={fieldsLocked}
+                    disabled={organizerFieldsLocked}
                     placeholder="Event title"
-                    readOnly={fieldsLocked}
+                    readOnly={organizerFieldsLocked}
                     {...field}
                     ref={(e) => {
                       field.ref(e);
@@ -614,25 +908,6 @@ export function EventDetailPanel({
 
         <FormField
           control={form.control}
-          name="participants"
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <ParticipantsInput
-                  disabled={fieldsLocked}
-                  icon={<UsersIcon className="size-4 text-white/30" />}
-                  onChange={field.onChange}
-                  placeholder="Add participants by email"
-                  value={field.value}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
           name="description"
           render={({ field }) => (
             <FormItem>
@@ -641,9 +916,9 @@ export function EventDetailPanel({
                   <TextIcon className="mt-1 size-4 shrink-0 text-white/30" />
                   <Textarea
                     className={`field-sizing-fixed min-h-[4.5rem] min-w-0 flex-1 resize-none rounded-none border-0 bg-transparent p-0 py-0.5 pl-0.5 text-white/80 text-xs leading-relaxed shadow-none placeholder:text-white/25 focus-visible:ring-0 ${lockedInputClass ?? ""}`}
-                    disabled={fieldsLocked}
+                    disabled={organizerFieldsLocked}
                     placeholder="Add notes"
-                    readOnly={fieldsLocked}
+                    readOnly={organizerFieldsLocked}
                     {...field}
                   />
                 </div>
@@ -668,6 +943,111 @@ export function EventDetailPanel({
     );
   }
 
+  function renderWhoSection() {
+    const accountOptions =
+      calendarAccounts.length > 0
+        ? calendarAccounts
+        : eventAccountEmail
+          ? [
+              {
+                email: eventAccountEmail,
+                label: friendlyAccountName(eventAccountEmail),
+                type: "google" as const,
+              },
+            ]
+          : [];
+
+    return (
+      <>
+        <FormField
+          control={form.control}
+          name="participants"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <ParticipantsInput
+                  allowRemove={capabilities.canRemoveParticipants}
+                  disabled={!capabilities.canAddParticipants}
+                  icon={<UsersIcon className="size-4 text-white/30" />}
+                  onChange={(next) => {
+                    field.onChange(next);
+                    void persistGuestInvites(next);
+                  }}
+                  placeholder="Add participants by email"
+                  value={field.value}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {userId && assignAccountEmail ? (
+          <div className={glassRow}>
+            <HashIcon className="size-4 shrink-0 text-white/30" />
+            <AccountCodeAssignSelect
+              accountEmail={assignAccountEmail}
+              disabled={!capabilities.canEditUserMetadata}
+              onChange={(id) => {
+                setAccountCodeId(id);
+                void saveUserMetadata(id, flightdeckStream);
+              }}
+              userId={userId}
+              value={accountCodeId}
+            />
+          </div>
+        ) : null}
+
+        {userId ? (
+          <div className={glassRow}>
+            <LayoutDashboardIcon className="size-4 shrink-0 text-white/30" />
+            <FlightdeckStreamSelect
+              disabled={!capabilities.canEditUserMetadata}
+              onChange={(stream) => {
+                setFlightdeckStream(stream);
+                void saveUserMetadata(accountCodeId, stream);
+              }}
+              value={flightdeckStream}
+            />
+          </div>
+        ) : null}
+
+        {accountOptions.length > 0 ? (
+          <div className={glassRow}>
+            <CircleUserIcon className="size-4 shrink-0 text-white/30" />
+            <Select
+              disabled={!isOrganizer && !isCreating}
+              onValueChange={(email) => {
+                if (isCreating) {
+                  setEventAccountEmail(email);
+                  return;
+                }
+                void persistAccountChange(email);
+              }}
+              value={eventAccountEmail || accountOptions[0]?.email}
+            >
+              <SelectTrigger
+                className={cn(
+                  "!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-white/80 text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-white/40",
+                  !isOrganizer && !isCreating && "opacity-70",
+                )}
+              >
+                <SelectValue placeholder="Calendar account" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border border-white/[0.12] shadow-2xl">
+                {accountOptions.map((account) => (
+                  <SelectItem key={account.email} value={account.email}>
+                    {account.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
   function renderWhereSection() {
     return (
       <>
@@ -681,9 +1061,9 @@ export function EventDetailPanel({
                   <MapPinIcon className="size-4 shrink-0 text-white/30" />
                   <input
                     className={`min-h-0 min-w-0 flex-1 bg-transparent py-0 text-white/80 text-xs leading-normal outline-none placeholder:text-white/25 ${lockedInputClass ?? ""}`}
-                    disabled={fieldsLocked}
+                    disabled={organizerFieldsLocked}
                     placeholder="Add location"
-                    readOnly={fieldsLocked}
+                    readOnly={organizerFieldsLocked}
                     {...field}
                   />
                 </div>
@@ -713,7 +1093,7 @@ export function EventDetailPanel({
                           ? conferenceProviderLabel(conferenceProvider)
                           : conferenceUrl}
                       </a>
-                      {!fieldsLocked ? (
+                      {!organizerFieldsLocked ? (
                         <button
                           className="shrink-0 text-white/30 hover:text-white/60"
                           onClick={() => field.onChange("")}
@@ -727,12 +1107,12 @@ export function EventDetailPanel({
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <input
                         className={`min-h-0 min-w-0 flex-1 bg-transparent py-0 text-white/80 text-xs leading-normal outline-none placeholder:text-white/25 ${lockedInputClass ?? ""}`}
-                        disabled={fieldsLocked}
+                        disabled={organizerFieldsLocked}
                         placeholder="Paste Meet / Teams / Zoom link"
-                        readOnly={fieldsLocked}
+                        readOnly={organizerFieldsLocked}
                         {...field}
                       />
-                      {!fieldsLocked ? (
+                      {!organizerFieldsLocked ? (
                         <button
                           className="shrink-0 rounded-md bg-white/[0.06] px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.10] hover:text-white/70"
                           onClick={() => {
@@ -767,7 +1147,7 @@ export function EventDetailPanel({
                 <div className={glassRow}>
                   <CalendarIcon className="size-4 shrink-0 text-white/30" />
                   <DatePicker
-                    disabled={fieldsLocked}
+                    disabled={organizerFieldsLocked}
                     onChange={(nextStartDate) => {
                       field.onChange(nextStartDate);
                       form.setValue("endDate", nextStartDate, {
@@ -796,7 +1176,7 @@ export function EventDetailPanel({
                 <div className={glassRow}>
                   <CalendarIcon className="size-4 shrink-0 text-white/30" />
                   <DatePicker
-                    disabled={fieldsLocked}
+                    disabled={organizerFieldsLocked}
                     onChange={field.onChange}
                     placeholder="End date"
                     triggerClassName={`h-full min-h-0 flex-1 rounded-none border-0 bg-transparent px-0 text-xs shadow-none hover:bg-transparent focus-visible:ring-0 ${lockedInputClass ?? ""}`}
@@ -818,7 +1198,7 @@ export function EventDetailPanel({
               <FormItem className="min-w-0 flex-1">
                 <FormControl>
                   <TimePicker
-                    disabled={fieldsLocked}
+                    disabled={organizerFieldsLocked}
                     onChange={field.onChange}
                     placeholder="Start"
                     triggerClassName={`h-full min-h-0 w-full rounded-none border-0 bg-transparent px-0 text-xs shadow-none hover:bg-transparent focus-visible:ring-0 ${lockedInputClass ?? ""}`}
@@ -836,7 +1216,7 @@ export function EventDetailPanel({
               <FormItem className="min-w-0 flex-1">
                 <FormControl>
                   <TimePicker
-                    disabled={fieldsLocked}
+                    disabled={organizerFieldsLocked}
                     onChange={field.onChange}
                     placeholder="End"
                     triggerClassName={`h-full min-h-0 w-full rounded-none border-0 bg-transparent px-0 text-xs shadow-none hover:bg-transparent focus-visible:ring-0 ${lockedInputClass ?? ""}`}
@@ -848,64 +1228,38 @@ export function EventDetailPanel({
           />
         </div>
 
-        {(isCreating || isEditing) && (
+        {isEditing && isRecurringSeries && organizerFieldsLocked ? (
+          <div className={glassRow}>
+            <RepeatIcon className="size-4 shrink-0 text-white/30" />
+            <span className="text-xs text-white/60">
+              {recurrencePreset !== "none"
+                ? recurrenceLabel(
+                    recurrenceRuleFromPreset(
+                      recurrencePreset,
+                      watchedStartDate
+                        ? new Date(`${watchedStartDate}T12:00:00`)
+                        : new Date(),
+                      customRecurrence,
+                    ),
+                    watchedStartDate
+                      ? new Date(`${watchedStartDate}T12:00:00`)
+                      : new Date(),
+                  )
+                : "Part of a recurring series"}
+            </span>
+          </div>
+        ) : (isCreating || isEditing) ? (
           <RecurrenceSelect
             customRule={customRecurrence}
-            disabled={fieldsLocked}
+            disabled={organizerFieldsLocked}
             onCustomRuleChange={setCustomRecurrence}
             onPresetChange={setRecurrencePreset}
             startDate={form.watch("startDate")}
             triggerClassName={`${glassRow} w-full border-0 bg-transparent shadow-none`}
             value={recurrencePreset}
           />
-        )}
-
-        {isCreating && googleCalendars.length > 1 && (
-          <FormField
-            control={form.control}
-            name="calendarId"
-            render={({ field }) => (
-              <FormItem>
-                <div className={glassRow}>
-                  <CalendarIcon className="size-4 shrink-0 text-white/30" />
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value || defaultGoogleCalendarId}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-white/80 text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-white/40">
-                        <SelectValue placeholder="Calendar" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="rounded-xl border border-white/[0.12] shadow-2xl">
-                      {googleCalendars.map((calendar) => (
-                        <SelectItem key={calendar.id} value={calendar.id}>
-                          {calendar.summary}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        {userId && assignAccountEmail ? (
-          <div className="space-y-1.5">
-            <p className="px-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
-              Assign (time sheet)
-            </p>
-            <AccountCodeAssignSelect
-              accountEmail={assignAccountEmail}
-              disabled={fieldsLocked}
-              onChange={setAccountCodeId}
-              userId={userId}
-              value={accountCodeId}
-            />
-          </div>
         ) : null}
+
       </>
     );
   }
@@ -914,13 +1268,17 @@ export function EventDetailPanel({
     what: renderWhatSection(),
     where: renderWhereSection(),
     when: renderWhenSection(),
+    who: renderWhoSection(),
   };
 
   const sectionLabels: Record<EventDetailSectionId, string> = {
     what: "What",
     where: "Where",
     when: "When",
+    who: "Who",
   };
+
+  const guestEditableSections: EventDetailSectionId[] = ["what", "who"];
 
   return (
     <TooltipProvider>
@@ -932,7 +1290,8 @@ export function EventDetailPanel({
         transition={spring}
       >
         <EventDetailHud
-          conferenceUrl={conferenceUrl}
+          accountEmail={assignAccountEmail || resolvedEventAccountEmail}
+          conferenceUrl={meetJoinUrl || conferenceUrl}
           end={hudEnd}
           event={event}
           isCreating={isCreating}
@@ -956,8 +1315,16 @@ export function EventDetailPanel({
                 <EventDetailSection
                   key={sectionId}
                   label={sectionLabels[sectionId]}
-                  lockTooltip={fieldsLocked ? lockTooltip : undefined}
-                  locked={fieldsLocked}
+                  lockTooltip={
+                    !guestEditableSections.includes(sectionId) &&
+                    organizerFieldsLocked
+                      ? lockTooltip
+                      : undefined
+                  }
+                  locked={
+                    !guestEditableSections.includes(sectionId) &&
+                    organizerFieldsLocked
+                  }
                   onOpenChange={(open) =>
                     setSectionOpen((prev) => ({ ...prev, [sectionId]: open }))
                   }

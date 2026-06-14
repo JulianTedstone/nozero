@@ -86,6 +86,7 @@ export function EventContextPanel({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [relatedTab, setRelatedTab] = useState<"deals" | "calendar">("deals");
+  const [briefTab, setBriefTab] = useState<"summary" | "source">("summary");
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -194,14 +195,65 @@ export function EventContextPanel({
           </div>
         ) : null}
 
-        <CollapsibleSection title="Context">
-          {bundle?.summary.purpose ? (
+        <CollapsibleSection title="Meeting brief">
+          <div className="mb-3 flex gap-1">
+            {(["summary", "source"] as const).map((tab) => (
+              <button
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[10px]",
+                  briefTab === tab
+                    ? "bg-white/[0.08] text-white/70"
+                    : "text-white/35 hover:text-white/50",
+                )}
+                key={tab}
+                onClick={() => setBriefTab(tab)}
+                type="button"
+              >
+                {tab === "summary" ? "Summary" : "Source"}
+              </button>
+            ))}
+          </div>
+
+          {briefTab === "summary" ? (
             <>
-              <p className="leading-relaxed whitespace-pre-wrap">
-                {bundle.summary.purpose}
-              </p>
-              {bundle.summary.sources.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
+              {bundle?.summary.purpose ? (
+                <p className="leading-relaxed whitespace-pre-wrap text-white/75">
+                  {bundle.summary.purpose}
+                </p>
+              ) : (
+                <p className="text-white/25">
+                  {bundle?.errors.ctx ?? "No summary yet."}
+                </p>
+              )}
+
+              {bundle && bundle.summary.actionPoints.length > 0 ? (
+                <div className="mt-4">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                    Action points
+                  </p>
+                  <ul className="list-inside list-disc space-y-1 text-[11px] text-white/60">
+                    {bundle.summary.actionPoints.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {bundle && bundle.summary.recommendations.length > 0 ? (
+                <div className="mt-4">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                    Recommendations
+                  </p>
+                  <ul className="list-inside list-disc space-y-1 text-[11px] italic text-white/50">
+                    {bundle.summary.recommendations.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {bundle && bundle.summary.sources.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
                   {bundle.summary.sources.map((s) => (
                     <span
                       className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-white/35"
@@ -214,9 +266,32 @@ export function EventContextPanel({
               ) : null}
             </>
           ) : (
-            <p className="text-white/25">
-              {bundle?.errors.ctx ?? "No summary yet."}
-            </p>
+            <>
+              {bundle && bundle.transcripts.length > 0 ? (
+                bundle.transcripts.map((t) => (
+                  <div key={t.id}>
+                    <p className="font-medium text-white/65">{t.title}</p>
+                    <span className="text-[10px] text-white/30">
+                      {t.confidence} confidence · {t.source}
+                    </span>
+                    {t.confidence === "low" ? (
+                      <p className="mt-2 text-[11px] text-amber-400/80">
+                        This transcript may not match this meeting — treat as
+                        unverified.
+                      </p>
+                    ) : null}
+                    <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-white/45">
+                      {t.fullText ?? t.excerpt ?? "No transcript text."}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-white/25">
+                  {bundle?.errors.krisp ??
+                    "No linked transcript. Connect Krisp or check the meeting title and time."}
+                </p>
+              )}
+            </>
           )}
         </CollapsibleSection>
 
@@ -380,10 +455,17 @@ export function EventContextPanel({
                     {t.confidence} confidence
                   </span>
                   {t.excerpt ? (
-                    <p className="mt-2 line-clamp-4 text-[11px] leading-relaxed text-white/45">
+                    <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-white/45">
                       {t.excerpt}
                     </p>
                   ) : null}
+                  <button
+                    className="mt-2 text-[10px] text-white/40 underline-offset-2 hover:text-white/60 hover:underline"
+                    onClick={() => setBriefTab("source")}
+                    type="button"
+                  >
+                    View full transcript in Source
+                  </button>
                 </li>
               ))}
             </ul>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { removeCalDavCredentials } from "@/lib/caldav-credentials";
+import { removeImapCredentials } from "@/lib/imap-credentials";
 import {
   getConnectedAccounts,
   removeConnectedAccountMeta,
@@ -19,13 +20,18 @@ export async function GET() {
 
     const accounts = await getConnectedAccounts(user.id);
     const { listCalDavCredentials } = await import("@/lib/caldav-credentials");
+    const { listImapCredentials } = await import("@/lib/imap-credentials");
     const caldavEmails = new Set(
       (await listCalDavCredentials(user.id)).map((c) => c.email.toLowerCase()),
+    );
+    const imapEmails = new Set(
+      (await listImapCredentials(user.id)).map((c) => c.email.toLowerCase()),
     );
 
     const enriched = accounts.map((a) => {
       const hasStored =
-        a.type === "caldav" && caldavEmails.has(a.email.toLowerCase());
+        (a.type === "caldav" && caldavEmails.has(a.email.toLowerCase())) ||
+        (a.type === "imap" && imapEmails.has(a.email.toLowerCase()));
       return {
         ...a,
         hasStoredCredentials: hasStored,
@@ -58,19 +64,28 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "accounts array required" }, { status: 400 });
     }
 
-    const sanitized = body.accounts.map(({ id, email, type, label, connected, color, serverUrl, username }) => ({
-      id,
-      email,
-      type,
-      label,
-      connected,
-      color,
-      serverUrl,
-      username,
-    }));
+    const sanitized = body.accounts
+      .filter((a) => a.id !== "primary-google")
+      .map(({ id, email, type, label, connected, color, serverUrl, username }) => ({
+        id,
+        email,
+        type,
+        label,
+        connected,
+        color,
+        serverUrl,
+        username,
+      }));
 
-    await saveConnectedAccounts(user.id, sanitized);
-    return NextResponse.json({ ok: true, accounts: sanitized });
+    const existing = (await getConnectedAccounts(user.id)).filter(
+      (a) => a.id !== "primary-google",
+    );
+    const incomingIds = new Set(sanitized.map((a) => a.id));
+    const preserved = existing.filter((a) => !incomingIds.has(a.id));
+    const merged = [...preserved, ...sanitized];
+
+    await saveConnectedAccounts(user.id, merged);
+    return NextResponse.json({ ok: true, accounts: merged });
   } catch (error) {
     console.error("[accounts PUT]", error);
     return NextResponse.json(
@@ -111,6 +126,7 @@ export async function DELETE(request: Request) {
         await removeConnectedToken(user.id, email);
       }
       await removeCalDavCredentials(user.id, email);
+      await removeImapCredentials(user.id, email);
     }
 
     return NextResponse.json({ ok: true });

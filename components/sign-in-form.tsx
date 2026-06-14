@@ -11,6 +11,7 @@ const spring = { type: "spring", stiffness: 260, damping: 28 } as const;
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/gmail.readonly",
   "email",
   "profile",
   "openid",

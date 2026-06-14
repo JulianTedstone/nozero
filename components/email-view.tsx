@@ -433,19 +433,35 @@ export function EmailView({
     if (!(userId && navigator.onLine)) return;
     setListRefreshing(true);
     setSyncError(null);
+    setListError(null);
     try {
       const res = await fetch("/api/email/sync", { method: "POST" });
+      const data = (await res.json()) as {
+        status?: string;
+        message?: string;
+        errors?: string[];
+        synced?: number;
+      };
       if (!res.ok) {
-        const data = (await res.json()) as { message?: string };
         throw new Error(data.message ?? `Sync failed (${res.status})`);
+      }
+      const errText =
+        data.errors?.join("; ") ??
+        (data.status === "error" ? data.message : undefined);
+      if (errText && (data.synced ?? 0) === 0) {
+        throw new Error(errText);
+      }
+      if (errText) {
+        setSyncError(errText);
       }
       await hydrateEmailMirrorFromServer(userId);
       await refreshLastSyncedAt();
       await loadThreads({ silent: true, fetchNetwork: true });
     } catch (err) {
-      setSyncError(
-        err instanceof Error ? err.message : "Email sync failed",
-      );
+      const message =
+        err instanceof Error ? err.message : "Email sync failed";
+      setSyncError(message);
+      setListError(message);
     } finally {
       setListRefreshing(false);
     }
@@ -952,11 +968,24 @@ export function EmailView({
                 Loading…
               </div>
             ) : threads.length === 0 ? (
-              listError ? (
-                <p className="px-3 py-8 text-center text-[11px] text-amber-400/80">
-                  {listError}
+              listError || syncError ? (
+                <div className="space-y-2 px-3 py-8 text-center text-[11px] text-amber-400/80">
+                  <p>{listError ?? syncError}</p>
+                  {(listError ?? syncError ?? "").includes("Gmail") ||
+                  (listError ?? syncError ?? "").includes("gmail") ? (
+                    <a
+                      className="inline-block text-[10px] text-amber-300/90 underline underline-offset-2 hover:text-amber-200"
+                      href="/settings"
+                    >
+                      Reconnect Google in Settings
+                    </a>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="px-3 py-8 text-center text-[11px] text-white/30">
+                  No mail yet. Tap refresh to sync from Gmail or IMAP.
                 </p>
-              ) : null
+              )
             ) : (
               <ul className="divide-y divide-white/[0.04]">
                 {threads.map((thread) => {

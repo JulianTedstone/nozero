@@ -90,6 +90,113 @@ async function getValidKrispTokens(
   return tokens;
 }
 
+async function parseMcpPayload(
+  res: Response,
+): Promise<{
+  result?: McpToolResult;
+  error?: { message?: string };
+} | null> {
+  const contentType = res.headers.get("content-type") ?? "";
+  const body = await res.text();
+
+  if (contentType.includes("text/event-stream") || body.startsWith("event:")) {
+    for (const line of body.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      try {
+        return JSON.parse(trimmed.slice(5).trim()) as {
+          result?: McpToolResult;
+          error?: { message?: string };
+        };
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  try {
+    return JSON.parse(body) as {
+      result?: McpToolResult;
+      error?: { message?: string };
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Krisp search_meetings returns markdown blocks in MCP text content. */
+function parseKrispMarkdownMeetings(
+  chunks: string[],
+): Record<string, unknown>[] {
+  const meetings: Record<string, unknown>[] = [];
+
+  for (const chunk of chunks) {
+    if (!chunk.startsWith("## ")) continue;
+
+    const lines = chunk.split("\n");
+    const header = lines[0] ?? "";
+    const titleMatch = header.match(/^## (.+?) \((.+)\)$/);
+    const title = titleMatch?.[1]?.trim() ?? header.slice(3).trim();
+    const start = titleMatch?.[2]?.trim();
+
+    let meetingId: string | undefined;
+    const attendees: string[] = [];
+
+    for (const line of lines.slice(1)) {
+      if (line.startsWith("meeting_id:")) {
+        meetingId = line.slice("meeting_id:".length).trim();
+      }
+      if (line.startsWith("speakers:")) {
+        for (const name of line.slice("speakers:".length).split(",")) {
+          const trimmed = name.trim();
+          if (trimmed) attendees.push(trimmed);
+        }
+      }
+    }
+
+    if (!meetingId) continue;
+
+    meetings.push({
+      id: meetingId,
+      meetingId,
+      title,
+      start,
+      attendees,
+      participants: attendees,
+    });
+  }
+
+  return meetings;
+}
+
+function mcpResultToPayload(result: McpToolResult | undefined): unknown | null {
+  if (!result || result.isError) return null;
+
+  if (result.structuredContent != null) {
+    return result.structuredContent;
+  }
+
+  const texts =
+    result.content
+      ?.map((c) => c.text)
+      .filter((t): t is string => typeof t === "string" && t.length > 0) ?? [];
+
+  if (texts.length === 0) return null;
+
+  const markdownMeetings = parseKrispMarkdownMeetings(texts);
+  if (markdownMeetings.length > 0) {
+    return { meetings: markdownMeetings };
+  }
+
+  const combined = texts.join("\n\n");
+  try {
+    return JSON.parse(combined) as unknown;
+  } catch {
+    return { text: combined };
+  }
+}
+
 async function mcpCall(
   accessToken: string,
   toolName: string,
@@ -100,7 +207,7 @@ async function mcpCall(
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Accept: "application/json, text/event-stream",
     },
     body: JSON.stringify({
       jsonrpc: "2.0",
@@ -113,26 +220,10 @@ async function mcpCall(
 
   if (!res.ok) return null;
 
-  const payload = (await res.json()) as {
-    result?: McpToolResult;
-    error?: { message?: string };
-  };
+  const payload = await parseMcpPayload(res);
+  if (!payload?.result || payload.error) return null;
 
-  if (payload.error) return null;
-
-  const result = payload.result;
-  if (result?.structuredContent != null) {
-    return result.structuredContent;
-  }
-
-  const text = result?.content?.find((c) => c.text)?.text;
-  if (!text) return null;
-
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return { text };
-  }
+  return mcpResultToPayload(payload.result);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -157,7 +248,7 @@ function attendeeOverlap(
   const set = new Set(emails.map((e) => e.toLowerCase()));
   const attendees: string[] = [];
 
-  for (const key of ["attendees", "participants", "emails"]) {
+  for (const key of ["attendees", "participants", "emails", "speakers"]) {
     const val = meeting[key];
     if (Array.isArray(val)) {
       for (const item of val) {
@@ -246,12 +337,24 @@ export async function krispContextForMeeting(
     .sort((a, b) => b.score - a.score);
 
   const best = ranked[0];
+
+  /** Below this, title/attendee match is too weak — do not attach a transcript. */
+  const MIN_ATTACH_SCORE = 4;
+  if (best.score < MIN_ATTACH_SCORE) {
+    return {
+      transcripts: [],
+      actions: [],
+      error: "No confident Krisp match for this meeting",
+    };
+  }
+
   const confidence: ContextTranscript["confidence"] =
     best.score >= 5 ? "high" : best.score >= 3 ? "medium" : "low";
 
   const meetingId =
     (typeof best.m.id === "string" && best.m.id) ||
     (typeof best.m.meetingId === "string" && best.m.meetingId) ||
+    (typeof best.m.meeting_id === "string" && best.m.meeting_id) ||
     "krisp-meeting";
 
   const transcripts: ContextTranscript[] = [];
@@ -259,22 +362,26 @@ export async function krispContextForMeeting(
     meetingId,
   });
 
-  const excerpt =
-    isRecord(doc) && typeof doc.excerpt === "string"
-      ? doc.excerpt
-      : isRecord(doc) && typeof doc.text === "string"
-        ? doc.text.slice(0, 500)
-        : typeof doc === "object" && doc !== null
-          ? JSON.stringify(doc).slice(0, 400)
+  const fullText =
+    isRecord(doc) && typeof doc.text === "string"
+      ? doc.text
+      : isRecord(doc) && typeof doc.transcript === "string"
+        ? doc.transcript
+        : isRecord(doc) && typeof doc.excerpt === "string"
+          ? doc.excerpt
           : null;
+
+  const excerpt = fullText ? fullText.slice(0, 500) : null;
 
   transcripts.push({
     id: meetingId,
     title:
       (typeof best.m.title === "string" && best.m.title) ||
+      (typeof best.m.name === "string" && best.m.name) ||
       input.title ||
       "Krisp meeting",
     excerpt,
+    fullText,
     source: "krisp",
     confidence,
   });

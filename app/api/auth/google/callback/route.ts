@@ -36,7 +36,13 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${settingsUrl}&oauth_error=invalid_state`);
   }
 
-  let statePayload: { userId: string; accountId: string; email: string; ts: number };
+  let statePayload: {
+    userId: string;
+    accountId: string;
+    email: string;
+    label?: string;
+    ts: number;
+  };
   try {
     statePayload = JSON.parse(stateData.payload);
   } catch {
@@ -68,7 +74,16 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${settingsUrl}&oauth_error=token_exchange_failed`);
   }
 
-  const tokenData = await tokenRes.json();
+  const tokenData = (await tokenRes.json()) as {
+    access_token: string;
+    refresh_token?: string;
+    expires_in: number;
+    scope?: string;
+    id_token: string;
+  };
+
+  const grantedScope = tokenData.scope ?? "";
+  const hasGmailScope = grantedScope.includes("gmail.readonly");
 
   // Extract email from id_token
   let email = statePayload.email;
@@ -131,24 +146,29 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${settingsUrl}&oauth_error=db_write_failed`);
   }
 
-  const existingAccounts = await getConnectedAccounts(user.id);
+  const existingAccounts = await getConnectedAccounts(user.id).then((list) =>
+    list.filter((a) => a.id !== "primary-google"),
+  );
   const accountId = statePayload.accountId;
   const existingMeta = existingAccounts.find((a) => a.id === accountId);
   const byEmail = existingAccounts.find(
-    (a) => a.email.toLowerCase() === email.toLowerCase() && a.id !== "primary-google",
+    (a) => a.email.toLowerCase() === email.toLowerCase(),
   );
 
-  const resolvedAccountId = isPrimaryEmail
-    ? "primary-google"
-    : (existingMeta?.id ??
-      byEmail?.id ??
-      (accountId !== "new" ? accountId : `acct-${Date.now()}`));
+  const resolvedAccountId =
+    existingMeta?.id ??
+    byEmail?.id ??
+    (accountId !== "new" ? accountId : `acct-${Date.now()}`);
 
+  const labelHint = statePayload.label?.trim();
   await upsertConnectedAccountMeta(user.id, {
     id: resolvedAccountId,
     email,
     type: "google",
-    label: existingMeta?.label ?? byEmail?.label ?? "Google Calendar & Gmail",
+    label:
+      existingMeta?.label ??
+      byEmail?.label ??
+      (labelHint || "Google Calendar & Gmail"),
     connected: true,
     color: existingMeta?.color ?? byEmail?.color ?? "#4285F4",
   });
@@ -179,6 +199,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const successUrl = `${settingsUrl}&connected=${encodeURIComponent(resolvedAccountId)}&email=${encodeURIComponent(email)}&sync=1`;
+  const gmailParam = hasGmailScope ? "" : "&gmail_warning=1";
+  const successUrl = `${settingsUrl}&connected=${encodeURIComponent(resolvedAccountId)}&email=${encodeURIComponent(email)}&sync=1${gmailParam}`;
   return NextResponse.redirect(successUrl);
 }

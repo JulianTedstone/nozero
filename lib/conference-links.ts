@@ -88,3 +88,28 @@ export function conferenceUrlFromGoogleEvent(event: {
 
   return extractConferenceUrl(event.description);
 }
+
+/**
+ * Prefer opening Meet (and similar) in the Google account that owns the calendar
+ * subscription, via `authuser` — matches Google Calendar's account-scoped join.
+ */
+export function conferenceJoinUrl(
+  url: string,
+  accountEmail?: string | null,
+): string {
+  const trimmed = url.trim();
+  if (!trimmed || !accountEmail?.includes("@")) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "meet.google.com" || host.endsWith(".meet.google.com")) {
+      parsed.searchParams.set("authuser", accountEmail.trim());
+      return parsed.toString();
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}

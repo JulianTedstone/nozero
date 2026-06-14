@@ -4,6 +4,10 @@ import type {
   FlightdeckBoardItem,
   FlightdeckBoardVerb,
 } from "@/types/flightdeck-board";
+import type {
+  FlightdeckComment,
+  FlightdeckThreadPayload,
+} from "@/types/flightdeck-comments";
 import { towerBaseUrl, towerGatewayHeaders } from "@/lib/tower-gateway";
 
 const MCP_PATH = "/mcp";
@@ -33,6 +37,17 @@ function parseTowerItems(text: string): FlightdeckBoardItem[] {
       approver: row.approver ? String(row.approver) : null,
       type: row.type ? String(row.type) : null,
       priority: row.priority ? String(row.priority) : null,
+      recurrence: row.recurrence ? String(row.recurrence) : null,
+      nextAction: row.nextAction
+        ? String(row.nextAction).slice(0, 10)
+        : row["next action"]
+          ? String(row["next action"]).slice(0, 10)
+          : null,
+      projectLink: row.projectLink
+        ? String(row.projectLink)
+        : row["project link"]
+          ? String(row["project link"])
+          : null,
       url: row.url ? String(row.url) : null,
       body: row.body ? String(row.body) : null,
     }));
@@ -188,6 +203,75 @@ export async function towerEnsureStream(input: {
   }
 }
 
+export async function towerCapture(input: {
+  title: string;
+  body?: string;
+  fields?: Record<string, string>;
+}): Promise<{ ok: boolean; ref?: string; error?: string }> {
+  if (!towerConfigured()) {
+    return { ok: false, error: "NOZERO_TOWER_API_KEY not configured" };
+  }
+
+  const title = input.title.trim();
+  if (!title) {
+    return { ok: false, error: "Title required" };
+  }
+
+  try {
+    const result = await withTowerSession(async (sessionId) => {
+      return callTowerTool(sessionId, "flightdeck_capture", {
+        title,
+        ...(input.body?.trim() ? { body: input.body.trim() } : {}),
+        ...(input.fields && Object.keys(input.fields).length > 0
+          ? { fields: input.fields }
+          : {}),
+      });
+    });
+    const text = result.content?.[0]?.text?.trim();
+    const refMatch = text?.match(/#(\d+)/);
+    return { ok: true, ref: refMatch?.[1] };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Capture failed",
+    };
+  }
+}
+
+/** Field-only updates (e.g. Owner) via Tower claim with fields, no column change. */
+export async function towerSetItemFields(input: {
+  item: string;
+  fields: Record<string, string>;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (!towerConfigured()) {
+    return { ok: false, error: "NOZERO_TOWER_API_KEY not configured" };
+  }
+
+  const fields = Object.fromEntries(
+    Object.entries(input.fields)
+      .map(([key, value]) => [key, value.trim()] as const)
+      .filter(([, value]) => value.length > 0),
+  );
+  if (Object.keys(fields).length === 0) {
+    return { ok: false, error: "No fields to update" };
+  }
+
+  try {
+    await withTowerSession(async (sessionId) => {
+      await callTowerTool(sessionId, "flightdeck_claim", {
+        item: input.item,
+        fields,
+      });
+    });
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Field update failed",
+    };
+  }
+}
+
 export async function towerRunBoardVerb(input: {
   verb: FlightdeckBoardVerb;
   item: string;
@@ -212,6 +296,51 @@ export async function towerRunBoardVerb(input: {
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Tower action failed",
+    };
+  }
+}
+
+function parseThreadJson(text: string): FlightdeckComment[] {
+  try {
+    const parsed = JSON.parse(text) as {
+      comments?: Array<{
+        author?: string;
+        body?: string;
+        createdAt?: string;
+      }>;
+    };
+    return (parsed.comments ?? [])
+      .filter((entry) => entry.body?.trim())
+      .map((entry) => ({
+        author: entry.author?.trim() || "unknown",
+        body: entry.body?.trim() ?? "",
+        createdAt: entry.createdAt ?? new Date(0).toISOString(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export async function towerReadThread(
+  item: string,
+): Promise<FlightdeckThreadPayload> {
+  if (!towerConfigured()) {
+    return { comments: [], error: "NOZERO_TOWER_API_KEY not configured" };
+  }
+
+  try {
+    const comments = await withTowerSession(async (sessionId) => {
+      const result = await callTowerTool(sessionId, "flightdeck_read_thread", {
+        item: String(item),
+      });
+      const text = result.content?.[0]?.text ?? "{}";
+      return parseThreadJson(text);
+    });
+    return { comments };
+  } catch (error) {
+    return {
+      comments: [],
+      error: error instanceof Error ? error.message : "Thread read failed",
     };
   }
 }

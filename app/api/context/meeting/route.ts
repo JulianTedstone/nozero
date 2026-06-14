@@ -49,13 +49,18 @@ function overlapAttendees(a: string[], b: string[]): boolean {
   return b.some((e) => set.has(e.toLowerCase()));
 }
 
-async function buildLlmSummary(input: {
+async function buildMeetingBrief(input: {
   title: string;
   description?: string | null;
   people: MeetingContextBundle["people"];
   deals: MeetingContextBundle["related"]["deals"];
-  transcriptExcerpt?: string | null;
-}): Promise<string | null> {
+  transcript?: string | null;
+  krispActions?: string[];
+}): Promise<{
+  purpose: string | null;
+  actionPoints: string[];
+  recommendations: string[];
+} | null> {
   if (!process.env.OPENROUTER_API_KEY) return null;
 
   const peopleLine = input.people
@@ -63,24 +68,46 @@ async function buildLlmSummary(input: {
     .join(", ");
 
   const dealsLine = input.deals.map((d) => d.name).join(", ");
+  const krispLine = (input.krispActions ?? []).join("; ") || "none";
 
-  const prompt = `Write a 1–2 sentence meeting purpose summary (max 40 words).
+  const prompt = `You are preparing a meeting brief for a calendar user. Return ONLY valid JSON with keys:
+- "summary": string (2-4 sentences, what this meeting was about)
+- "actionPoints": string[] (concrete follow-ups with owners when known; max 6)
+- "recommendations": string[] (AI suggestions for next steps; max 4)
 
 Title: ${input.title}
 Participants: ${peopleLine || "unknown"}
 Deals: ${dealsLine || "none"}
-Notes: ${input.description?.slice(0, 200) ?? "none"}
-Transcript excerpt: ${input.transcriptExcerpt?.slice(0, 300) ?? "none"}
+Calendar notes: ${input.description?.slice(0, 400) ?? "none"}
+Krisp action items: ${krispLine}
+Transcript (use only if present and relevant): ${input.transcript?.slice(0, 4000) ?? "none"}
 
-Return plain text only, no JSON.`;
+If transcript is missing or unrelated, base summary on title, participants, and notes only.`;
 
   try {
     const { text } = await generateText({
       model: getOpenRouterModel(),
       prompt,
-      maxTokens: 120,
+      maxTokens: 600,
     });
-    return text.trim() || null;
+    const trimmed = text.trim();
+    const jsonStart = trimmed.indexOf("{");
+    const jsonEnd = trimmed.lastIndexOf("}");
+    if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
+    const parsed = JSON.parse(trimmed.slice(jsonStart, jsonEnd + 1)) as {
+      summary?: string;
+      actionPoints?: string[];
+      recommendations?: string[];
+    };
+    return {
+      purpose: parsed.summary?.trim() || null,
+      actionPoints: Array.isArray(parsed.actionPoints)
+        ? parsed.actionPoints.filter((s) => typeof s === "string" && s.trim())
+        : [],
+      recommendations: Array.isArray(parsed.recommendations)
+        ? parsed.recommendations.filter((s) => typeof s === "string" && s.trim())
+        : [],
+    };
   } catch {
     return null;
   }
@@ -120,7 +147,7 @@ export async function POST(request: Request) {
         : undefined,
       streams,
       repos,
-      summary: { purpose: null, sources: [] },
+      summary: { purpose: null, actionPoints: [], recommendations: [], sources: [] },
       people: emails.map((email) => ({
         email,
         name: null,
@@ -272,18 +299,36 @@ export async function POST(request: Request) {
       })(),
     ]);
 
-    if (!bundle.summary.purpose) {
-      const llm = await buildLlmSummary({
-        title,
-        description: body.description,
-        people: bundle.people,
-        deals: bundle.related.deals,
-        transcriptExcerpt: bundle.transcripts[0]?.excerpt,
-      });
-      if (llm) {
-        bundle.summary.purpose = llm;
+    const transcript = bundle.transcripts[0];
+    const transcriptForBrief =
+      transcript?.confidence === "high"
+        ? transcript.fullText ?? transcript.excerpt
+        : null;
+
+    const brief = await buildMeetingBrief({
+      title,
+      description: body.description,
+      people: bundle.people,
+      deals: bundle.related.deals,
+      transcript: transcriptForBrief,
+      krispActions: bundle.actions.map((a) => a.title),
+    });
+
+    if (brief) {
+      if (!bundle.summary.purpose && brief.purpose) {
+        bundle.summary.purpose = brief.purpose;
         bundle.summary.sources.push("email");
       }
+      if (brief.actionPoints.length > 0) {
+        bundle.summary.actionPoints = brief.actionPoints;
+      }
+      if (brief.recommendations.length > 0) {
+        bundle.summary.recommendations = brief.recommendations;
+      }
+    }
+
+    if (bundle.summary.actionPoints.length === 0 && bundle.actions.length > 0) {
+      bundle.summary.actionPoints = bundle.actions.map((a) => a.title);
     }
 
     return NextResponse.json(bundle);

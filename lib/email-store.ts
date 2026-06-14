@@ -13,13 +13,9 @@ import {
 } from "@/lib/email-enrichment";
 import {
   enabledAccountEmails,
-  inferAccountEmail,
   listEmailAccountViews,
 } from "@/lib/email-preferences";
-import {
-  getSomaEmailThread,
-  listSomaEmailThreads,
-} from "@/lib/soma-client";
+import { fetchMailThreadDetail, syncMailThreadsForUser } from "@/lib/mail-sync";
 import type {
   EmailMessage,
   EmailThreadDetail,
@@ -107,10 +103,11 @@ function rowToMessage(row: DbMessageRow): EmailMessage {
   };
 }
 
-async function upsertThreadFromSoma(
+export async function upsertThreadSummary(
   userId: string,
   thread: EmailThreadSummary,
   accountEmail: string,
+  options?: { enrich?: boolean },
 ): Promise<void> {
   const admin = createAdminClient();
   const sender =
@@ -129,11 +126,15 @@ async function upsertThreadFromSoma(
 
   let aiSummary = existing?.ai_summary as string | null | undefined;
   if (!aiSummary) {
-    aiSummary = await summarizeThread({
-      subject: thread.subject,
-      participants: thread.participants,
-      snippet: thread.snippet,
-    });
+    aiSummary = thread.snippet?.slice(0, 280) ?? null;
+    if (options?.enrich) {
+      aiSummary =
+        (await summarizeThread({
+          subject: thread.subject,
+          participants: thread.participants,
+          snippet: thread.snippet,
+        })) ?? aiSummary;
+    }
   }
 
   await admin.schema("nozero").from("email_threads").upsert(
@@ -159,8 +160,13 @@ async function ingestThreadMessages(
   accountEmail: string,
   userEmails: string[],
 ): Promise<EmailThreadDetail | null> {
-  const { detail } = await getSomaEmailThread(threadId);
+  const { detail, error } = await fetchMailThreadDetail(
+    userId,
+    threadId,
+    accountEmail,
+  );
   if (!detail) {
+    if (error) console.error("[email-store] ingest failed:", error);
     return null;
   }
 
@@ -292,17 +298,16 @@ async function loadThreadFromDb(
   };
 }
 
-export async function syncSomaThreads(userId: string, limit = 40): Promise<void> {
-  const accounts = await listEmailAccountViews(userId);
-  const enabled = enabledAccountEmails(accounts);
-  if (enabled.length === 0) return;
+export async function syncMailThreads(
+  userId: string,
+  limit = 40,
+): Promise<{ synced: number; errors: string[] }> {
+  return syncMailThreadsForUser(userId, limit);
+}
 
-  const { threads } = await listSomaEmailThreads({ limit });
-  for (const thread of threads) {
-    const accountEmail = inferAccountEmail(thread.participants, enabled);
-    if (!enabled.includes(accountEmail)) continue;
-    await upsertThreadFromSoma(userId, thread, accountEmail);
-  }
+/** @deprecated Use syncMailThreads — kept for imports during transition */
+export async function syncSomaThreads(userId: string, limit = 40): Promise<void> {
+  await syncMailThreadsForUser(userId, limit);
 }
 
 export async function listStoredThreads(input: {
@@ -327,7 +332,14 @@ export async function listStoredThreads(input: {
   }
 
   if (input.sync !== false) {
-    await syncSomaThreads(input.userId, 60);
+    const syncResult = await syncMailThreadsForUser(input.userId, 60);
+    if (syncResult.errors.length > 0 && syncResult.synced === 0) {
+      return {
+        threads: [],
+        nextCursor: null,
+        error: syncResult.errors.join("; "),
+      };
+    }
   }
 
   const admin = createAdminClient();

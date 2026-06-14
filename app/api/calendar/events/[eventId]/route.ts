@@ -12,6 +12,8 @@ import {
   updateEvent,
   updateRecurringEvent,
 } from "@/lib/calendar";
+import { isUserEventOrganizer } from "@/lib/event-organizer";
+import { getEventEditCapabilities } from "@/lib/event-permissions";
 import type { RecurrenceEditScope } from "@/lib/recurrence";
 import type { RecurrenceRule } from "@/types/calendar";
 
@@ -42,6 +44,107 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
+    const organizer = isUserEventOrganizer(existingEvent, user.email);
+    const capabilities = getEventEditCapabilities(existingEvent, user.email);
+
+    if (body.metadataOnly === true) {
+      if (!capabilities.canEditUserMetadata) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const codeFields = await resolveAccountCodeAssignment(
+        user.id,
+        body.accountCodeId as string | null | undefined,
+      );
+
+      const event = await updateEvent(user.id, eventId, {
+        ...codeFields,
+        flightdeckStream:
+          body.flightdeckStream === null
+            ? undefined
+            : (body.flightdeckStream as string | undefined),
+      });
+
+      return NextResponse.json({ event });
+    }
+
+    if (body.accountOnly === true) {
+      if (!organizer) {
+        return NextResponse.json(
+          { error: "Only the organiser can change the calendar account" },
+          { status: 403 },
+        );
+      }
+
+      const accountEmail =
+        typeof body.accountEmail === "string" ? body.accountEmail.trim() : "";
+      if (!accountEmail) {
+        return NextResponse.json(
+          { error: "accountEmail is required" },
+          { status: 400 },
+        );
+      }
+
+      const event = await updateEvent(user.id, eventId, {
+        accountEmail,
+        calendarId:
+          typeof body.calendarId === "string" ? body.calendarId : undefined,
+      });
+
+      const finalEvent = body.pushToGoogle
+        ? await syncUpdatedEventToGoogle(user.id, existingEvent, event)
+        : event;
+
+      return NextResponse.json({ event: finalEvent });
+    }
+
+    if (body.guestInviteOnly === true) {
+      if (!capabilities.canAddParticipants) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const incoming = body.attendees as
+        | Array<{ email: string; status?: string }>
+        | undefined;
+      if (!Array.isArray(incoming)) {
+        return NextResponse.json({ error: "Invalid attendees" }, { status: 400 });
+      }
+
+      const existingEmails = new Set(
+        (existingEvent.attendees ?? []).map((a) => a.email.toLowerCase()),
+      );
+      const incomingEmails = incoming.map((a) => a.email.toLowerCase());
+
+      for (const email of existingEmails) {
+        if (!incomingEmails.includes(email)) {
+          return NextResponse.json(
+            { error: "Guests cannot remove participants" },
+            { status: 403 },
+          );
+        }
+      }
+
+      const event = await updateEvent(user.id, eventId, {
+        attendees: incoming.map((a) => ({
+          email: a.email,
+          status: (a.status ?? "pending") as "pending" | "accepted" | "declined",
+        })),
+      });
+
+      const finalEvent = body.pushToGoogle
+        ? await syncUpdatedEventToGoogle(user.id, existingEvent, event)
+        : event;
+
+      return NextResponse.json({ event: finalEvent });
+    }
+
+    if (!organizer) {
+      return NextResponse.json(
+        { error: "Only the organiser can edit this meeting" },
+        { status: 403 },
+      );
+    }
+
     const scope = (body.recurrenceScope as RecurrenceEditScope | undefined) ?? "all";
     const codeFields = await resolveAccountCodeAssignment(
       user.id,
@@ -62,8 +165,11 @@ export async function PATCH(request: Request, context: RouteContext) {
       categories: body.category ? [body.category] : undefined,
       allDay: body.allDay,
       recurrence: body.recurrence as RecurrenceRule | undefined,
-      accountEmail: body.accountEmail,
       ...codeFields,
+      flightdeckStream:
+        body.flightdeckStream === null
+          ? undefined
+          : (body.flightdeckStream as string | undefined),
     };
 
     const isRecurringChange =

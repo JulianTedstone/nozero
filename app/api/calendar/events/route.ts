@@ -68,6 +68,10 @@ export async function POST(request: Request) {
       recurrence: body.recurrence as RecurrenceRule | undefined,
       accountEmail: body.accountEmail,
       ...codeFields,
+      flightdeckStream:
+        body.flightdeckStream === null
+          ? undefined
+          : (body.flightdeckStream as string | undefined),
     });
 
     const finalEvent = body.pushToGoogle

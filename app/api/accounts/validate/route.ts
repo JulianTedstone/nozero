@@ -7,6 +7,8 @@ import {
   listGoogleAccountsForSync,
 } from "@/lib/connected-accounts";
 import { listEmailAccountViews } from "@/lib/email-preferences";
+import { getImapCredentials, listImapCredentials } from "@/lib/imap-credentials";
+import { testImapConnection } from "@/lib/imap-sync";
 import { listUserEventsInRange } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -24,6 +26,7 @@ export async function POST() {
   const emailViews = await listEmailAccountViews(userId);
   const googleSync = await listGoogleAccountsForSync(userId);
   const caldavStored = await listCalDavCredentials(userId);
+  const imapStored = await listImapCredentials(userId);
 
   const now = new Date();
   const rangeStart = new Date(now);
@@ -121,6 +124,48 @@ export async function POST() {
       continue;
     }
 
+    if (account.type === "imap") {
+      const creds =
+        (await getImapCredentials(userId, account.email)) ??
+        imapStored.find((c) => c.email.toLowerCase() === account.email.toLowerCase());
+      if (!creds?.password) {
+        results.push({
+          id: account.id,
+          email: account.email,
+          type: account.type,
+          credentials: "missing",
+          emailEnabled: emailView?.connected === true && emailView.visible !== false,
+          eventsInRange: 0,
+          detail: "No IMAP password stored — reconnect and enter credentials",
+        });
+        continue;
+      }
+
+      try {
+        await testImapConnection(creds);
+        results.push({
+          id: account.id,
+          email: account.email,
+          type: account.type,
+          credentials: "ok",
+          emailEnabled: emailView?.connected === true && emailView.visible !== false,
+          eventsInRange: 0,
+        });
+      } catch (error) {
+        results.push({
+          id: account.id,
+          email: account.email,
+          type: account.type,
+          credentials: "invalid",
+          emailEnabled: emailView?.connected === true,
+          eventsInRange: 0,
+          detail:
+            error instanceof Error ? error.message : "IMAP connection failed",
+        });
+      }
+      continue;
+    }
+
     results.push({
       id: account.id,
       email: account.email,
@@ -128,7 +173,7 @@ export async function POST() {
       credentials: "missing",
       emailEnabled: emailView?.connected === true,
       eventsInRange: 0,
-      detail: "IMAP credentials are not stored server-side yet",
+      detail: "Unsupported account type",
     });
   }
 

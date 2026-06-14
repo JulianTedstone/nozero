@@ -36,6 +36,8 @@ export interface CalendarEvent {
   accountCodeId?: string;
   accountCode?: string;
   accountCodeLabel?: string;
+  /** Flightdeck stream lane for this meeting (optional). */
+  flightdeckStream?: string;
   /** Video conference join URL (Meet, Teams, Zoom, etc.). */
   conferenceUrl?: string;
   /** Event organiser email from the source calendar. */

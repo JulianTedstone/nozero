@@ -21,6 +21,7 @@ import { organizerDisplayName } from "@/lib/event-organizer";
 import type { CalendarEvent } from "@/types/calendar";
 
 interface EventDetailHudProps {
+  accountEmail?: string;
   conferenceUrl?: string;
   isOrganizer: boolean;
   location?: string;
@@ -86,6 +87,7 @@ function countdownLabel(start?: string): string | null {
 }
 
 export function EventDetailHud({
+  accountEmail,
   title,
   start,
   end,
@@ -156,6 +158,11 @@ export function EventDetailHud({
                 href={conferenceUrl}
                 rel="noopener noreferrer"
                 target="_blank"
+                title={
+                  accountEmail
+                    ? `Join with ${accountEmail}`
+                    : "Join video call"
+                }
               >
                 <VideoIcon className="size-3" />
                 {conferenceProviderLabel(provider)}

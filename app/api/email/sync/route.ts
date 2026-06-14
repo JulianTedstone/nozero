@@ -2,12 +2,12 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
-import { syncSomaThreads } from "@/lib/email-store";
+import { syncMailThreads } from "@/lib/email-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/** Pull latest threads from Soma into Supabase (manual or background sync). */
+/** Pull latest threads from Gmail/IMAP into Supabase (manual or background sync). */
 export async function POST() {
   const user = await getCurrentAuthUser();
   if (!user?.id) {
@@ -15,10 +15,19 @@ export async function POST() {
   }
 
   try {
-    await syncSomaThreads(user.id, 60);
+    const { synced, errors } = await syncMailThreads(user.id, 60);
+    const hasErrors = errors.length > 0;
     return NextResponse.json({
-      status: "success",
+      status: hasErrors && synced === 0 ? "error" : "success",
+      synced,
+      errors: hasErrors ? errors : undefined,
       syncedAt: new Date().toISOString(),
+      message:
+        hasErrors && synced === 0
+          ? errors.join("; ")
+          : hasErrors
+            ? `Synced ${synced} threads with warnings`
+            : `Synced ${synced} threads`,
     });
   } catch (error) {
     return NextResponse.json(

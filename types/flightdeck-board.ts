@@ -1,3 +1,5 @@
+import type { FlightdeckFieldOptions } from "@/lib/flightdeck-field-options";
+
 export interface FlightdeckBoardItem {
   id: string;
   ref: string | null;
@@ -9,6 +11,9 @@ export interface FlightdeckBoardItem {
   approver: string | null;
   type: string | null;
   priority: string | null;
+  recurrence: string | null;
+  nextAction: string | null;
+  projectLink: string | null;
   url: string | null;
   body: string | null;
 }
@@ -27,7 +32,13 @@ export interface FlightdeckBoardPayload {
   projectOwner: string;
   columns: string[];
   streams: string[];
+  owners: string[];
+  fieldOptions: FlightdeckFieldOptions;
   items: FlightdeckBoardItem[];
   source: "tower" | "github";
+  /** Tower MCP credential present — board verbs and capture work. */
+  actionsEnabled: boolean;
+  /** GitHub token present — comment read/write on linked issues. */
+  commentsEnabled: boolean;
   error?: string;
 }

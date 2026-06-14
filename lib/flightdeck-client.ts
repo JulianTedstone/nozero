@@ -2,6 +2,11 @@ import "server-only";
 
 import type { ContextTask } from "@/types/meeting-context";
 import type { FlightdeckBoardItem } from "@/types/flightdeck-board";
+import {
+  DEFAULT_FLIGHTDECK_FIELD_OPTIONS,
+  mergeFieldOptions,
+  type FlightdeckFieldOptions,
+} from "@/lib/flightdeck-field-options";
 
 export const FLIGHTDECK_STATUS_ORDER = [
   "Backlog",
@@ -35,6 +40,7 @@ interface GraphqlItem {
     nodes?: Array<{
       text?: string;
       name?: string;
+      date?: string;
       field?: { name?: string };
     }>;
   };
@@ -97,6 +103,7 @@ function fieldText(
     }
     if (node.text) return node.text;
     if (node.name) return node.name;
+    if (node.date) return node.date.slice(0, 10);
   }
   return null;
 }
@@ -115,6 +122,9 @@ function graphqlItemToBoard(item: GraphqlItem): FlightdeckBoardItem {
     approver: fieldText(item, "Approver"),
     type: fieldText(item, "Type"),
     priority: fieldText(item, "Priority"),
+    recurrence: fieldText(item, "Recurrence"),
+    nextAction: fieldText(item, "Next Action"),
+    projectLink: fieldText(item, "Project Link"),
     url: item.content?.url ?? null,
     body: item.content?.body ?? null,
   };
@@ -133,6 +143,10 @@ const ITEMS_PAGE_FRAGMENT = `
           }
           ... on ProjectV2ItemFieldSingleSelectValue {
             name
+            field { ... on ProjectV2FieldCommon { name } }
+          }
+          ... on ProjectV2ItemFieldDateValue {
+            date
             field { ... on ProjectV2FieldCommon { name } }
           }
         }
@@ -359,4 +373,82 @@ export async function searchFlightdeckTasks(input: {
   }
 
   return { tasks };
+}
+
+type GraphqlFieldNode = {
+  name?: string;
+  dataType?: string;
+  options?: Array<{ name?: string }>;
+};
+
+export async function fetchFlightdeckFieldOptions(): Promise<FlightdeckFieldOptions> {
+  const token = githubToken();
+  if (!token) {
+    return DEFAULT_FLIGHTDECK_FIELD_OPTIONS;
+  }
+
+  const owner = projectOwner();
+  const number = projectNumber();
+  const query = `
+    query FlightdeckFields($owner: String!, $number: Int!) {
+      user(login: $owner) {
+        projectV2(number: $number) {
+          fields(first: 40) {
+            nodes {
+              ... on ProjectV2FieldCommon { name dataType }
+              ... on ProjectV2SingleSelectField {
+                name
+                options { name }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const { data } = await flightdeckGraphql(query, { owner, number });
+  const nodes =
+    (
+      data as {
+        user?: { projectV2?: { fields?: { nodes?: GraphqlFieldNode[] } } };
+      } | null
+    )?.user?.projectV2?.fields?.nodes ?? [];
+
+  if (nodes.length === 0) {
+    return DEFAULT_FLIGHTDECK_FIELD_OPTIONS;
+  }
+
+  const pickOptions = (fieldName: string) =>
+    nodes
+      .find((node) => node.name === fieldName)
+      ?.options?.map((option) => option.name ?? "")
+      .filter(Boolean) ?? [];
+
+  return mergeFieldOptions({
+    streams: pickOptions("Stream"),
+    owners: pickOptions("Owner"),
+    approvers: pickOptions("Approver"),
+    approvals: pickOptions("Approval"),
+    priorities: pickOptions("Priority"),
+  });
+}
+
+export function githubCommentsEnabled(): boolean {
+  return Boolean(githubToken());
+}
+
+export function parseIssueFromUrl(
+  issueUrl: string | null | undefined,
+): { owner: string; repo: string; number: number } | null {
+  if (!issueUrl) return null;
+  const match = issueUrl.match(
+    /github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/i,
+  );
+  if (!match) return null;
+  return {
+    owner: match[1],
+    repo: match[2],
+    number: Number(match[3]),
+  };
 }

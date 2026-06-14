@@ -8,6 +8,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const emailHint = searchParams.get("email") ?? "";
   const accountId = searchParams.get("accountId") ?? "";
+  const labelHint = searchParams.get("label") ?? "";
   const origin = getPublicOrigin(request);
 
   const cookieStore = await cookies();
@@ -23,8 +24,15 @@ export async function GET(request: Request) {
     return new NextResponse("GOOGLE_CLIENT_ID not configured", { status: 500 });
   }
 
+  const effectiveEmailHint = emailHint || user.email || "";
   // Signed state to tie the callback to the initiating user + account slot
-  const payload = JSON.stringify({ userId: user.id, accountId, email: emailHint, ts: Date.now() });
+  const payload = JSON.stringify({
+    userId: user.id,
+    accountId,
+    email: effectiveEmailHint,
+    label: labelHint,
+    ts: Date.now(),
+  });
   const sig = createHmac("sha256", process.env.NOZERO_SESSION_SECRET!)
     .update(payload)
     .digest("hex");
@@ -39,13 +47,14 @@ export async function GET(request: Request) {
     scope: [
       "https://www.googleapis.com/auth/calendar",
       "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/gmail.readonly",
       "email",
       "profile",
     ].join(" "),
     access_type: "offline",
     prompt: "consent",
     state,
-    ...(emailHint ? { login_hint: emailHint } : {}),
+    ...(effectiveEmailHint ? { login_hint: effectiveEmailHint } : {}),
   });
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);

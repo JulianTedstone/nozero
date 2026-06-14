@@ -60,14 +60,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBackgroundSync } from "@/hooks/use-background-sync";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth-client";
@@ -1859,20 +1853,30 @@ export function ModernCalendarView({
               Today
             </Button>
 
-            <Select
+            <Tabs
               onValueChange={(v) => setViewMode(v as ViewMode)}
               value={viewMode}
             >
-              <SelectTrigger className="h-9 w-[4.5rem] rounded-lg border-white/[0.06] bg-white/[0.03] px-2.5 py-0 text-xs md:w-24">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl border border-white/[0.12] bg-popover shadow-2xl ring-1 ring-white/10">
-                <SelectItem value="day">Day</SelectItem>
-                <SelectItem value="week">Week</SelectItem>
-                <SelectItem value="month">Month</SelectItem>
-                <SelectItem value="year">Year</SelectItem>
-              </SelectContent>
-            </Select>
+              <TabsList className="h-9 gap-0.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-0.5">
+                {(
+                  [
+                    { value: "day", label: "Day", short: "D" },
+                    { value: "week", label: "Week", short: "W" },
+                    { value: "month", label: "Month", short: "M" },
+                    { value: "year", label: "Year", short: "Y" },
+                  ] as const
+                ).map((tab) => (
+                  <TabsTrigger
+                    className="h-8 min-w-0 flex-1 rounded-md px-1.5 text-[11px] text-white/45 after:hidden hover:text-white/70 data-active:border-white/[0.06] data-active:bg-white/[0.08] data-active:text-white/90 md:px-2.5"
+                    key={tab.value}
+                    value={tab.value}
+                  >
+                    <span className="md:hidden">{tab.short}</span>
+                    <span className="hidden md:inline">{tab.label}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
             {/* Search — desktop only */}
             <div className="relative hidden md:block">

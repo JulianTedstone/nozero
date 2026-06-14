@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  const settingsUrl = `${origin}/settings?section=accounts`;
+  const settingsUrl = `${origin}/settings?section=connections`;
 
   if (error || !code || !state) {
     return NextResponse.redirect(

@@ -37,6 +37,8 @@ export interface ContextTranscript {
   id: string;
   title: string;
   excerpt: string | null;
+  /** Full transcript text when available (for source view). */
+  fullText: string | null;
   source: "krisp";
   confidence: "high" | "medium" | "low";
 }
@@ -77,6 +79,8 @@ export interface MeetingContextBundle {
   repos: string[];
   summary: {
     purpose: string | null;
+    actionPoints: string[];
+    recommendations: string[];
     sources: Array<"email" | "transcript" | "crm" | "ctx">;
   };
   people: ContextPerson[];

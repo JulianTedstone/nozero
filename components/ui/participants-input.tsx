@@ -18,7 +18,10 @@ interface ContactSuggestion {
 
 interface ParticipantsInputProps {
   className?: string;
+  /** When true, adding participants is disabled. */
   disabled?: boolean;
+  /** When false, existing chips cannot be removed (guest on someone else's meeting). */
+  allowRemove?: boolean;
   icon?: React.ReactNode;
   inputClassName?: string;
   onChange: (value: Participant[]) => void;
@@ -55,6 +58,7 @@ const STATUS_STYLES: Record<
 export function ParticipantsInput({
   className,
   disabled = false,
+  allowRemove = true,
   icon,
   inputClassName,
   placeholder = "Add email and press Enter",
@@ -212,7 +216,7 @@ export function ParticipantsInput({
                     <span className="min-w-0 truncate text-[11px] text-white/80">
                       {participant.email}
                     </span>
-                    {!disabled ? (
+                    {!disabled && allowRemove ? (
                       <button
                         className="shrink-0 rounded-full p-0.5 text-white/30 transition-colors hover:bg-white/[0.08] hover:text-white/70"
                         onClick={(event) => {
@@ -299,7 +303,8 @@ export function ParticipantsInput({
                 if (
                   event.key === "Backspace" &&
                   draft.length === 0 &&
-                  value.length > 0
+                  value.length > 0 &&
+                  allowRemove
                 ) {
                   event.preventDefault();
                   removeParticipant(value.at(-1)!.email);

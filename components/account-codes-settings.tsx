@@ -138,7 +138,7 @@ export function AccountCodesSettings({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-semibold text-lg">Account codes</h2>
+        <h2 className="font-semibold text-lg">External project codes</h2>
         <p className="mt-1 text-muted-foreground text-sm">
           Define codes and labels for time-sheeting. Codes are scoped to each
           connected email account, can be assigned to meetings, and are archived

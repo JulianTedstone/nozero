@@ -51,3 +51,29 @@ export async function removeCalDavCredentialAtomic(
   });
   if (error) throw error;
 }
+
+export async function setImapCredentialAtomic(
+  userId: string,
+  email: string,
+  creds: Record<string, unknown>,
+) {
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("set_imap_credential", {
+    p_user_id: userId,
+    p_email: email,
+    p_creds: creds,
+  });
+  if (error) throw error;
+}
+
+export async function removeImapCredentialAtomic(
+  userId: string,
+  email: string,
+) {
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("remove_imap_credential", {
+    p_user_id: userId,
+    p_email: email,
+  });
+  if (error) throw error;
+}

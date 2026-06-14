@@ -4,8 +4,12 @@ import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import {
   FLIGHTDECK_STATUS_ORDER,
+  fetchFlightdeckFieldOptions,
+  githubCommentsEnabled,
   listFlightdeckBoard,
 } from "@/lib/flightdeck-client";
+import { mergeFieldOptions } from "@/lib/flightdeck-field-options";
+import { deriveFlightdeckOwners } from "@/lib/flightdeck-defaults";
 import { towerConfigured, towerQueryBoard } from "@/lib/tower-mcp-client";
 import type { FlightdeckBoardPayload } from "@/types/flightdeck-board";
 
@@ -27,11 +31,20 @@ function projectNumber(): number {
 function buildPayload(
   items: FlightdeckBoardPayload["items"],
   source: FlightdeckBoardPayload["source"],
-  error?: string
+  actionsEnabled: boolean,
+  fieldOptions: FlightdeckBoardPayload["fieldOptions"],
+  error?: string,
 ): FlightdeckBoardPayload {
   const streams = [
     ...new Set(items.map((i) => i.stream).filter(Boolean) as string[]),
   ].sort();
+  const owners = deriveFlightdeckOwners(items);
+
+  const mergedOptions = mergeFieldOptions({
+    ...fieldOptions,
+    streams: [...new Set([...fieldOptions.streams, ...streams])],
+    owners: [...new Set([...fieldOptions.owners, ...owners])],
+  });
 
   const knownStatuses = new Set<string>(FLIGHTDECK_STATUS_ORDER);
   const extraStatuses = [
@@ -55,9 +68,13 @@ function buildPayload(
     projectNumber: projectNumber(),
     projectOwner: projectOwner(),
     columns,
-    streams,
+    streams: mergedOptions.streams,
+    owners: mergedOptions.owners,
+    fieldOptions: mergedOptions,
     items,
     source,
+    actionsEnabled,
+    commentsEnabled: githubCommentsEnabled(),
     error,
   };
 }
@@ -68,13 +85,26 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (towerConfigured()) {
+  const actionsEnabled = towerConfigured();
+  const fieldOptions = await fetchFlightdeckFieldOptions();
+
+  if (actionsEnabled) {
     const tower = await towerQueryBoard();
     if (tower.items.length > 0) {
-      return NextResponse.json(buildPayload(tower.items, "tower", tower.error));
+      return NextResponse.json(
+        buildPayload(tower.items, "tower", true, fieldOptions, tower.error),
+      );
     }
   }
 
   const github = await listFlightdeckBoard();
-  return NextResponse.json(buildPayload(github.items, "github", github.error));
+  return NextResponse.json(
+    buildPayload(
+      github.items,
+      "github",
+      actionsEnabled,
+      fieldOptions,
+      github.error,
+    ),
+  );
 }
