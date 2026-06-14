@@ -43,13 +43,6 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
-            git config --global --add safe.directory "$(pwd)"
-            if [ ! -d .git ]; then
-              git init -b main
-              git remote add origin https://github.com/JulianTedstone/nozero.git
-            fi
-            git fetch origin main
-            git reset --hard origin/main
-            docker compose -f docker-compose.host.yml up -d --build
-            docker image prune -f
+            DEPLOY_ROOT="${{ secrets.DEPLOY_PATH:-/root/npt-core/nozero }}"
+            chmod +x "$DEPLOY_ROOT/bin/deploy.sh"
+            exec "$DEPLOY_ROOT/bin/deploy.sh"

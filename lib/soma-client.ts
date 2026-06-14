@@ -1,5 +1,17 @@
 import "server-only";
 
+import {
+  fetchHydrationContactByEmail,
+  getHydrationConfig,
+  getHydrationEmailThread,
+  hydrationBaseUrl,
+  listHydrationEmailThreads,
+  searchHydrationCompaniesByDomain,
+  searchHydrationContacts,
+  searchHydrationDeals,
+  searchHydrationMessages,
+} from "@/lib/hydration-client";
+
 import type {
   EmailMessage,
   EmailThreadDetail,
@@ -35,6 +47,10 @@ export function getSomaConfig() {
 }
 
 export function somaBaseUrl(): string {
+  const hydration = hydrationBaseUrl();
+  if (hydration) {
+    return hydration;
+  }
   return process.env.NOZERO_SOMA_ANANSI_URL?.replace(/\/$/, "") ?? "";
 }
 
@@ -217,6 +233,13 @@ function rawToContextPerson(
 export async function fetchContactByEmail(
   email: string
 ): Promise<ContextPerson | null> {
+  if (getHydrationConfig()) {
+    const hydrated = await fetchHydrationContactByEmail(email);
+    if (hydrated) {
+      return hydrated;
+    }
+  }
+
   const payload = await searchSomaContactsByEmail(email);
   if (!payload) {
     return null;
@@ -270,6 +293,13 @@ export async function searchSomaDeals(
   query: string,
   limit = 10
 ): Promise<ContextDeal[]> {
+  if (getHydrationConfig()) {
+    const deals = await searchHydrationDeals(query, limit);
+    if (deals.length) {
+      return deals;
+    }
+  }
+
   const config = getSomaConfig();
   if (!(config && query.trim())) {
     return [];
@@ -348,6 +378,13 @@ export async function fetchCompanyById(
 export async function searchCompaniesByDomain(
   domain: string
 ): Promise<ContextCompany[]> {
+  if (getHydrationConfig()) {
+    const found = await searchHydrationCompaniesByDomain(domain);
+    if (found.length) {
+      return found;
+    }
+  }
+
   const config = getSomaConfig();
   if (!(config && domain.trim())) {
     return [];
@@ -420,6 +457,13 @@ export async function searchSomaMessages(
   query: string,
   limit = 12
 ): Promise<ContextMessage[]> {
+  if (getHydrationConfig()) {
+    const messages = await searchHydrationMessages(query, limit);
+    if (messages.length) {
+      return messages;
+    }
+  }
+
   const config = getSomaConfig();
   if (!config || query.trim().length < 2) {
     return [];
@@ -497,6 +541,13 @@ export async function searchSomaContacts(
   query: string,
   limit = 8
 ): Promise<SomaContactSuggestion[]> {
+  if (getHydrationConfig()) {
+    const hydrated = await searchHydrationContacts(query, limit);
+    if (hydrated.length) {
+      return hydrated;
+    }
+  }
+
   const config = getSomaConfig();
   if (!config) {
     return [];
@@ -752,8 +803,18 @@ export async function listSomaEmailThreads(input?: {
   q?: string;
   limit?: number;
 }): Promise<{ threads: EmailThreadSummary[]; error?: string }> {
+  if (getHydrationConfig()) {
+    const hydrated = await listHydrationEmailThreads(input);
+    if (hydrated.threads.length > 0) {
+      return hydrated;
+    }
+  }
+
   const config = getSomaConfig();
   if (!config) {
+    if (getHydrationConfig()) {
+      return { threads: [], error: "No email threads in hydration; run POST /v1/crm/sync/soma-mail" };
+    }
     return { threads: [], error: "Soma not configured" };
   }
 
@@ -822,8 +883,18 @@ export async function listSomaEmailThreads(input?: {
 export async function getSomaEmailThread(
   threadId: string
 ): Promise<{ detail: EmailThreadDetail | null; error?: string }> {
+  if (getHydrationConfig()) {
+    const hydrated = await getHydrationEmailThread(threadId);
+    if (hydrated.detail) {
+      return hydrated;
+    }
+  }
+
   const config = getSomaConfig();
   if (!config) {
+    if (getHydrationConfig()) {
+      return { detail: null, error: "Thread not in hydration; sync soma-mail or configure Soma" };
+    }
     return { detail: null, error: "Soma not configured" };
   }
 

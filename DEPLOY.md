@@ -54,8 +54,11 @@ just attaches `nozero-web` to that Caddy's Docker network. Same pattern as
 
 ## Deploy on push (GitHub Actions)
 
-Pushes to `main` run CI (`bun install`, `bun run build`) then deploy to the Hetzner host over SSH
-(`.github/workflows/deploy.yml`). Manual redeploy: **Actions → ci-deploy → Run workflow**.
+Pushes to `main` run CI (`bun install`, `bun run build`) then SSH to the host and run
+**`bin/deploy.sh`** (Lane A: `git pull` → `op inject` → `systemctl restart aqua-nozero`).
+See `aqua-context/DEPLOYMENT.md`. Legacy `docker compose --build` is retired.
+
+Manual redeploy: **Actions → ci-deploy → Run workflow**.
 
 Repository secrets (same pattern as `nopilot-co-www`):
 
@@ -64,17 +67,17 @@ Repository secrets (same pattern as `nopilot-co-www`):
 | `HETZNER_HOST` | Host IP or DNS |
 | `HETZNER_USER` | `root` |
 | `HETZNER_SSH_KEY` | Private key for SSH deploy |
-| `DEPLOY_PATH` | `/opt/nozero` |
+| `DEPLOY_PATH` | `/root/npt-core/nozero` (optional; this is the default) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (CI build) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (CI build) |
 
 Optional repository variable: `NEXT_PUBLIC_SITE_URL` (defaults to `https://zero.nopilot.co`).
 
-The host `.env` is **not** in git — it stays on the box for runtime secrets. Only
-`NEXT_PUBLIC_*` values must be present for CI builds and Docker build args.
+Runtime secrets live in `.env.local` / `.env.aqua.local` on the host (`op inject` from
+`.env.tpl` + `.env.aqua.tpl`). Only `NEXT_PUBLIC_*` must be present for CI builds.
 
 ## Notes
-- The build needs `NEXT_PUBLIC_*` at build time (inlined into the client bundle) —
-  `docker-compose.host.yml` passes them as build args from `.env`.
+- The build needs `NEXT_PUBLIC_*` at build time — `bin/deploy.sh` sources `.env.local`
+  on the host before `bun run build`.
 - The standalone `server.js` runs under Node in the runner stage even though the build
   uses Bun; both are fine.
