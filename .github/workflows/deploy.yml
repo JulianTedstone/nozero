@@ -43,6 +43,9 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
             set -e
-            DEPLOY_ROOT="${{ secrets.DEPLOY_PATH:-/root/npt-core/nozero }}"
+            DEPLOY_ROOT="${{ secrets.DEPLOY_PATH }}"
+            if [ -z "$DEPLOY_ROOT" ]; then
+              DEPLOY_ROOT="/root/npt-core/nozero"
+            fi
             chmod +x "$DEPLOY_ROOT/bin/deploy.sh"
             exec "$DEPLOY_ROOT/bin/deploy.sh"

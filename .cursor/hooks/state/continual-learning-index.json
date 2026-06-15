@@ -1,57 +1,69 @@
 {
   "version": 1,
   "transcripts": {
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/156a4051-95e0-43d7-83b1-1ae9b60845c1.jsonl": {
-      "mtimeMs": 1781414461000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+    "/Users/ted/.cursor/projects/Users-ted-Projects-aqua-nozero/agent-transcripts/627d6303-05bb-4820-a1c1-aa83d87e2c3a/627d6303-05bb-4820-a1c1-aa83d87e2c3a.jsonl": {
+      "mtimeMs": 1781513042016,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/2d1f930b-afbe-40ec-9262-dfc8ae027965.jsonl": {
-      "mtimeMs": 1781305600000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
-    },
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/abb4078f-71ae-4072-94a7-055b8306fbac.jsonl": {
-      "mtimeMs": 1781361386000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
-    },
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/ac3da12b-0d7a-438e-a820-8836bd33ba44.jsonl": {
-      "mtimeMs": 1781395885000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
-    },
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/b7393826-b918-46a2-96e2-c76d867749ae.jsonl": {
-      "mtimeMs": 1781361978000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+    "/Users/ted/.cursor/projects/Users-ted-Projects-aqua-nozero/agent-transcripts/627d6303-05bb-4820-a1c1-aa83d87e2c3a/subagents/0f8c9851-c57f-4f71-9d46-c4fae4425fe5.jsonl": {
+      "mtimeMs": 1781451200951,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
     "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/6c4b40f8-62e1-4dba-b84e-f4c7eb2d93a4/6c4b40f8-62e1-4dba-b84e-f4c7eb2d93a4.jsonl": {
-      "mtimeMs": 1781361539000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+      "mtimeMs": 1781361539594,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/a12c8182-61c9-4288-af2d-b9ec88993e4b/a12c8182-61c9-4288-af2d-b9ec88993e4b.jsonl": {
-      "mtimeMs": 1781414039000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/156a4051-95e0-43d7-83b1-1ae9b60845c1.jsonl": {
+      "mtimeMs": 1781513029605,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/a12c8182-61c9-4288-af2d-b9ec88993e4b/subagents/664f25c8-db62-4e88-a13e-35507775d9c3.jsonl": {
-      "mtimeMs": 1781413725000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/b7393826-b918-46a2-96e2-c76d867749ae.jsonl": {
+      "mtimeMs": 1781361978235,
+      "processedAt": "2026-06-15T08:46:19.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/abb4078f-71ae-4072-94a7-055b8306fbac.jsonl": {
+      "mtimeMs": 1781361386928,
+      "processedAt": "2026-06-15T08:46:19.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/ac3da12b-0d7a-438e-a820-8836bd33ba44.jsonl": {
+      "mtimeMs": 1781395885535,
+      "processedAt": "2026-06-15T08:46:19.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/156a4051-95e0-43d7-83b1-1ae9b60845c1/subagents/2d1f930b-afbe-40ec-9262-dfc8ae027965.jsonl": {
+      "mtimeMs": 1781305600431,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
     "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/eb1544b2-0294-49e1-bbc6-b7e351289a7d/eb1544b2-0294-49e1-bbc6-b7e351289a7d.jsonl": {
-      "mtimeMs": 1781340037000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+      "mtimeMs": 1781340037930,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
     "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/e349b7b8-2a7e-4245-92aa-5611773be7e2/e349b7b8-2a7e-4245-92aa-5611773be7e2.jsonl": {
-      "mtimeMs": 1781444921000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+      "mtimeMs": 1781511954854,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
     "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/e349b7b8-2a7e-4245-92aa-5611773be7e2/subagents/508ee64a-4617-4a68-92cf-c1a1f0d85633.jsonl": {
-      "mtimeMs": 1781444945000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
-    },
-    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/e349b7b8-2a7e-4245-92aa-5611773be7e2/subagents/aa28ca8f-42f3-4b4e-91cd-871cfe0f05f4.jsonl": {
-      "mtimeMs": 1781341478000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+      "mtimeMs": 1781445008228,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     },
     "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/e349b7b8-2a7e-4245-92aa-5611773be7e2/subagents/1e43a983-eb6e-4e1c-a633-1716fe2ac6e2.jsonl": {
-      "mtimeMs": 1781380802000,
-      "processedAt": "2026-06-14T13:49:48.000Z"
+      "mtimeMs": 1781380802710,
+      "processedAt": "2026-06-15T08:46:19.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/e349b7b8-2a7e-4245-92aa-5611773be7e2/subagents/aa28ca8f-42f3-4b4e-91cd-871cfe0f05f4.jsonl": {
+      "mtimeMs": 1781341478894,
+      "processedAt": "2026-06-15T08:46:19.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/a12c8182-61c9-4288-af2d-b9ec88993e4b/a12c8182-61c9-4288-af2d-b9ec88993e4b.jsonl": {
+      "mtimeMs": 1781512029546,
+      "processedAt": "2026-06-15T08:46:19.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-npt-nozero/agent-transcripts/a12c8182-61c9-4288-af2d-b9ec88993e4b/subagents/664f25c8-db62-4e88-a13e-35507775d9c3.jsonl": {
+      "mtimeMs": 1781413725206,
+      "processedAt": "2026-06-15T08:46:19.000Z"
+    },
+    "/Users/ted/.cursor/projects/Users-ted-Projects-aqua-nozero/agent-transcripts/627d6303-05bb-4820-a1c1-aa83d87e2c3a/subagents/62e051e8-0df4-4161-a1d9-7104f9205b42.jsonl": {
+      "mtimeMs": 1781513075838,
+      "processedAt": "2026-06-15T08:46:19.000Z"
     }
   }
 }

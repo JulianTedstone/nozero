@@ -1,8 +1,10 @@
 # Migration: Convex → Supabase
 
-Status: SPEC — pending phase 1 execution.
+> **Superseded for production.** aqua-npt now runs on Supabase **gily** (`gilyyzjsasyhrwterjor.supabase.co`), schema `nozero`. See `~/aqua/aqua-context/GILY-AUDIT.md` and `AQUA.md`. This doc is kept for historical Convex→Postgres mapping only.
+
+Status: COMPLETE (Convex removed); original target project `hzzojgkumgqzurjtnaud` was never used for aqua deploy.
 Owner: @JulianTedstone.
-Target: `nozero` schema in shared NOPILOT Supabase project `hzzojgkumgqzurjtnaud`.
+Runtime target: `nozero` schema on **gily**.
 
 ## Decisions
 
