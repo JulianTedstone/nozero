@@ -6,7 +6,10 @@ import {
   saveConnectedAccounts,
   type ConnectedAccountMeta,
 } from "@/lib/connected-accounts";
-import { isGoogleSignInUser } from "@/lib/auth-provider";
+import {
+  getAuthProviderForUser,
+  isGoogleSignInUser,
+} from "@/lib/auth-provider";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readUserPreferences } from "@/lib/user-preferences";
 
