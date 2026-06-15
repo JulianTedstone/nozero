@@ -131,10 +131,10 @@ The project requires environment variables for Supabase (URL, anon key, service-
 
 ## Learned User Preferences
 
-- Primary Supabase login account is separate from linked calendar accounts; multiple Google and CalDAV accounts must coexist without overwriting prior connections.
+- Primary nozero login (email+password or OAuth) is separate from linked mail/calendar identities; one session may attach many Google, CalDAV, and IMAP accounts—each identity kept completely separate by `account_email`, never merged across logins or identities.
 - Per-account calendar subscription is configured in Settings, not by auto-importing every shared/org calendar.
 - Sidebar calendar visibility toggles must persist across sessions; only subscribed calendars sync events.
-- Calendar labels should show friendly account names (e.g. `julian.tedstone@coherence.digital` → "Julian, Coherence"), not generic "Calendar"/"Primary".
+- Calendar labels should show friendly account names from the email local-part via `friendlyAccountName()` (e.g. `julian.tedstone@coherence.digital` → "Julian, Coherence"), not generic "Calendar"/"Primary" or OAuth display nicknames.
 - Do not list connected accounts under the My Calendars sidebar; account management belongs in Settings.
 - CalDAV credential edits must retain stored passwords without forcing re-entry on Save/Reconnect.
 - Calendar and email must be offline-first: instant reads from a local mirror; sync never blocks initial paint; sync is manual refresh or background only; the app must work fully offline with data as of the last sync. Email inbox sync uses direct Gmail API and IMAP (not Soma/Anansi); sync errors must show in the UI, not as silent empty inboxes.
@@ -146,9 +146,9 @@ The project requires environment variables for Supabase (URL, anon key, service-
 
 ## Learned Workspace Facts
 
-- Google and CalDAV tokens/credentials live in `nozero.profiles.preferences` (`connectedTokens`, `connectedCalDav`); IMAP credentials in `nozero.imap_credentials` via `lib/imap-credentials.ts` and migration `20260614000001_imap_credentials.sql`; the `calendar_tokens` migration exists but the app does not use that table.
+- Google and CalDAV tokens/credentials live in `nozero.profiles.preferences` (`connectedTokens`, `connectedCalDav`, `connectedAccounts` metadata); IMAP in `connectedImap` plus `nozero.imap_credentials` via `lib/imap-credentials.ts`; registry can desync from tokens when `PUT /api/accounts` full-replaces metadata or unscoped `localStorage` races occur.
 - CalDAV connect/sync (incl. iCloud preset at `https://caldav.icloud.com`, app-specific password): `POST /api/accounts/caldav/connect`, `lib/caldav-sync.ts` with `tsdav` `DAVClient`; stored as `type: "caldav"`.
-- Multi-account Google sync pulls all linked accounts via `pullAllGoogleCalendarAccounts()` in `lib/google-accounts-sync.ts`.
+- Multi-account Google sync pulls linked accounts via `pullAllGoogleCalendarAccounts()` in `lib/google-accounts-sync.ts`; password-login profiles must keep `profiles.provider=email`—synthetic `primary-google` sidebar calendar is for Google sign-in only, or synced events under linked identities are hidden.
 - Calendar subscriptions and visibility filtering: `lib/calendar-subscriptions.ts`, `lib/calendar-subscription-utils.ts` (`eventMatchesVisibleSubscriptions`); visibility API at `/api/calendar/visibility`.
 - Windowed sync: initial pull ±3 months (`lib/sync-window.ts`, `lib/calendar-sync-range.ts`); background extension via `POST /api/calendar/sync/extend` in 3-month chunks.
 - Contact autocomplete: `/api/contacts/suggest` (Soma client in `lib/soma-client.ts`) plus local invitation/event attendee fallbacks.
