@@ -17,17 +17,25 @@ function originFromRequestHost(request: Request): string | null {
 /** Public site origin for OAuth callbacks (respects reverse-proxy headers). */
 export function getPublicOrigin(request: Request): string {
   const requestOrigin = originFromRequestHost(request);
-  // Local dev: always match the port the browser hit (SITE_URL is often :3000 while dev runs on :3001).
+  const explicit = (
+    process.env.SITE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim()
+  )?.replace(/\/$/, "");
+
+  // Public Host / X-Forwarded-Host wins over localhost SITE_URL from aqua overlays.
+  if (requestOrigin && !isLocalHost(new URL(requestOrigin).host)) {
+    return requestOrigin;
+  }
+
+  if (explicit && !isLocalHost(new URL(explicit).host)) {
+    return explicit;
+  }
+
+  // Local dev: match the port the browser hit (SITE_URL is often :3000 while dev runs on :3001).
   if (requestOrigin && isLocalHost(new URL(requestOrigin).host)) {
     return requestOrigin;
   }
 
-  const explicit =
-    process.env.SITE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) {
-    return explicit.replace(/\/$/, "");
-  }
-
+  if (explicit) return explicit;
   if (requestOrigin) return requestOrigin;
 
   return new URL(request.url).origin;
