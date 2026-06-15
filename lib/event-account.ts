@@ -1,4 +1,4 @@
-import { accountEmailFromGoogleLocalId } from "@/lib/google-calendar";
+import { accountEmailFromGoogleLocalId } from "@/lib/google-calendar-ids";
 import type { CalendarEvent } from "@/types/calendar";
 
 type CalendarSubscription = {

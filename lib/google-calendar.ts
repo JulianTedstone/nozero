@@ -3,6 +3,10 @@ import { conferenceUrlFromGoogleEvent } from "@/lib/conference-links";
 import { setConnectedAccountSyncToken } from "@/lib/connected-accounts";
 import type { CalendarEvent } from "@/lib/calendar";
 import {
+  googleEventIdFromLocalId,
+  googleLocalEventId,
+} from "@/lib/google-calendar-ids";
+import {
   type RecurrenceEditScope,
   parseGoogleRecurrence,
   recurrenceRuleToGoogleRRule,
@@ -15,39 +19,14 @@ import {
   upsertUserEvent,
   upsertUserRecord,
 } from "@/lib/store";
-import { isGoogleSignInUser } from "@/lib/auth-provider";
+
+async function googleSignInUser(userId: string): Promise<boolean> {
+  const { isGoogleSignInUser } = await import("@/lib/auth-provider");
+  return isGoogleSignInUser(userId);
+}
 
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const DEFAULT_CALENDAR_ID = "primary";
-
-/** Slug embedded in scoped Google local event ids. */
-export function googleAccountSlug(accountEmail: string): string {
-  return accountEmail.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-}
-
-/** Stable local event id scoped to a Google account (avoids cross-account collisions). */
-export function googleLocalEventId(
-  accountEmail: string,
-  googleEventId: string,
-): string {
-  return `google_${googleAccountSlug(accountEmail)}_${googleEventId}`;
-}
-
-/** Reverse {@link googleLocalEventId} when the account email is among known candidates. */
-export function accountEmailFromGoogleLocalId(
-  localId: string,
-  candidateEmails: string[],
-): string | undefined {
-  if (!localId.startsWith("google_")) return undefined;
-  const rest = localId.slice("google_".length);
-  const lastUnderscore = rest.lastIndexOf("_");
-  if (lastUnderscore <= 0) return undefined;
-  const slug = rest.slice(0, lastUnderscore);
-  for (const email of candidateEmails) {
-    if (googleAccountSlug(email) === slug) return email;
-  }
-  return undefined;
-}
 
 function eventBelongsToGoogleAccount(
   event: CalendarEvent,
@@ -67,15 +46,6 @@ function eventBelongsToGoogleAccount(
 function googleEventIdFromLocalEvent(event: CalendarEvent): string {
   if (event.sourceId) return event.sourceId;
   return googleEventIdFromLocalId(event.id);
-}
-
-function googleEventIdFromLocalId(localId: string): string {
-  if (!localId.startsWith("google_")) {
-    throw new Error("Not a Google Calendar event");
-  }
-  const rest = localId.slice("google_".length);
-  const lastUnderscore = rest.lastIndexOf("_");
-  return lastUnderscore >= 0 ? rest.slice(lastUnderscore + 1) : rest;
 }
 
 interface GoogleCalendarEvent {
@@ -177,7 +147,7 @@ async function saveGoogleAuthTokens(params: {
     refreshToken: params.refreshToken,
     expiresAt: params.expiresAt ?? undefined,
   };
-  if (await isGoogleSignInUser(params.userId)) {
+  if (await googleSignInUser(params.userId)) {
     patch.provider = "google";
   }
   await upsertUserRecord(patch);
@@ -809,7 +779,7 @@ export async function hasGoogleCalendarConnected(
 ): Promise<boolean> {
   try {
     const userData = await getGoogleAuth(userId);
-    const googleLogin = await isGoogleSignInUser(userId);
+    const googleLogin = await googleSignInUser(userId);
     return !!(
       googleLogin &&
       userData?.accessToken &&
@@ -941,7 +911,7 @@ export async function ensureGoogleCalendarWatch(params: {
 
   await upsertUserRecord({
     userId,
-    ...(await isGoogleSignInUser(userId) ? { provider: "google" as const } : {}),
+    ...(await googleSignInUser(userId) ? { provider: "google" as const } : {}),
     accessToken,
     refreshToken,
     expiresAt,
@@ -994,7 +964,7 @@ export async function syncGoogleCalendarEventsIncrementally(params: {
   };
 
   const persistSyncToken = async (nextSyncToken: string | undefined) => {
-    if (isPrimary && (await isGoogleSignInUser(userId))) {
+    if (isPrimary && (await googleSignInUser(userId))) {
       await upsertUserRecord({
         userId,
         provider: "google",

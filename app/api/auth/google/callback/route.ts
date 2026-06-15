@@ -9,7 +9,6 @@ import { isGoogleAccountLinkConfigured } from "@/lib/google-oauth-config";
 import { getPublicOrigin } from "@/lib/oauth-redirect";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { isGoogleSignInUser } from "@/lib/auth-provider";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
