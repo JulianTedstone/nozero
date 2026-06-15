@@ -52,6 +52,7 @@ import {
   type CSSProperties,
 } from "react";
 import { UserIdentityAvatar } from "@/components/user-identity-avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
