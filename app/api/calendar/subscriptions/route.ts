@@ -4,6 +4,7 @@ import {
   listSubscriptionViews,
 } from "@/lib/calendar-subscriptions";
 import { getCurrentAuthUser } from "@/lib/auth-server";
+import { repairUserAccounts } from "@/lib/repair-connected-accounts";
 
 export async function GET() {
   try {
@@ -11,6 +12,8 @@ export async function GET() {
     if (!user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    await repairUserAccounts(user.id);
 
     const [calendars, sidebarExpanded] = await Promise.all([
       listSubscriptionViews(user.id),

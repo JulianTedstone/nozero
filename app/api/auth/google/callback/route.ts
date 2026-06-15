@@ -4,9 +4,12 @@ import {
   getConnectedAccounts,
   upsertConnectedAccountMeta,
 } from "@/lib/connected-accounts";
+import { isGoogleSignInUser } from "@/lib/auth-provider";
+import { isGoogleAccountLinkConfigured } from "@/lib/google-oauth-config";
 import { getPublicOrigin } from "@/lib/oauth-redirect";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isGoogleSignInUser } from "@/lib/auth-provider";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -16,6 +19,12 @@ export async function GET(request: Request) {
 
   const origin = getPublicOrigin(request);
   const settingsUrl = `${origin}/settings?section=accounts`;
+
+  if (!isGoogleAccountLinkConfigured()) {
+    return NextResponse.redirect(
+      `${settingsUrl}&oauth_error=google_not_configured`,
+    );
+  }
 
   if (error || !code || !state) {
     return NextResponse.redirect(`${settingsUrl}&oauth_error=${error ?? "missing_params"}`);
@@ -123,12 +132,13 @@ export async function GET(request: Request) {
 
   const isPrimaryEmail =
     email.toLowerCase() === (user.email ?? "").toLowerCase();
+  const googleLogin = await isGoogleSignInUser(user.id);
 
   const { error: saveErr } = await admin
     .from("profiles")
     .update({
       preferences: { ...prefs, connectedTokens },
-      ...(isPrimaryEmail
+      ...(isPrimaryEmail && googleLogin
         ? {
             access_token: tokenData.access_token,
             refresh_token: tokenData.refresh_token ?? null,

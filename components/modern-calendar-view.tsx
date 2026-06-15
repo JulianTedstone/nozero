@@ -51,7 +51,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Button } from "@/components/ui/button";
+import { UserIdentityAvatar } from "@/components/user-identity-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1612,21 +1612,16 @@ export function ModernCalendarView({
 
   const userAvatarButton = (
     <Button
-      className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/[0.08] bg-white/[0.06] p-0 hover:bg-white/[0.1]"
+      className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/[0.08] bg-transparent p-0 hover:bg-white/[0.06]"
       size="icon"
       variant="ghost"
     >
-      {userImage ? (
-        <img
-          alt={userName}
-          className="h-full w-full object-cover"
-          src={userImage}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-500/40 to-blue-600/40 font-semibold text-white text-xs">
-          {userName?.[0] || <UserIcon className="h-3.5 w-3.5" />}
-        </div>
-      )}
+      <UserIdentityAvatar
+        className="h-9 w-9 ring-0"
+        image={userImage}
+        name={userName ?? "?"}
+        size="md"
+      />
     </Button>
   );
 

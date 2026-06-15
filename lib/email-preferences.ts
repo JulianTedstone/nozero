@@ -72,11 +72,13 @@ export async function listEmailAccountViews(
   userId: string,
 ): Promise<EmailAccountView[]> {
   const { getConnectedAccounts } = await import("@/lib/connected-accounts");
+  const { isGoogleSignInUser } = await import("@/lib/auth-provider");
   const user = await getUserRecord(userId);
   const visibility = await getEmailAccountVisibility(userId);
   const views: EmailAccountView[] = [];
   let colorIndex = 0;
   const loginEmail = user?.email?.toLowerCase() ?? "";
+  const googleLogin = await isGoogleSignInUser(userId);
 
   const connected = await getConnectedAccounts(userId);
   const mailAccounts = connected.filter(
@@ -85,7 +87,7 @@ export async function listEmailAccountViews(
   );
 
   // Google sign-in: login email is a mail identity only when not already in connectedAccounts.
-  if (user?.email && user.provider === "google") {
+  if (user?.email && googleLogin) {
     const hasLinkedSlot = mailAccounts.some(
       (account) => account.email.toLowerCase() === loginEmail,
     );
@@ -105,7 +107,7 @@ export async function listEmailAccountViews(
   for (const account of mailAccounts) {
     const emailKey = account.email.toLowerCase();
     const isLoginGoogle =
-      user?.provider === "google" && emailKey === loginEmail;
+      googleLogin && emailKey === loginEmail;
     views.push({
       id: account.id,
       email: account.email,

@@ -1,6 +1,7 @@
 import { createHmac } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { isGoogleAccountLinkConfigured } from "@/lib/google-oauth-config";
 import { getPublicOrigin } from "@/lib/oauth-redirect";
 import { createClient } from "@/lib/supabase/server";
 
@@ -20,8 +21,10 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/auth/signin`);
   }
 
-  if (!process.env.GOOGLE_CLIENT_ID) {
-    return new NextResponse("GOOGLE_CLIENT_ID not configured", { status: 500 });
+  if (!isGoogleAccountLinkConfigured()) {
+    return NextResponse.redirect(
+      `${origin}/settings?section=accounts&oauth_error=google_not_configured`,
+    );
   }
 
   const effectiveEmailHint = emailHint || user.email || "";

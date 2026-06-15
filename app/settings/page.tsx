@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { ModernSettingsForm } from "@/components/modern-settings-form";
 import { getUserPreferences } from "@/lib/auth";
 import { getCurrentAuthUser } from "@/lib/auth-server";
+import { getConnectedAccounts } from "@/lib/connected-accounts";
+import { isGoogleAccountLinkConfigured } from "@/lib/google-oauth-config";
+import { repairUserAccounts } from "@/lib/repair-connected-accounts";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -33,15 +36,14 @@ export default async function SettingsPage({
     "email";
 
   const preferences = await getUserPreferences(user.id);
+  await repairUserAccounts(user.id);
   const { section, connected, email, oauth_error, sync, gmail_warning } = await searchParams;
   const validSection = VALID_SECTIONS.includes(
     section as (typeof VALID_SECTIONS)[number],
   )
     ? section
     : undefined;
-  const connectedAccounts = Array.isArray(preferences.connectedAccounts)
-    ? preferences.connectedAccounts
-    : [];
+  const connectedAccounts = await getConnectedAccounts(user.id);
   const displayName =
     typeof preferences.displayName === "string" && preferences.displayName.trim()
       ? preferences.displayName.trim()
@@ -65,6 +67,7 @@ export default async function SettingsPage({
         connectedEmail={email}
         oauthError={oauth_error}
         gmailWarning={gmail_warning === "1"}
+        googleAccountLinkConfigured={isGoogleAccountLinkConfigured()}
         triggerSync={sync === "1"}
         userEmail={user.email}
         userId={user.id}

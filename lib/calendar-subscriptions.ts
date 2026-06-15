@@ -137,12 +137,14 @@ export async function listSubscriptionViews(
   userId: string,
 ): Promise<CalendarSubscriptionView[]> {
   const { getConnectedAccounts } = await import("@/lib/connected-accounts");
+  const { isGoogleSignInUser } = await import("@/lib/auth-provider");
   const user = await getUserRecord(userId);
   const byAccount = await getSubscriptionsByAccount(userId);
   const visibility = await getCalendarVisibility(userId);
   const views: CalendarSubscriptionView[] = [];
+  const googleLogin = await isGoogleSignInUser(userId);
 
-  if (user?.email && user.provider === "google") {
+  if (user?.email && googleLogin) {
     const accountId = "primary-google";
     const subs =
       byAccount[accountId] ??

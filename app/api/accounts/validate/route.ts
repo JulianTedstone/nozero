@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isGoogleSignInUser } from "@/lib/auth-provider";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { testCalDavConnection } from "@/lib/caldav-sync";
 import { getCalDavCredentials, listCalDavCredentials } from "@/lib/caldav-credentials";
@@ -178,7 +179,8 @@ export async function POST() {
   }
 
   const primaryEmail = user.email?.toLowerCase();
-  if (primaryEmail) {
+  const googleLogin = await isGoogleSignInUser(userId);
+  if (primaryEmail && googleLogin) {
     const primaryEvents = events.filter(
       (e) =>
         !(e as { accountEmail?: string }).accountEmail ||
@@ -189,10 +191,7 @@ export async function POST() {
       id: "primary-google",
       email: user.email ?? primaryEmail,
       type: "google",
-      credentials:
-        googleSync.some((g) => g.isPrimary) || user.provider === "google"
-          ? "ok"
-          : "missing",
+      credentials: googleSync.some((g) => g.isPrimary) ? "ok" : "missing",
       emailEnabled: primaryEmailView?.visible !== false,
       eventsInRange: primaryEvents.length,
     });

@@ -134,11 +134,13 @@ export async function listGoogleAccountsForSync(userId: string): Promise<
   }> = [];
 
   const primaryEmail = user?.email?.toLowerCase();
+  const { isGoogleSignInUser } = await import("@/lib/auth-provider");
+  const googleLogin = user ? await isGoogleSignInUser(user.userId) : false;
   const primaryConnected =
     primaryEmail &&
     (connectedTokens[user.email!] ?? connectedTokens[primaryEmail]);
 
-  if (user?.email && user.provider === "google") {
+  if (user?.email && googleLogin) {
     const useConnected =
       primaryConnected?.accessToken && primaryConnected.refreshToken;
 

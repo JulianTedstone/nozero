@@ -21,6 +21,10 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
+  describeGoogleOAuthError,
+  GOOGLE_ACCOUNT_LINK_SETUP_HINT,
+} from "@/lib/google-oauth-config";
+import {
   Form,
   FormControl,
   FormField,
@@ -47,48 +51,8 @@ import {
 } from "@/lib/event-detail-layout";
 import { inferBindingsForEmail, githubRepoUrl } from "@/lib/context-accounts";
 import { AccountCodesSettings } from "@/components/account-codes-settings";
+import { UserIdentityAvatar } from "@/components/user-identity-avatar";
 import { cn } from "@/lib/utils";
-
-// Palette of distinct hues — derived deterministically from the name
-const AVATAR_COLORS = ["#4285F4","#EA4335","#34A853","#FBBC05","#8B5CF6","#EC4899","#14B8A6","#F97316"];
-function nameToColor(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
-}
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/);
-  return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
-}
-
-function InitialsAvatar({ name, image, size }: { name: string; image?: string; size: "sm" | "lg" }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const dim = size === "lg" ? "h-10 w-10" : "h-8 w-8";
-  const round = size === "lg" ? "rounded-xl" : "rounded-full";
-  const textSz = size === "lg" ? "text-sm" : "text-xs";
-  const color = nameToColor(name || "U");
-  const initials = getInitials(name || "?");
-  if (image && !imgFailed) {
-    return (
-      <div className={`${dim} flex-shrink-0 overflow-hidden ${round} ring-2 ring-white/[0.08]`}>
-        <img
-          alt={name}
-          className="h-full w-full object-cover"
-          src={image}
-          onError={() => setImgFailed(true)}
-        />
-      </div>
-    );
-  }
-  return (
-    <div
-      className={`${dim} flex-shrink-0 ${round} flex items-center justify-center font-bold ${textSz} text-white ring-2 ring-white/[0.08]`}
-      style={{ backgroundColor: color }}
-    >
-      {initials}
-    </div>
-  );
-}
 
 /** Theme-aware settings surfaces (light + dark). */
 const settingsSelectContent =
@@ -160,6 +124,7 @@ interface ModernSettingsFormProps {
   connectedEmail?: string;
   oauthError?: string;
   gmailWarning?: boolean;
+  googleAccountLinkConfigured?: boolean;
   triggerSync?: boolean;
   userEmail: string;
   userId: string;
@@ -529,6 +494,7 @@ export function ModernSettingsForm({
   connectedEmail,
   oauthError,
   gmailWarning,
+  googleAccountLinkConfigured = true,
   triggerSync,
   userId,
   userEmail,
@@ -691,8 +657,11 @@ export function ModernSettingsForm({
   useEffect(() => {
     if (oauthError) {
       toast({
-        title: "Google connection failed",
-        description: oauthError,
+        title:
+          oauthError === "google_not_configured"
+            ? "Google linking unavailable"
+            : "Google connection failed",
+        description: describeGoogleOAuthError(oauthError),
         variant: "destructive",
       });
       window.history.replaceState({}, "", "/settings?section=accounts");
@@ -967,7 +936,27 @@ export function ModernSettingsForm({
     setSmtpServerUrl("");
   }
 
+  function warnGoogleAccountLinkUnavailable() {
+    toast({
+      title: "Google linking unavailable",
+      description: GOOGLE_ACCOUNT_LINK_SETUP_HINT,
+      variant: "destructive",
+    });
+  }
+
+  function navigateGoogleConnect(params: URLSearchParams) {
+    if (!googleAccountLinkConfigured) {
+      warnGoogleAccountLinkUnavailable();
+      return;
+    }
+    window.location.href = `/api/auth/google/connect?${params.toString()}`;
+  }
+
   function selectNewAccountType(option: AccountPickerOption) {
+    if (option === "google" && !googleAccountLinkConfigured) {
+      warnGoogleAccountLinkUnavailable();
+      return;
+    }
     if (option === "icloud") {
       setNewAccountType("caldav");
       setCalDavPreset("icloud");
@@ -1344,6 +1333,10 @@ export function ModernSettingsForm({
   }
 
   async function beginGoogleOAuth() {
+    if (!googleAccountLinkConfigured) {
+      warnGoogleAccountLinkUnavailable();
+      return;
+    }
     const email = editDraft.email?.trim();
     if (!email) {
       toast({
@@ -1370,7 +1363,7 @@ export function ModernSettingsForm({
       accountId: pendingId,
       label: pending.label,
     });
-    window.location.href = `/api/auth/google/connect?${params.toString()}`;
+    navigateGoogleConnect(params);
   }
 
   async function connectImapSibling(caldavAccount: Account, serverUrl: string) {
@@ -1615,7 +1608,8 @@ export function ModernSettingsForm({
               <button
                 type="button"
                 onClick={() => void beginGoogleOAuth()}
-                className="flex flex-1 items-center justify-center gap-1.5 h-8 rounded-lg bg-[#4285F4] text-xs font-medium text-white hover:bg-[#3b78e0] transition-colors"
+                disabled={!googleAccountLinkConfigured}
+                className="flex flex-1 items-center justify-center gap-1.5 h-8 rounded-lg bg-[#4285F4] text-xs font-medium text-white hover:bg-[#3b78e0] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -1808,7 +1802,7 @@ export function ModernSettingsForm({
               </p>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-border bg-muted/40 px-2.5 py-1.5 md:hidden">
-              <InitialsAvatar name={userName} image={userImage} size="sm" />
+              <UserIdentityAvatar name={userName} image={userImage} size="sm" />
               <div className="min-w-0">
                 <p className="max-w-[7rem] truncate font-medium text-[11px] text-foreground">
                   {userName}
@@ -1840,7 +1834,7 @@ export function ModernSettingsForm({
         {/* User Card */}
         <div className="hidden border-border border-t p-3 md:block">
           <div className="flex items-center gap-2.5 rounded-xl px-3 py-2">
-            <InitialsAvatar name={userName} image={userImage} size="sm" />
+            <UserIdentityAvatar name={userName} image={userImage} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium text-foreground text-xs">
                 {userName}
@@ -2206,7 +2200,7 @@ export function ModernSettingsForm({
 
               <div className="liquid-glass-subtle rounded-2xl p-4 md:p-5 space-y-4">
                 <div className="flex items-center gap-3">
-                  <InitialsAvatar name={displayName} image={userImage} size="lg" />
+                  <UserIdentityAvatar name={displayName} image={userImage} size="lg" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-xs text-foreground">{displayName}</p>
                     <p className="truncate text-[10px] text-muted-foreground">{userEmail}</p>
@@ -2273,6 +2267,12 @@ export function ModernSettingsForm({
                 <p className="mt-1 text-sm text-muted-foreground md:text-xs">
                   Connect email and calendar accounts for sync. No accounts means no email or calendar pull.
                 </p>
+                {!googleAccountLinkConfigured ? (
+                  <p className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-100/90">
+                    Google calendar and Gmail linking is not configured on this server.
+                    CalDAV and IMAP still work. {GOOGLE_ACCOUNT_LINK_SETUP_HINT}
+                  </p>
+                ) : null}
               </div>
 
               <div>
@@ -2298,12 +2298,20 @@ export function ModernSettingsForm({
                               Connected
                             </span>
                           ) : account.type === "google" ? (
-                            <a
-                              href={`/api/auth/google/connect?email=${encodeURIComponent(account.email)}&accountId=${encodeURIComponent(account.id)}`}
-                              className="flex items-center gap-1 rounded-lg bg-[#4285F4]/15 px-2 py-0.5 text-[10px] text-[#4285F4] hover:bg-[#4285F4]/25 transition-colors"
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const params = new URLSearchParams({
+                                  email: account.email,
+                                  accountId: account.id,
+                                });
+                                navigateGoogleConnect(params);
+                              }}
+                              disabled={!googleAccountLinkConfigured}
+                              className="flex items-center gap-1 rounded-lg bg-[#4285F4]/15 px-2 py-0.5 text-[10px] text-[#4285F4] hover:bg-[#4285F4]/25 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               Connect
-                            </a>
+                            </button>
                           ) : account.type === "caldav" ? (
                             <button
                               type="button"
@@ -2373,8 +2381,11 @@ export function ModernSettingsForm({
                         <button
                           key={option.id}
                           type="button"
+                          disabled={
+                            option.id === "google" && !googleAccountLinkConfigured
+                          }
                           onClick={() => selectNewAccountType(option.id)}
-                          className="rounded-xl border border-border bg-muted/40 py-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground/90 transition-colors"
+                          className="rounded-xl border border-border bg-muted/40 py-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground/90 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           {option.label}
                         </button>

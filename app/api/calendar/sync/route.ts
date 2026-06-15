@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isGoogleSignInUser } from "@/lib/auth-provider";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { syncWithGoogleCalendar } from "@/lib/calendar";
 import { hasAnyCalendarLinked } from "@/lib/google-accounts-sync";
@@ -47,7 +48,12 @@ export async function POST(request: NextRequest) {
     }
 
     let result;
-    if (tokens?.accessToken && tokens?.refreshToken) {
+    const googleLogin = await isGoogleSignInUser(user.id);
+    if (
+      googleLogin &&
+      tokens?.accessToken &&
+      tokens?.refreshToken
+    ) {
       const expiresAt = tokens.accessTokenExpiresAt
         ? Math.floor(tokens.accessTokenExpiresAt / 1000)
         : 0;
@@ -69,7 +75,12 @@ export async function POST(request: NextRequest) {
       result = await syncWithGoogleCalendar(user.id, undefined, { pullOnly });
     }
 
-    if (result.success && tokens?.accessToken && tokens?.refreshToken) {
+    if (
+      result.success &&
+      googleLogin &&
+      tokens?.accessToken &&
+      tokens?.refreshToken
+    ) {
       try {
         const expiresAt = tokens.accessTokenExpiresAt
           ? Math.floor(tokens.accessTokenExpiresAt / 1000)

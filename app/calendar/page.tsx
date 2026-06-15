@@ -3,8 +3,10 @@ import { Suspense } from "react";
 import { ModernCalendarView } from "@/components/modern-calendar-view";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { getUserPreferences } from "@/lib/auth";
+import { getAuthProviderForUser } from "@/lib/auth-provider";
 import { getEvents } from "@/lib/calendar";
 import { parseEventSectionOrder } from "@/lib/event-detail-layout";
+import { repairUserAccounts } from "@/lib/repair-connected-accounts";
 import type { CalendarEvent } from "@/types/calendar";
 
 export default async function CalendarPage() {
@@ -15,6 +17,8 @@ export default async function CalendarPage() {
   if (!user?.id) {
     redirect("/");
   }
+
+  await repairUserAccounts(user.id);
 
   const today = new Date();
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -30,6 +34,13 @@ export default async function CalendarPage() {
   const eventSectionOrder = parseEventSectionOrder(
     preferences.eventSectionOrder,
   );
+
+  const displayName =
+    typeof preferences.displayName === "string" && preferences.displayName.trim()
+      ? preferences.displayName.trim()
+      : user.name;
+
+  const authProvider = await getAuthProviderForUser(user.id);
 
   const persona =
     process.env.NEXT_PUBLIC_DEVICE_NAME === "europa" ? "Pierre" : "Bertrand";
@@ -50,8 +61,8 @@ export default async function CalendarPage() {
           userEmail={user.email}
           userId={user.id}
           userImage={user.image ?? undefined}
-          userName={user.name}
-          userProvider="google"
+          userName={displayName}
+          userProvider={authProvider}
         />
       </Suspense>
     </div>

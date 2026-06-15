@@ -13,6 +13,7 @@ import {
   defaultCategories,
   deleteUserEvent,
   getGoogleAuth,
+  getUserRecord,
   getUserTimezone as getStoredUserTimezone,
   getUserEvent,
   listUserCategories,
@@ -28,6 +29,8 @@ import {
   updateGoogleCalendarEvent,
 } from "./google-calendar";
 import { pullAllCalendarAccounts } from "./google-accounts-sync";
+import { repairEventAccountEmailsIfNeeded } from "@/lib/repair-event-account-emails";
+import { isGoogleSignInUser } from "@/lib/auth-provider";
 
 export interface RecurrenceRule {
   byDay?: string[];
@@ -263,6 +266,9 @@ export async function getEvents(
   end: Date | string
 ): Promise<CalendarEvent[]> {
   try {
+    const user = await getUserRecord(userId);
+    await repairEventAccountEmailsIfNeeded(userId, user?.email ?? undefined);
+
     const rangeStart =
       typeof start === "string" ? parseISO(start) : new Date(start);
     const rangeEnd = typeof end === "string" ? parseISO(end) : new Date(end);
@@ -566,8 +572,9 @@ export async function searchEvents(
   });
 
   const userData = await getGoogleAuth(userId);
+  const googleLogin = await isGoogleSignInUser(userId);
   const hasGoogleCalendar =
-    userData?.provider === "google" &&
+    googleLogin &&
     userData?.accessToken &&
     userData?.refreshToken;
 
@@ -1062,19 +1069,19 @@ export async function syncWithGoogleCalendar(
   try {
     const userData = googleAuth
       ? {
-          provider: "google",
           accessToken: googleAuth.accessToken,
           refreshToken: googleAuth.refreshToken,
           expiresAt: googleAuth.expiresAt ?? 0,
         }
       : await getGoogleAuth(userId);
 
-    if (
-      !userData?.provider ||
-      userData.provider !== "google" ||
-      !userData.accessToken ||
-      !userData.refreshToken
-    ) {
+    const googleLogin = await isGoogleSignInUser(userId);
+    const hasPrimaryGoogle =
+      googleLogin &&
+      userData?.accessToken &&
+      userData?.refreshToken;
+
+    if (!hasPrimaryGoogle) {
       const linked = await pullAllCalendarAccounts(userId);
       if (linked.accounts === 0) {
         return {
@@ -1235,8 +1242,9 @@ export async function hasGoogleCalendarConnected(
   userId: string
 ): Promise<boolean> {
   const userData = await getGoogleAuth(userId);
+  const googleLogin = await isGoogleSignInUser(userId);
   return !!(
-    userData?.provider === "google" &&
+    googleLogin &&
     userData?.accessToken &&
     userData?.refreshToken
   );

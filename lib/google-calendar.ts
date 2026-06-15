@@ -15,6 +15,7 @@ import {
   upsertUserEvent,
   upsertUserRecord,
 } from "@/lib/store";
+import { isGoogleSignInUser } from "@/lib/auth-provider";
 
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const DEFAULT_CALENDAR_ID = "primary";
@@ -170,13 +171,16 @@ async function saveGoogleAuthTokens(params: {
   refreshToken?: string;
   userId: string;
 }) {
-  await upsertUserRecord({
+  const patch: Parameters<typeof upsertUserRecord>[0] = {
     userId: params.userId,
-    provider: "google",
     accessToken: params.accessToken,
     refreshToken: params.refreshToken,
     expiresAt: params.expiresAt ?? undefined,
-  });
+  };
+  if (await isGoogleSignInUser(params.userId)) {
+    patch.provider = "google";
+  }
+  await upsertUserRecord(patch);
 }
 
 /**
@@ -805,8 +809,9 @@ export async function hasGoogleCalendarConnected(
 ): Promise<boolean> {
   try {
     const userData = await getGoogleAuth(userId);
+    const googleLogin = await isGoogleSignInUser(userId);
     return !!(
-      userData?.provider === "google" &&
+      googleLogin &&
       userData?.accessToken &&
       userData?.refreshToken
     );
@@ -936,7 +941,7 @@ export async function ensureGoogleCalendarWatch(params: {
 
   await upsertUserRecord({
     userId,
-    provider: "google",
+    ...(await isGoogleSignInUser(userId) ? { provider: "google" as const } : {}),
     accessToken,
     refreshToken,
     expiresAt,
@@ -989,7 +994,7 @@ export async function syncGoogleCalendarEventsIncrementally(params: {
   };
 
   const persistSyncToken = async (nextSyncToken: string | undefined) => {
-    if (isPrimary) {
+    if (isPrimary && (await isGoogleSignInUser(userId))) {
       await upsertUserRecord({
         userId,
         provider: "google",

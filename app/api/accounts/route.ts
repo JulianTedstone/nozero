@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
+import { isGoogleAccountLinkConfigured } from "@/lib/google-oauth-config";
 import { removeCalDavCredentials } from "@/lib/caldav-credentials";
-import { removeImapCredentials } from "@/lib/imap-credentials";
 import {
   getConnectedAccounts,
   removeConnectedAccountMeta,
@@ -9,6 +9,8 @@ import {
   saveConnectedAccounts,
   type ConnectedAccountMeta,
 } from "@/lib/connected-accounts";
+import { removeImapCredentials } from "@/lib/imap-credentials";
+import { repairUserAccounts } from "@/lib/repair-connected-accounts";
 import { getUserRecord } from "@/lib/store";
 
 export async function GET() {
@@ -18,6 +20,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    await repairUserAccounts(user.id);
     const accounts = await getConnectedAccounts(user.id);
     const { listCalDavCredentials } = await import("@/lib/caldav-credentials");
     const { listImapCredentials } = await import("@/lib/imap-credentials");
@@ -42,6 +45,9 @@ export async function GET() {
     return NextResponse.json({
       primaryEmail: user.email,
       accounts: enriched,
+      capabilities: {
+        googleAccountLink: isGoogleAccountLinkConfigured(),
+      },
     });
   } catch (error) {
     console.error("[accounts GET]", error);
