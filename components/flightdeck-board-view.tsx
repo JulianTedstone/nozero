@@ -1,12 +1,11 @@
 "use client";
 
 import {
-  ChevronLeftIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   Loader2Icon,
   PlusIcon,
   RefreshCwIcon,
-  RepeatIcon,
   SearchIcon,
 } from "lucide-react";
 import {
@@ -42,10 +41,13 @@ interface FlightdeckBoardViewProps {
   tabBar?: ReactNode;
 }
 
+type GroupBy = "stream" | "owner" | "approver";
+type SortBy = "ticket" | "next-action-desc" | "priority-asc";
+
 const RECURRING_STATUS = "Recurring";
 const SCHEDULED_STATUS = "Scheduled";
 const COMPLETE_STATUS = "Complete";
-const EDGE_COLLAPSED_CLASS = "w-2.5 shrink-0";
+const PRIORITY_ORDER = ["p0", "p1", "p2", "p3", "p4", "p5"];
 
 function itemKey(item: FlightdeckBoardItem): string {
   return item.ref ?? item.id;
@@ -75,9 +77,14 @@ export function FlightdeckBoardView({
   const [newTaskOwner, setNewTaskOwner] = useState("Ted");
   const [captureBusy, setCaptureBusy] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
-  const [recurringExpanded, setRecurringExpanded] = useState(false);
-  const [scheduledExpanded, setScheduledExpanded] = useState(false);
-  const [completeExpanded, setCompleteExpanded] = useState(false);
+  const [groupBy, setGroupBy] = useState<GroupBy>("stream");
+  const [sortBy, setSortBy] = useState<SortBy>("ticket");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [hiddenStreams, setHiddenStreams] = useState<Record<string, boolean>>(
+    {}
+  );
 
   const owners = useMemo(
     () => payload?.owners ?? ["Ted", "Claude", "Bertrand"],
@@ -120,7 +127,7 @@ export function FlightdeckBoardView({
   );
 
   useEffect(() => {
-    void load();
+    load().catch(() => undefined);
   }, [load]);
 
   useEffect(() => {
@@ -150,6 +157,37 @@ export function FlightdeckBoardView({
     });
   }, [payload, search, streamFilter]);
 
+  const sortedItems = useMemo(() => {
+    const items = [...filteredItems];
+    items.sort((a, b) => {
+      if (sortBy === "next-action-desc") {
+        const at = a.nextAction ? Date.parse(a.nextAction) : 0;
+        const bt = b.nextAction ? Date.parse(b.nextAction) : 0;
+        if (at !== bt) {
+          return bt - at;
+        }
+      }
+      if (sortBy === "priority-asc") {
+        const ap = PRIORITY_ORDER.indexOf((a.priority ?? "").toLowerCase());
+        const bp = PRIORITY_ORDER.indexOf((b.priority ?? "").toLowerCase());
+        const ai = ap === -1 ? Number.POSITIVE_INFINITY : ap;
+        const bi = bp === -1 ? Number.POSITIVE_INFINITY : bp;
+        if (ai !== bi) {
+          return ai - bi;
+        }
+      }
+      const an =
+        Number((a.ref ?? "").replace(/[^\d]/g, "")) || Number.MAX_SAFE_INTEGER;
+      const bn =
+        Number((b.ref ?? "").replace(/[^\d]/g, "")) || Number.MAX_SAFE_INTEGER;
+      if (an !== bn) {
+        return an - bn;
+      }
+      return (a.title ?? "").localeCompare(b.title ?? "");
+    });
+    return items;
+  }, [filteredItems, sortBy]);
+
   const columns = useMemo(() => {
     if (!payload) {
       return [];
@@ -161,25 +199,6 @@ export function FlightdeckBoardView({
         col !== COMPLETE_STATUS
     );
   }, [payload]);
-
-  const scheduledCards = useMemo(
-    () => filteredItems.filter((item) => item.status === SCHEDULED_STATUS),
-    [filteredItems]
-  );
-
-  const completeCards = useMemo(
-    () => filteredItems.filter((item) => item.status === COMPLETE_STATUS),
-    [filteredItems]
-  );
-
-  const showScheduledColumn = useMemo(() => Boolean(payload), [payload]);
-
-  const showCompleteColumn = useMemo(() => Boolean(payload), [payload]);
-
-  const recurringCards = useMemo(
-    () => filteredItems.filter((item) => item.status === RECURRING_STATUS),
-    [filteredItems]
-  );
 
   const showRecurringColumn = useMemo(
     () =>
@@ -202,38 +221,6 @@ export function FlightdeckBoardView({
     }
     return slots;
   }, [columns, showRecurringColumn]);
-
-  useEffect(() => {
-    if (
-      selected?.status === RECURRING_STATUS &&
-      showRecurringColumn &&
-      !recurringExpanded
-    ) {
-      setRecurringExpanded(true);
-    }
-    if (
-      selected?.status === SCHEDULED_STATUS &&
-      showScheduledColumn &&
-      !scheduledExpanded
-    ) {
-      setScheduledExpanded(true);
-    }
-    if (
-      selected?.status === COMPLETE_STATUS &&
-      showCompleteColumn &&
-      !completeExpanded
-    ) {
-      setCompleteExpanded(true);
-    }
-  }, [
-    selected,
-    showRecurringColumn,
-    recurringExpanded,
-    showScheduledColumn,
-    scheduledExpanded,
-    showCompleteColumn,
-    completeExpanded,
-  ]);
 
   const syncSelection = useCallback(
     (
@@ -393,18 +380,13 @@ export function FlightdeckBoardView({
         <p className="line-clamp-3 text-[11px] text-white/75 leading-snug">
           {item.title}
         </p>
-        {item.body ? (
-          <p className="mt-1 line-clamp-2 text-[10px] text-white/35 leading-snug">
-            {item.body}
-          </p>
-        ) : null}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <InlineFieldPicker
             ariaLabel="Change stream"
             disabled={pickerDisabled}
             emptyLabel="Stream"
             onChange={(stream) => {
-              void updateFields(item, { Stream: stream });
+              updateFields(item, { Stream: stream }).catch(() => undefined);
             }}
             options={fieldOptions.streams}
             value={item.stream}
@@ -414,7 +396,7 @@ export function FlightdeckBoardView({
             disabled={pickerDisabled}
             emptyLabel="Owner"
             onChange={(owner) => {
-              void updateFields(item, { Owner: owner });
+              updateFields(item, { Owner: owner }).catch(() => undefined);
             }}
             options={owners.length ? owners : fieldOptions.owners}
             value={item.owner}
@@ -424,7 +406,7 @@ export function FlightdeckBoardView({
             disabled={pickerDisabled}
             emptyLabel="Approver"
             onChange={(approver) => {
-              void updateFields(item, { Approver: approver });
+              updateFields(item, { Approver: approver }).catch(() => undefined);
             }}
             options={fieldOptions.approvers}
             value={item.approver}
@@ -439,7 +421,7 @@ export function FlightdeckBoardView({
       className="flex w-[17rem] shrink-0 flex-col rounded-xl border border-white/[0.06] bg-white/[0.02]"
       key={status}
     >
-      <div className="flex items-center justify-between border-white/[0.06] border-b px-3 py-2">
+      <div className="flex items-center justify-between px-3 py-2">
         <h2 className="font-semibold text-[10px] text-white/40 uppercase tracking-wider">
           {status}
         </h2>
@@ -451,144 +433,33 @@ export function FlightdeckBoardView({
     </section>
   );
 
-  const renderEdgeColumn = (
-    status: string,
-    cards: FlightdeckBoardItem[],
-    expanded: boolean,
-    onExpandedChange: (next: boolean) => void,
-    edge: "left" | "right",
-    accentClass: string
-  ) => {
-    const collapseIcon =
-      edge === "left" ? (
-        <ChevronLeftIcon className="h-3.5 w-3.5" />
-      ) : (
-        <ChevronRightIcon className="h-3.5 w-3.5" />
-      );
-    const expandIcon =
-      edge === "left" ? (
-        <ChevronRightIcon className="h-3.5 w-3.5" />
-      ) : (
-        <ChevronLeftIcon className="h-3.5 w-3.5" />
-      );
-
-    if (expanded) {
-      return (
-        <section
-          className={cn(
-            "flex w-[17rem] shrink-0 flex-col rounded-xl border bg-white/[0.02]",
-            accentClass
-          )}
-          key={status}
-        >
-          <div className="flex items-center justify-between gap-1 border-white/[0.06] border-b px-3 py-2">
-            <h2 className="truncate font-semibold text-[10px] text-white/40 uppercase tracking-wider">
-              {status}
-            </h2>
-            <div className="flex shrink-0 items-center gap-1">
-              <span className="text-[10px] text-white/25">{cards.length}</span>
-              <button
-                aria-label={`Collapse ${status} column`}
-                className="rounded p-0.5 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
-                onClick={() => onExpandedChange(false)}
-                type="button"
-              >
-                {collapseIcon}
-              </button>
-            </div>
-          </div>
-          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-            {cards.map((item) => renderCard(item))}
-          </ul>
-        </section>
-      );
+  const groupedRows = useMemo(() => {
+    const map = new Map<string, FlightdeckBoardItem[]>();
+    for (const item of sortedItems) {
+      const raw =
+        groupBy === "stream"
+          ? item.stream
+          : groupBy === "owner"
+            ? item.owner
+            : item.approver;
+      const key = raw?.trim() || "Unassigned";
+      const existing = map.get(key) ?? [];
+      existing.push(item);
+      map.set(key, existing);
     }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [groupBy, sortedItems]);
 
-    return (
-      <button
-        aria-expanded={false}
-        aria-label={`Expand ${status} column (${cards.length} items)`}
-        className={cn(
-          "group relative flex self-stretch rounded-xl border transition-colors hover:bg-white/[0.04]",
-          EDGE_COLLAPSED_CLASS,
-          accentClass
-        )}
-        key={`${status}-collapsed`}
-        onClick={() => onExpandedChange(true)}
-        type="button"
-      >
-        <span
-          className={cn(
-            "pointer-events-none absolute top-1/2 -translate-y-1/2 rounded p-0.5 text-white/40 group-hover:text-white/65",
-            edge === "left" ? "left-0" : "right-0"
-          )}
-        >
-          {expandIcon}
-        </span>
-        <span className="sr-only">
-          {status} ({cards.length})
-        </span>
-      </button>
-    );
+  const toggleStreamVisibility = (stream: string) => {
+    setHiddenStreams((prev) => ({ ...prev, [stream]: !prev[stream] }));
   };
 
-  const renderRecurringColumn = () => {
-    if (recurringExpanded) {
-      return (
-        <section
-          className="flex w-[17rem] shrink-0 flex-col rounded-xl border border-violet-500/15 bg-violet-500/[0.03]"
-          key={RECURRING_STATUS}
-        >
-          <div className="flex items-center justify-between gap-1 border-white/[0.06] border-b px-3 py-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <RepeatIcon className="h-3 w-3 shrink-0 text-violet-400/70" />
-              <h2 className="truncate font-semibold text-[10px] text-violet-300/70 uppercase tracking-wider">
-                {RECURRING_STATUS}
-              </h2>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <span className="text-[10px] text-white/25">
-                {recurringCards.length}
-              </span>
-              <button
-                aria-label="Collapse recurring column"
-                className="rounded p-0.5 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
-                onClick={() => setRecurringExpanded(false)}
-                type="button"
-              >
-                <ChevronLeftIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-            {recurringCards.map((item) => renderCard(item))}
-          </ul>
-        </section>
-      );
+  const showOnlyStream = (stream: string) => {
+    const next: Record<string, boolean> = {};
+    for (const s of payload?.streams ?? []) {
+      next[s] = s !== stream;
     }
-
-    return (
-      <button
-        aria-expanded={false}
-        aria-label={`Expand ${RECURRING_STATUS} column (${recurringCards.length} items)`}
-        className="flex w-11 shrink-0 flex-col items-center gap-2 self-stretch rounded-xl border border-violet-500/15 bg-violet-500/[0.04] px-1 py-3 text-violet-300/60 transition-colors hover:border-violet-500/25 hover:bg-violet-500/[0.07]"
-        key={`${RECURRING_STATUS}-collapsed`}
-        onClick={() => setRecurringExpanded(true)}
-        type="button"
-      >
-        <RepeatIcon className="h-3.5 w-3.5 shrink-0" />
-        <span
-          className="font-semibold text-[9px] uppercase tracking-wider [writing-mode:vertical-rl]"
-          style={{ textOrientation: "mixed" }}
-        >
-          {RECURRING_STATUS}
-        </span>
-        <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[9px] text-violet-200/80 tabular-nums">
-          {recurringCards.length}
-        </span>
-        <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
-      </button>
-    );
+    setHiddenStreams(next);
   };
 
   return (
@@ -600,27 +471,6 @@ export function FlightdeckBoardView({
               {tabBar}
             </div>
           ) : null}
-          <div className="relative min-w-[10rem] flex-1">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
-            <input
-              className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-3 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search board…"
-              value={search}
-            />
-          </div>
-          <select
-            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
-            onChange={(e) => setStreamFilter(e.target.value || null)}
-            value={streamFilter ?? ""}
-          >
-            <option value="">All streams</option>
-            {(payload?.streams ?? []).map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
           <Button
             className="h-8 gap-1.5 rounded-xl bg-white/95 font-medium text-[11px] text-black hover:bg-white"
             disabled={!actionsEnabled}
@@ -639,11 +489,50 @@ export function FlightdeckBoardView({
             <PlusIcon className="h-3.5 w-3.5" />
             New Task
           </Button>
+          <div className="relative min-w-[10rem] flex-1">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
+            <input
+              className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-3 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search board…"
+              value={search}
+            />
+          </div>
+          <select
+            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
+            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+            value={groupBy}
+          >
+            <option value="stream">Group by: Stream</option>
+            <option value="owner">Group by: Owner</option>
+            <option value="approver">Group by: Approver</option>
+          </select>
+          <select
+            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            value={sortBy}
+          >
+            <option value="ticket">Sort: Ticket No</option>
+            <option value="next-action-desc">Sort: Next Action (desc)</option>
+            <option value="priority-asc">Sort: Priority (asc)</option>
+          </select>
+          <select
+            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
+            onChange={(e) => setStreamFilter(e.target.value || null)}
+            value={streamFilter ?? ""}
+          >
+            <option value="">All streams</option>
+            {(payload?.streams ?? []).map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
           <Button
             className="h-8 gap-1.5 border-white/[0.08] bg-white/[0.04] text-[11px] text-white/60"
             disabled={refreshing}
             onClick={() => {
-              void load(true);
+              load(true).catch(() => undefined);
             }}
             size="sm"
             variant="outline"
@@ -674,37 +563,86 @@ export function FlightdeckBoardView({
           </div>
         ) : (
           <div className="flex h-full min-w-0 gap-2 p-4 md:p-6">
-            {showScheduledColumn
-              ? renderEdgeColumn(
-                  SCHEDULED_STATUS,
-                  scheduledCards,
-                  scheduledExpanded,
-                  setScheduledExpanded,
-                  "left",
-                  "border-sky-500/15 bg-sky-500/[0.03]"
-                )
-              : null}
-            <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto">
-              {columnSlots.map((slot) => {
-                if (slot.kind === "recurring") {
-                  return renderRecurringColumn();
+            <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto">
+              {groupedRows.map(([groupLabel, groupItems]) => {
+                if (groupBy === "stream" && hiddenStreams[groupLabel]) {
+                  return null;
                 }
-                const cards = filteredItems.filter(
-                  (item) => item.status === slot.status
+                const groupExpanded = expandedGroups[groupLabel] ?? true;
+                return (
+                  <section
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.015]"
+                    key={groupLabel}
+                  >
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          aria-label={
+                            groupExpanded ? "Collapse lane" : "Expand lane"
+                          }
+                          className="rounded p-0.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70"
+                          onClick={() =>
+                            setExpandedGroups((prev) => ({
+                              ...prev,
+                              [groupLabel]: !groupExpanded,
+                            }))
+                          }
+                          type="button"
+                        >
+                          {groupExpanded ? (
+                            <ChevronDownIcon className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRightIcon className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        {groupBy === "stream" ? (
+                          <input
+                            checked={!hiddenStreams[groupLabel]}
+                            className="h-3.5 w-3.5 rounded border-white/[0.2] bg-transparent"
+                            onChange={() => toggleStreamVisibility(groupLabel)}
+                            type="checkbox"
+                          />
+                        ) : null}
+                        <p className="font-medium text-[10px] text-white/55 uppercase tracking-wider">
+                          {groupLabel}
+                        </p>
+                        <span className="text-[10px] text-white/30">
+                          {groupItems.length}
+                        </span>
+                      </div>
+                      {groupBy === "stream" ? (
+                        <button
+                          className="rounded border border-white/[0.08] px-2 py-0.5 text-[10px] text-white/45 hover:bg-white/[0.05] hover:text-white/65"
+                          onClick={() => showOnlyStream(groupLabel)}
+                          type="button"
+                        >
+                          Hide Others
+                        </button>
+                      ) : null}
+                    </div>
+                    {groupExpanded ? (
+                      <div className="flex min-w-0 gap-3 overflow-x-auto px-2 pb-2">
+                        {columnSlots.map((slot) => {
+                          if (slot.kind === "recurring") {
+                            const cards = groupItems.filter(
+                              (item) => item.status === RECURRING_STATUS
+                            );
+                            if (cards.length === 0) {
+                              return null;
+                            }
+                            return renderStatusColumn(RECURRING_STATUS, cards);
+                          }
+                          const cards = groupItems.filter(
+                            (item) => item.status === slot.status
+                          );
+                          return renderStatusColumn(slot.status, cards);
+                        })}
+                      </div>
+                    ) : null}
+                  </section>
                 );
-                return renderStatusColumn(slot.status, cards);
               })}
             </div>
-            {showCompleteColumn
-              ? renderEdgeColumn(
-                  COMPLETE_STATUS,
-                  completeCards,
-                  completeExpanded,
-                  setCompleteExpanded,
-                  "right",
-                  "border-emerald-500/15 bg-emerald-500/[0.03]"
-                )
-              : null}
           </div>
         )}
 
@@ -801,7 +739,7 @@ export function FlightdeckBoardView({
               className="bg-white/95 text-black hover:bg-white"
               disabled={captureBusy}
               onClick={() => {
-                void captureTask();
+                captureTask().catch(() => undefined);
               }}
               type="button"
             >

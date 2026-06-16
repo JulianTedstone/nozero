@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { ExternalLinkIcon, Loader2Icon } from "lucide-react";
+import { ChevronLeftIcon, ExternalLinkIcon, Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -123,6 +123,7 @@ export function FlightdeckTaskPanel({
   const [commentDraft, setCommentDraft] = useState("");
   const [tagOwner, setTagOwner] = useState(false);
   const [commentBusy, setCommentBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const itemRef = item.ref ?? item.id;
   const fieldsDisabled = !actionsEnabled || actionBusy;
@@ -160,7 +161,7 @@ export function FlightdeckTaskPanel({
   useEffect(() => {
     setCommentDraft("");
     setTagOwner(false);
-    void loadComments();
+    loadComments().catch(() => undefined);
   }, [loadComments]);
 
   const mention = useMemo(() => ownerMention(item.owner), [item.owner]);
@@ -185,7 +186,7 @@ export function FlightdeckTaskPanel({
   }, [tagOwner, mention]);
 
   const patchField = (fields: Record<string, string>) => {
-    void onFieldsChange(item, fields);
+    onFieldsChange(item, fields).catch(() => undefined);
   };
 
   const postComment = async () => {
@@ -221,8 +222,13 @@ export function FlightdeckTaskPanel({
   };
 
   return (
-    <aside className="absolute top-0 right-0 flex h-full w-full max-w-md flex-col border-white/[0.08] border-l bg-[#0d0d0f]/95 backdrop-blur-md md:w-[24rem]">
-      <div className="flex items-start justify-between gap-2 border-white/[0.06] border-b px-4 py-3">
+    <aside
+      className={cn(
+        "absolute top-0 right-0 z-20 flex h-full w-full flex-col border-white/[0.08] border-l bg-[#0d0d0f]/95 backdrop-blur-md",
+        expanded ? "md:w-[50vw] md:max-w-[50vw]" : "md:w-[24rem] md:max-w-md"
+      )}
+    >
+      <div className="flex items-start justify-between gap-2 px-4 py-3">
         <div className="min-w-0">
           <p className="text-[10px] text-white/30">
             #{item.ref ?? "draft"} · {item.status}
@@ -231,13 +237,28 @@ export function FlightdeckTaskPanel({
             {item.title}
           </h3>
         </div>
-        <button
-          className="rounded-lg p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
-          onClick={onClose}
-          type="button"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className="rounded-lg p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            onClick={() => setExpanded((prev) => !prev)}
+            title={expanded ? "Shrink panel" : "Expand panel"}
+            type="button"
+          >
+            <ChevronLeftIcon
+              className={cn(
+                "h-4 w-4 transition-transform",
+                expanded && "rotate-180"
+              )}
+            />
+          </button>
+          <button
+            className="rounded-lg p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            onClick={onClose}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
@@ -248,14 +269,6 @@ export function FlightdeckTaskPanel({
         ) : null}
 
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <DetailSelect
-            disabled={fieldsDisabled}
-            id="fd-stream"
-            label="Stream"
-            onChange={(stream) => patchField({ Stream: stream })}
-            options={fieldOptions.streams}
-            value={item.stream}
-          />
           <DetailSelect
             disabled={fieldsDisabled}
             id="fd-owner"
@@ -282,13 +295,31 @@ export function FlightdeckTaskPanel({
           />
           <DetailSelect
             disabled={fieldsDisabled}
+            id="fd-stream"
+            label="Stream"
+            onChange={(stream) => patchField({ Stream: stream })}
+            options={fieldOptions.streams}
+            value={item.stream}
+          />
+          <DetailSelect
+            disabled={fieldsDisabled}
             id="fd-priority"
             label="Priority"
             onChange={(priority) => patchField({ Priority: priority })}
             options={fieldOptions.priorities}
             value={item.priority}
           />
-          <div className="space-y-1 sm:col-span-2">
+          <div className="space-y-1">
+            <Label className="text-[10px] text-white/30">Next Action</Label>
+            <DatePicker
+              disabled={fieldsDisabled}
+              key={`${itemRef}-next-action`}
+              onChange={(date) => patchField({ "Next Action": date })}
+              triggerClassName="h-8 w-full justify-start border-white/[0.08] bg-white/[0.03] px-2 text-[11px]"
+              value={item.nextAction ?? undefined}
+            />
+          </div>
+          <div className="space-y-1">
             <Label
               className="text-[10px] text-white/30"
               htmlFor="fd-recurrence"
@@ -308,16 +339,6 @@ export function FlightdeckTaskPanel({
                 }
               }}
               placeholder="e.g. weekly Monday"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] text-white/30">Next Action</Label>
-            <DatePicker
-              disabled={fieldsDisabled}
-              key={`${itemRef}-next-action`}
-              onChange={(date) => patchField({ "Next Action": date })}
-              triggerClassName="h-8 w-full justify-start border-white/[0.08] bg-white/[0.03] px-2 text-[11px]"
-              value={item.nextAction ?? undefined}
             />
           </div>
           <div className="space-y-1">
@@ -344,7 +365,7 @@ export function FlightdeckTaskPanel({
           </div>
         </div>
 
-        <div className="space-y-2 border-white/[0.06] border-t pt-3">
+        <div className="space-y-2 pt-3">
           <p className="text-[10px] text-white/30 uppercase tracking-wider">
             Comments
           </p>
@@ -413,7 +434,7 @@ export function FlightdeckTaskPanel({
                 <Button
                   className="h-7 bg-white/90 text-[10px] text-black hover:bg-white"
                   disabled={commentBusy || !commentDraft.trim()}
-                  onClick={() => void postComment()}
+                  onClick={() => postComment().catch(() => undefined)}
                   size="sm"
                   type="button"
                 >
@@ -443,7 +464,7 @@ export function FlightdeckTaskPanel({
               className="h-7 border-white/[0.08] bg-white/[0.04] text-[10px] text-white/65 capitalize"
               disabled={actionBusy || !actionsEnabled}
               key={verb}
-              onClick={() => void onRunAction(verb)}
+              onClick={() => onRunAction(verb).catch(() => undefined)}
               size="sm"
               variant="outline"
             >
