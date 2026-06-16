@@ -3,7 +3,10 @@
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  GripVerticalIcon,
   Loader2Icon,
+  PinIcon,
+  PinOffIcon,
   PlusIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -29,6 +32,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DEFAULT_FLIGHTDECK_FIELD_OPTIONS } from "@/lib/flightdeck-field-options";
+import {
+  mergeStreamOrder,
+  readFlightdeckBoardPrefs,
+  writeFlightdeckBoardPrefs,
+} from "@/lib/flightdeck-board-preferences";
+import {
+  readFlightdeckBoardMirror,
+  writeFlightdeckBoardMirror,
+} from "@/lib/local-mirror/db";
 import { cn } from "@/lib/utils";
 import type {
   FlightdeckBoardItem,
@@ -38,7 +50,9 @@ import type {
 
 interface FlightdeckBoardViewProps {
   initialStream?: string | null;
+  mirrorVersion?: number;
   tabBar?: ReactNode;
+  userId?: string;
 }
 
 type GroupBy = "stream" | "owner" | "approver";
@@ -48,6 +62,36 @@ const RECURRING_STATUS = "Recurring";
 const SCHEDULED_STATUS = "Scheduled";
 const COMPLETE_STATUS = "Complete";
 const PRIORITY_ORDER = ["p0", "p1", "p2", "p3", "p4", "p5"];
+const COLUMN_WIDTH_CLASS = "w-[17rem]";
+
+type ColumnSlot =
+  | { kind: "status"; status: string }
+  | { kind: "recurring" };
+
+function columnCounts(
+  groupItems: FlightdeckBoardItem[],
+  slots: ColumnSlot[],
+): { key: string; label: string; count: number }[] {
+  return slots.map((slot) => {
+    if (slot.kind === "recurring") {
+      return {
+        key: RECURRING_STATUS,
+        label: RECURRING_STATUS,
+        count: groupItems.filter((item) => item.status === RECURRING_STATUS)
+          .length,
+      };
+    }
+    return {
+      key: slot.status,
+      label: slot.status,
+      count: groupItems.filter((item) => item.status === slot.status).length,
+    };
+  });
+}
+
+function formatColumnTotal(label: string, count: number): string {
+  return `${count} (${label.toLowerCase()})`;
+}
 
 function itemKey(item: FlightdeckBoardItem): string {
   return item.ref ?? item.id;
@@ -55,7 +99,9 @@ function itemKey(item: FlightdeckBoardItem): string {
 
 export function FlightdeckBoardView({
   initialStream = null,
+  mirrorVersion = 0,
   tabBar,
+  userId,
 }: FlightdeckBoardViewProps) {
   const [payload, setPayload] = useState<FlightdeckBoardPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,9 +128,24 @@ export function FlightdeckBoardView({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
     {}
   );
-  const [hiddenStreams, setHiddenStreams] = useState<Record<string, boolean>>(
-    {}
+  const [pinnedStreams, setPinnedStreams] = useState<string[]>(
+    () => readFlightdeckBoardPrefs().pinnedStreams,
   );
+  const [streamOrder, setStreamOrder] = useState<string[]>(
+    () => readFlightdeckBoardPrefs().streamOrder,
+  );
+  const [hiddenStreams, setHiddenStreams] = useState<Record<string, boolean>>(
+    () => readFlightdeckBoardPrefs().hiddenStreams,
+  );
+  const [dragStream, setDragStream] = useState<string | null>(null);
+
+  useEffect(() => {
+    writeFlightdeckBoardPrefs({
+      pinnedStreams,
+      streamOrder,
+      hiddenStreams,
+    });
+  }, [pinnedStreams, streamOrder, hiddenStreams]);
 
   const owners = useMemo(
     () => payload?.owners ?? ["Ted", "Claude", "Bertrand"],
@@ -97,38 +158,76 @@ export function FlightdeckBoardView({
   );
 
   const load = useCallback(
-    async (silent = false): Promise<FlightdeckBoardPayload | null> => {
+    async (opts?: {
+      silent?: boolean;
+      fetchNetwork?: boolean;
+    }): Promise<FlightdeckBoardPayload | null> => {
+      const silent = opts?.silent ?? false;
+      const fetchNetwork = opts?.fetchNetwork !== false;
+
       if (silent) {
         setRefreshing(true);
       } else {
         setLoading(true);
       }
       setError(null);
+
       try {
+        if (userId) {
+          const cached = await readFlightdeckBoardMirror(userId);
+          if (cached) {
+            setPayload(cached);
+            if (!silent) {
+              setLoading(false);
+            }
+          }
+        }
+
+        if (!fetchNetwork) {
+          return userId ? await readFlightdeckBoardMirror(userId) : null;
+        }
+
+        if (!navigator.onLine) {
+          return userId ? await readFlightdeckBoardMirror(userId) : null;
+        }
+
         const res = await fetch("/api/flightdeck/board");
         if (!res.ok) {
           throw new Error(`Board load failed (${res.status})`);
         }
         const data = (await res.json()) as FlightdeckBoardPayload;
+        if (userId) {
+          await writeFlightdeckBoardMirror(userId, data);
+        }
         setPayload(data);
         if (data.error && data.items.length === 0) {
           setError(data.error);
         }
         return data;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load board");
-        return null;
+        const cached = userId ? await readFlightdeckBoardMirror(userId) : null;
+        if (!cached) {
+          setError(err instanceof Error ? err.message : "Failed to load board");
+        }
+        return cached;
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    []
+    [userId],
   );
 
   useEffect(() => {
     load().catch(() => undefined);
   }, [load]);
+
+  useEffect(() => {
+    if (!userId || mirrorVersion === 0) {
+      return;
+    }
+    load({ silent: true, fetchNetwork: false }).catch(() => undefined);
+  }, [load, mirrorVersion, userId]);
 
   useEffect(() => {
     setStreamFilter(initialStream ?? null);
@@ -206,8 +305,8 @@ export function FlightdeckBoardView({
     [payload?.items]
   );
 
-  const columnSlots = useMemo(() => {
-    type Slot = { kind: "status"; status: string } | { kind: "recurring" };
+  const columnSlots = useMemo((): ColumnSlot[] => {
+    type Slot = ColumnSlot;
 
     const slots: Slot[] = [];
     for (const status of columns) {
@@ -256,7 +355,7 @@ export function FlightdeckBoardView({
       if (!res.ok) {
         throw new Error(data.error ?? "Action failed");
       }
-      const refreshed = await load(true);
+      const refreshed = await load({ silent: true });
       syncSelection(refreshed, selected);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Action failed");
@@ -287,7 +386,7 @@ export function FlightdeckBoardView({
       if (!res.ok) {
         throw new Error(data.error ?? "Field update failed");
       }
-      const refreshed = await load(true);
+      const refreshed = await load({ silent: true });
       syncSelection(refreshed, item);
     } catch (err) {
       setActionError(
@@ -343,7 +442,7 @@ export function FlightdeckBoardView({
       setNewTaskOpen(false);
       setNewTaskTitle("");
       setNewTaskBody("");
-      const refreshed = await load(true);
+      const refreshed = await load({ silent: true });
       if (refreshed && data.ref) {
         const created =
           refreshed.items.find((item) => item.ref === data.ref) ?? null;
@@ -417,20 +516,22 @@ export function FlightdeckBoardView({
   );
 
   const renderStatusColumn = (status: string, cards: FlightdeckBoardItem[]) => (
-    <section
-      className="flex w-[17rem] shrink-0 flex-col rounded-xl border border-white/[0.06] bg-white/[0.02]"
+    <div
+      className={cn("flex shrink-0 flex-col", COLUMN_WIDTH_CLASS)}
       key={status}
     >
-      <div className="flex items-center justify-between px-3 py-2">
-        <h2 className="font-semibold text-[10px] text-white/40 uppercase tracking-wider">
+      <div className="flex items-baseline justify-between gap-2 px-0.5 pb-1.5">
+        <h2 className="truncate font-medium text-[9px] text-white/35 uppercase tracking-wide">
           {status}
         </h2>
-        <span className="text-[10px] text-white/25">{cards.length}</span>
+        <span className="shrink-0 text-[9px] text-white/25 tabular-nums">
+          {cards.length}
+        </span>
       </div>
-      <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+      <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {cards.map((item) => renderCard(item))}
       </ul>
-    </section>
+    </div>
   );
 
   const groupedRows = useMemo(() => {
@@ -447,8 +548,23 @@ export function FlightdeckBoardView({
       existing.push(item);
       map.set(key, existing);
     }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [groupBy, sortedItems]);
+    let entries = [...map.entries()];
+    if (groupBy === "stream") {
+      const labels = entries.map(([label]) => label);
+      const order = mergeStreamOrder(streamOrder, labels);
+      entries.sort(([a], [b]) => {
+        const ai = order.indexOf(a);
+        const bi = order.indexOf(b);
+        return (
+          (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) -
+          (bi === -1 ? Number.MAX_SAFE_INTEGER : bi)
+        );
+      });
+    } else {
+      entries.sort(([a], [b]) => a.localeCompare(b));
+    }
+    return entries;
+  }, [groupBy, sortedItems, streamOrder]);
 
   const toggleStreamVisibility = (stream: string) => {
     setHiddenStreams((prev) => ({ ...prev, [stream]: !prev[stream] }));
@@ -462,9 +578,38 @@ export function FlightdeckBoardView({
     setHiddenStreams(next);
   };
 
+  const togglePinStream = (stream: string) => {
+    setPinnedStreams((prev) => {
+      if (prev.includes(stream)) {
+        return prev.filter((entry) => entry !== stream);
+      }
+      return [...prev, stream];
+    });
+    setExpandedGroups((prev) => ({ ...prev, [stream]: true }));
+  };
+
+  const reorderStream = (from: string, to: string) => {
+    if (from === to) {
+      return;
+    }
+    const labels = groupedRows.map(([label]) => label);
+    setStreamOrder((prev) => {
+      const order = mergeStreamOrder(prev, labels);
+      const fromIdx = order.indexOf(from);
+      const toIdx = order.indexOf(to);
+      if (fromIdx === -1 || toIdx === -1) {
+        return order;
+      }
+      const next = [...order];
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, from);
+      return next;
+    });
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 border-white/[0.06] border-b px-3 py-3 md:px-4">
+      <header className="shrink-0 px-3 py-3 md:px-4">
         <div className="flex flex-wrap items-center gap-2">
           {tabBar ? (
             <div className="w-full max-w-[260px] shrink-0 md:w-[260px]">
@@ -532,7 +677,7 @@ export function FlightdeckBoardView({
             className="h-8 gap-1.5 border-white/[0.08] bg-white/[0.04] text-[11px] text-white/60"
             disabled={refreshing}
             onClick={() => {
-              load(true).catch(() => undefined);
+              load({ silent: true }).catch(() => undefined);
             }}
             size="sm"
             variant="outline"
@@ -563,24 +708,49 @@ export function FlightdeckBoardView({
           </div>
         ) : (
           <div className="flex h-full min-w-0 gap-2 p-4 md:p-6">
-            <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto">
+            <div className="flex min-w-0 flex-1 flex-col divide-y divide-white/[0.06] overflow-y-auto">
               {groupedRows.map(([groupLabel, groupItems]) => {
                 if (groupBy === "stream" && hiddenStreams[groupLabel]) {
                   return null;
                 }
-                const groupExpanded = expandedGroups[groupLabel] ?? true;
+                const isPinned = pinnedStreams.includes(groupLabel);
+                const groupExpanded =
+                  isPinned || (expandedGroups[groupLabel] ?? false);
+                const counts = columnCounts(groupItems, columnSlots);
+                const totalsSummary = counts
+                  .filter((col) => col.count > 0)
+                  .map((col) => formatColumnTotal(col.label, col.count))
+                  .join(" › ");
+
                 return (
                   <section
-                    className="rounded-xl border border-white/[0.06] bg-white/[0.015]"
+                    className={cn(
+                      "group/section",
+                      dragStream === groupLabel && "bg-sky-500/[0.04]",
+                    )}
                     key={groupLabel}
+                    onDragOver={(event) => {
+                      if (groupBy !== "stream" || !dragStream) {
+                        return;
+                      }
+                      event.preventDefault();
+                    }}
+                    onDrop={(event) => {
+                      if (groupBy !== "stream" || !dragStream) {
+                        return;
+                      }
+                      event.preventDefault();
+                      reorderStream(dragStream, groupLabel);
+                      setDragStream(null);
+                    }}
                   >
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-stretch gap-2 py-2.5">
+                      <div className="flex w-[11rem] shrink-0 items-center gap-1.5">
                         <button
                           aria-label={
                             groupExpanded ? "Collapse lane" : "Expand lane"
                           }
-                          className="rounded p-0.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70"
+                          className="rounded p-0.5 text-white/35 hover:text-white/60"
                           onClick={() =>
                             setExpandedGroups((prev) => ({
                               ...prev,
@@ -603,25 +773,78 @@ export function FlightdeckBoardView({
                             type="checkbox"
                           />
                         ) : null}
-                        <p className="font-medium text-[10px] text-white/55 uppercase tracking-wider">
-                          {groupLabel}
-                        </p>
-                        <span className="text-[10px] text-white/30">
+                        <div className="min-w-0">
+                          <p className="truncate text-[11px] text-white/60 leading-tight">
+                            {groupLabel}
+                          </p>
+                          {totalsSummary ? (
+                            <p className="mt-0.5 truncate text-[9px] text-white/28">
+                              {totalsSummary}
+                            </p>
+                          ) : null}
+                        </div>
+                        <span className="shrink-0 text-[9px] text-white/28 tabular-nums">
                           {groupItems.length}
                         </span>
                       </div>
+
+                      <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto">
+                        {counts.map((col) => (
+                          <div
+                            className={cn(
+                              "shrink-0 px-1 text-center",
+                              COLUMN_WIDTH_CLASS,
+                            )}
+                            key={`${groupLabel}-${col.key}`}
+                          >
+                            <p className="text-[10px] text-white/45 tabular-nums">
+                              {col.count}
+                            </p>
+                            <p className="truncate text-[9px] text-white/25 uppercase tracking-wide">
+                              {col.label}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
                       {groupBy === "stream" ? (
-                        <button
-                          className="rounded border border-white/[0.08] px-2 py-0.5 text-[10px] text-white/45 hover:bg-white/[0.05] hover:text-white/65"
-                          onClick={() => showOnlyStream(groupLabel)}
-                          type="button"
-                        >
-                          Hide Others
-                        </button>
+                        <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-within/section:opacity-100">
+                          <button
+                            aria-label="Reorder stream"
+                            className="cursor-grab rounded p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60 active:cursor-grabbing"
+                            draggable
+                            onDragEnd={() => setDragStream(null)}
+                            onDragStart={() => setDragStream(groupLabel)}
+                            type="button"
+                          >
+                            <GripVerticalIcon className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            aria-label={
+                              isPinned ? "Unpin stream" : "Pin stream open"
+                            }
+                            className="rounded p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+                            onClick={() => togglePinStream(groupLabel)}
+                            type="button"
+                          >
+                            {isPinned ? (
+                              <PinOffIcon className="h-3.5 w-3.5" />
+                            ) : (
+                              <PinIcon className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          <button
+                            className="rounded px-2 py-0.5 text-[10px] text-white/40 hover:bg-white/[0.05] hover:text-white/65"
+                            onClick={() => showOnlyStream(groupLabel)}
+                            type="button"
+                          >
+                            Hide Others
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                     {groupExpanded ? (
-                      <div className="flex min-w-0 gap-3 overflow-x-auto px-2 pb-2">
+                      <div className="flex min-w-0 gap-3 overflow-x-auto pb-3">
                         {columnSlots.map((slot) => {
                           if (slot.kind === "recurring") {
                             const cards = groupItems.filter(

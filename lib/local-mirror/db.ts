@@ -5,9 +5,10 @@ import type {
   EmailThreadDetail,
   EmailThreadListItem,
 } from "@/types/email";
+import type { FlightdeckBoardPayload } from "@/types/flightdeck-board";
 
 const DB_NAME = "nozero-local-mirror";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export type MirrorMeta = {
   lastSyncAt: string | null;
@@ -41,25 +42,41 @@ type NozeroMirrorDb = DBSchema & {
     key: string;
     value: MirrorMeta;
   };
+  flightdeck_board: {
+    key: string;
+    value: FlightdeckBoardPayload;
+  };
+  flightdeck_meta: {
+    key: string;
+    value: MirrorMeta;
+  };
 };
+
+export type MirrorDomain = "calendar" | "email" | "flightdeck";
 
 let dbPromise: Promise<IDBPDatabase<NozeroMirrorDb>> | null = null;
 
 function getDb() {
   if (!dbPromise) {
     dbPromise = openDB<NozeroMirrorDb>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const calendarEvents = db.createObjectStore("calendar_events");
-        calendarEvents.createIndex("by_user", "userId");
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const calendarEvents = db.createObjectStore("calendar_events");
+          calendarEvents.createIndex("by_user", "userId");
 
-        db.createObjectStore("calendar_meta");
+          db.createObjectStore("calendar_meta");
 
-        const emailThreads = db.createObjectStore("email_threads");
-        emailThreads.createIndex("by_user", "accountEmail");
+          const emailThreads = db.createObjectStore("email_threads");
+          emailThreads.createIndex("by_user", "accountEmail");
 
-        db.createObjectStore("email_thread_details");
-        db.createObjectStore("email_accounts");
-        db.createObjectStore("email_meta");
+          db.createObjectStore("email_thread_details");
+          db.createObjectStore("email_accounts");
+          db.createObjectStore("email_meta");
+        }
+        if (oldVersion < 2) {
+          db.createObjectStore("flightdeck_board");
+          db.createObjectStore("flightdeck_meta");
+        }
       },
     });
   }
@@ -86,27 +103,46 @@ export function emailDetailKey(
   return `${userId}::${accountEmail.toLowerCase()}::${threadId}`;
 }
 
-export function metaKey(userId: string, domain: "calendar" | "email") {
+export function metaKey(userId: string, domain: MirrorDomain) {
   return `${userId}::${domain}`;
+}
+
+function metaStoreName(domain: MirrorDomain) {
+  if (domain === "calendar") return "calendar_meta";
+  if (domain === "email") return "email_meta";
+  return "flightdeck_meta";
 }
 
 export async function readMirrorMeta(
   userId: string,
-  domain: "calendar" | "email",
+  domain: MirrorDomain,
 ): Promise<MirrorMeta | null> {
   const db = await getDb();
-  const store = domain === "calendar" ? "calendar_meta" : "email_meta";
-  return (await db.get(store, metaKey(userId, domain))) ?? null;
+  return (await db.get(metaStoreName(domain), metaKey(userId, domain))) ?? null;
 }
 
 export async function writeMirrorMeta(
   userId: string,
-  domain: "calendar" | "email",
+  domain: MirrorDomain,
   meta: MirrorMeta,
 ): Promise<void> {
   const db = await getDb();
-  const store = domain === "calendar" ? "calendar_meta" : "email_meta";
-  await db.put(store, meta, metaKey(userId, domain));
+  await db.put(metaStoreName(domain), meta, metaKey(userId, domain));
+}
+
+export async function readFlightdeckBoardMirror(
+  userId: string,
+): Promise<FlightdeckBoardPayload | null> {
+  const db = await getDb();
+  return (await db.get("flightdeck_board", userId)) ?? null;
+}
+
+export async function writeFlightdeckBoardMirror(
+  userId: string,
+  payload: FlightdeckBoardPayload,
+): Promise<void> {
+  const db = await getDb();
+  await db.put("flightdeck_board", payload, userId);
 }
 
 export async function upsertCalendarEvents(

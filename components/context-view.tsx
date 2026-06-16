@@ -7,22 +7,141 @@ import {
   FilePlusIcon,
   SaveIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { ContextIcon } from "@/components/context-icon";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { CollapsibleSidebarSection } from "@/components/collapsible-sidebar-section";
 import {
   type EventContextNavigation,
   EventContextPanel,
 } from "@/components/event-context-panel";
-import { githubRepoUrl, inferBindingsForEmail } from "@/lib/context-accounts";
+import { ThreeColumnLayout } from "@/components/three-column-layout";
+import {
+  githubRepoUrl,
+  inferBindingsForEmail,
+  reposForStream,
+} from "@/lib/context-accounts";
 import { cn } from "@/lib/utils";
 import type { CalendarEvent } from "@/types/calendar";
+import type { ConnectedBundle } from "@/types/context-connected";
 import type { ContextFocus } from "@/types/context-focus";
+
+type FileTreeNode =
+  | { kind: "folder"; name: string; path: string; children: FileTreeNode[] }
+  | { kind: "file"; name: string; path: string };
+
+function buildFileTree(paths: string[]): FileTreeNode[] {
+  const insert = (
+    nodes: FileTreeNode[],
+    parts: string[],
+    fullPath: string,
+    prefix: string,
+  ) => {
+    const [head, ...rest] = parts;
+    if (!head) {
+      return;
+    }
+    if (rest.length === 0) {
+      nodes.push({ kind: "file", name: head, path: fullPath });
+      return;
+    }
+    const folderPath = prefix ? `${prefix}/${head}` : head;
+    let folder = nodes.find(
+      (node): node is Extract<FileTreeNode, { kind: "folder" }> =>
+        node.kind === "folder" && node.name === head,
+    );
+    if (!folder) {
+      folder = { kind: "folder", name: head, path: folderPath, children: [] };
+      nodes.push(folder);
+    }
+    insert(folder.children, rest, fullPath, folderPath);
+  };
+
+  const roots: FileTreeNode[] = [];
+  for (const path of [...paths].sort()) {
+    insert(roots, path.split("/"), path, "");
+  }
+  return roots;
+}
+
+function repoKeyFor(stream: string, fullName: string): string {
+  return `${stream}::${fullName}`;
+}
+
+function FileTreeList({
+  activePath,
+  depth,
+  nodes,
+  onSelectFile,
+  onToggleFolder,
+  openFolders,
+}: {
+  nodes: FileTreeNode[];
+  depth: number;
+  activePath: string | null;
+  openFolders: Record<string, boolean>;
+  onToggleFolder: (path: string) => void;
+  onSelectFile: (path: string) => void;
+}) {
+  return (
+    <>
+      {nodes.map((node) => {
+        if (node.kind === "folder") {
+          const expanded = openFolders[node.path] ?? depth < 1;
+          return (
+            <div key={node.path}>
+              <button
+                className="flex w-full items-center gap-1 rounded px-2 py-1 text-left text-[10px] text-white/45 hover:bg-white/[0.04]"
+                onClick={() => onToggleFolder(node.path)}
+                style={{ paddingLeft: 8 + depth * 10 }}
+                type="button"
+              >
+                {expanded ? (
+                  <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                ) : (
+                  <ChevronRightIcon className="h-3 w-3 shrink-0" />
+                )}
+                <span className="truncate">{node.name}</span>
+              </button>
+              {expanded ? (
+                <FileTreeList
+                  activePath={activePath}
+                  depth={depth + 1}
+                  nodes={node.children}
+                  onSelectFile={onSelectFile}
+                  onToggleFolder={onToggleFolder}
+                  openFolders={openFolders}
+                />
+              ) : null}
+            </div>
+          );
+        }
+        return (
+          <button
+            className={cn(
+              "block w-full truncate rounded px-2 py-1 text-left text-[10px]",
+              activePath === node.path
+                ? "bg-white/[0.07] text-white/75"
+                : "text-white/40 hover:bg-white/[0.04]"
+            )}
+            key={node.path}
+            onClick={() => onSelectFile(node.path)}
+            style={{ paddingLeft: 20 + depth * 10 }}
+            type="button"
+          >
+            {node.name}
+          </button>
+        );
+      })}
+    </>
+  );
+}
 
 interface ContextViewProps {
   focus: ContextFocus;
   navigation: EventContextNavigation;
   onFocusChange: (focus: ContextFocus) => void;
   recentMeetings?: CalendarEvent[];
+  sidebarFooter?: ReactNode;
+  tabBar?: ReactNode;
   userEmail?: string;
 }
 
@@ -32,14 +151,18 @@ export function ContextView({
   recentMeetings = [],
   onFocusChange,
   navigation,
+  sidebarFooter,
+  tabBar,
 }: ContextViewProps) {
   const bindings = userEmail ? inferBindingsForEmail(userEmail) : [];
-  const repos = bindings.flatMap((b) => b.repos);
   const bindingStreams = [...new Set(bindings.flatMap((b) => b.streams))];
   const [selectedStream, setSelectedStream] = useState<string | null>(
     bindingStreams[0] ?? null
   );
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
   const [openStreams, setOpenStreams] = useState<Record<string, boolean>>({});
+  const [openRepos, setOpenRepos] = useState<Record<string, boolean>>({});
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [workspace, setWorkspace] = useState<{
     streams: Record<
       string,
@@ -62,28 +185,8 @@ export function ContextView({
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [rightSections, setRightSections] = useState<Record<string, boolean>>({
-    updates: true,
-    crm: true,
-    tickets: true,
-    repo: true,
-    messages: true,
-    events: true,
-  });
-  const [tickets, setTickets] = useState<
-    Array<{ ref?: string; title: string; status: string }>
-  >([]);
-  const [messages, setMessages] = useState<
-    Array<{ id: string; subject: string; sender: string }>
-  >([]);
-  const [crm, setCrm] = useState<{
-    participants: Array<{
-      email: string;
-      name: string | null;
-      company: string | null;
-    }>;
-    deals: Array<{ name: string; stage: string | null }>;
-  }>({ participants: [], deals: [] });
+  const [connected, setConnected] = useState<ConnectedBundle | null>(null);
+  const [connectedLoading, setConnectedLoading] = useState(false);
 
   const streams = useMemo(() => {
     const fromWorkspace = Object.keys(workspace?.streams ?? {});
@@ -97,15 +200,48 @@ export function ContextView({
   );
 
   const selectedSummary = selectedStream
-    ? (workspace?.streams[selectedStream]?.summary ??
+    ? (connected?.summary ??
+      workspace?.streams[selectedStream]?.summary ??
       `Context for ${selectedStream}`)
     : "Select a stream to start.";
+
+  const crm = connected?.sections.crm ?? { participants: [], deals: [] };
+  const tickets = connected?.sections.tickets ?? [];
+  const messages = connected?.sections.messages ?? [];
+  const connectedEvents = connected?.sections.events ?? [];
+  const streamEvents =
+    connectedEvents.length > 0
+      ? connectedEvents
+      : recentMeetings.filter(
+          (event) =>
+            !selectedStream ||
+            (event.flightdeckStream ?? "").toLowerCase() ===
+              selectedStream.toLowerCase()
+        );
+  const workspaceUpdates = connected?.sections.updates?.length
+    ? connected.sections.updates
+    : (workspace?.updates ?? []).filter((update) =>
+        selectedStream ? update.stream === selectedStream : true
+      );
 
   useEffect(() => {
     if (!selectedStream && streams.length > 0) {
       setSelectedStream(streams[0]);
     }
   }, [selectedStream, streams]);
+
+  useEffect(() => {
+    if (!selectedStream) {
+      return;
+    }
+    const streamRepos = reposForStream(selectedStream, bindings);
+    if (
+      streamRepos.length > 0 &&
+      !streamRepos.some((repo) => repo.fullName === selectedRepo)
+    ) {
+      setSelectedRepo(streamRepos[0].fullName);
+    }
+  }, [bindings, selectedRepo, selectedStream]);
 
   useEffect(() => {
     fetch("/api/context/workspace")
@@ -118,64 +254,39 @@ export function ContextView({
 
   useEffect(() => {
     if (!selectedStream) {
+      setConnected(null);
       return;
     }
-    fetch("/api/flightdeck/board")
-      .then((res) => res.json())
-      .then((data) => {
-        const rows =
-          (data.items as Array<{
-            stream?: string;
-            ref?: string;
-            title: string;
-            status: string;
-          }>) ?? [];
-        setTickets(
-          rows
-            .filter(
-              (item) =>
-                (item.stream ?? "").toLowerCase() ===
-                selectedStream.toLowerCase()
-            )
-            .slice(0, 20)
-            .map((item) => ({
-              ref: item.ref,
-              title: item.title,
-              status: item.status,
-            }))
-        );
-      })
-      .catch(() => setTickets([]));
-
-    fetch(
-      `/api/email/threads?filter=all&limit=20&sync=false&stream=${encodeURIComponent(selectedStream)}`
-    )
-      .then((res) => res.json())
-      .then((data) => {
-        const rows =
-          (data.threads as Array<{
-            id: string;
-            subject: string;
-            sender: string;
-          }>) ?? [];
-        setMessages(rows.slice(0, 20));
-      })
-      .catch(() => setMessages([]));
-
-    fetch("/api/context/lookup", {
+    const controller = new AbortController();
+    setConnectedLoading(true);
+    fetch("/api/context/connected", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: selectedStream, participants: [] }),
+      signal: controller.signal,
+      body: JSON.stringify({
+        stream: selectedStream,
+        path: activePath,
+        repo: selectedRepo,
+      }),
     })
       .then((res) => res.json())
       .then((data) => {
-        setCrm({
-          participants: data.participants ?? [],
-          deals: data.deals ?? [],
-        });
+        if (!controller.signal.aborted) {
+          setConnected(data as ConnectedBundle);
+        }
       })
-      .catch(() => setCrm({ participants: [], deals: [] }));
-  }, [selectedStream]);
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setConnected(null);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setConnectedLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [activePath, selectedRepo, selectedStream]);
 
   useEffect(() => {
     const file = selectedFiles.find((entry) => entry.path === activePath);
@@ -246,28 +357,6 @@ export function ContextView({
     }
   };
 
-  const section = (key: string, title: string, body: React.ReactNode) => (
-    <section className="rounded-lg border border-white/[0.06] bg-white/[0.02]">
-      <button
-        className="flex w-full items-center justify-between px-3 py-2 text-left"
-        onClick={() =>
-          setRightSections((prev) => ({ ...prev, [key]: !prev[key] }))
-        }
-        type="button"
-      >
-        <span className="font-semibold text-[10px] text-white/35 uppercase tracking-wider">
-          {title}
-        </span>
-        {rightSections[key] ? (
-          <ChevronDownIcon className="h-3.5 w-3.5 text-white/40" />
-        ) : (
-          <ChevronRightIcon className="h-3.5 w-3.5 text-white/40" />
-        )}
-      </button>
-      {rightSections[key] ? <div className="px-3 pb-3">{body}</div> : null}
-    </section>
-  );
-
   if (focus.type === "meeting") {
     return (
       <EventContextPanel
@@ -279,254 +368,321 @@ export function ContextView({
     );
   }
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 px-4 py-4 md:px-6">
-        <div className="flex items-center gap-2">
-          <ContextIcon className="text-white/45" />
-          <h1 className="font-semibold text-sm text-white/85">Context</h1>
+  const streamsTree = (
+    <>
+      {tabBar ? (
+        <div className="shrink-0 space-y-3 border-white/[0.06] border-b p-3">
+          {tabBar}
         </div>
-      </header>
-      <div className="min-h-0 flex-1 gap-3 px-4 pb-4 md:flex md:px-6">
-        <aside className="flex min-h-0 w-full flex-col rounded-xl border border-white/[0.06] bg-white/[0.015] md:w-[22%]">
-          <div className="px-3 py-2">
-            <h2 className="font-semibold text-[10px] text-white/35 uppercase tracking-wider">
-              Streams
-            </h2>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-            {streams.map((stream) => {
-              const selected = selectedStream === stream;
-              const expanded = openStreams[stream] ?? selected;
-              const files = workspace?.streams[stream]?.files ?? [];
-              return (
-                <div className="mb-1 rounded-lg" key={stream}>
-                  <button
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px]",
-                      selected
-                        ? "bg-white/[0.08] text-white/80"
-                        : "text-white/50 hover:bg-white/[0.05]"
-                    )}
-                    onClick={() => {
-                      setSelectedStream(stream);
-                      setOpenStreams((prev) => ({
-                        ...prev,
-                        [stream]: !expanded,
-                      }));
-                    }}
-                    type="button"
-                  >
-                    <span className="truncate">{stream}</span>
-                    {expanded ? (
-                      <ChevronDownIcon className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronRightIcon className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                  {expanded ? (
-                    <div className="mt-1 ml-2 space-y-1 border-white/[0.06] border-l pl-2">
-                      {files.map((file) => (
+      ) : null}
+      <div className="px-3 py-2">
+        <h2 className="font-semibold text-[10px] text-white/35 uppercase tracking-wider">
+          Streams
+        </h2>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        {streams.map((stream) => {
+          const selected = selectedStream === stream;
+          const expanded = openStreams[stream] ?? selected;
+          const streamRepos = reposForStream(stream, bindings);
+          const files = workspace?.streams[stream]?.files ?? [];
+          const fileTree = buildFileTree(files.map((file) => file.path));
+          return (
+            <div className="mb-1 rounded-lg" key={stream}>
+              <button
+                className={cn(
+                  "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px]",
+                  selected
+                    ? "bg-white/[0.08] text-white/80"
+                    : "text-white/50 hover:bg-white/[0.05]"
+                )}
+                onClick={() => {
+                  setSelectedStream(stream);
+                  setOpenStreams((prev) => ({
+                    ...prev,
+                    [stream]: !expanded,
+                  }));
+                }}
+                type="button"
+              >
+                <span className="truncate">{stream}</span>
+                {expanded ? (
+                  <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
+                )}
+              </button>
+              {expanded ? (
+                <div className="mt-1 ml-2 space-y-1 border-white/[0.06] border-l pl-2">
+                  {streamRepos.map((repo) => {
+                    const key = repoKeyFor(stream, repo.fullName);
+                    const repoExpanded = openRepos[key] ?? selected;
+                    const repoSelected =
+                      selected && selectedRepo === repo.fullName;
+                    return (
+                      <div key={key}>
                         <button
                           className={cn(
-                            "block w-full truncate rounded px-2 py-1 text-left text-[10px]",
-                            selected && activePath === file.path
-                              ? "bg-white/[0.07] text-white/75"
-                              : "text-white/40 hover:bg-white/[0.04]"
+                            "flex w-full items-center justify-between rounded px-2 py-1 text-left text-[10px]",
+                            repoSelected
+                              ? "bg-white/[0.06] text-white/70"
+                              : "text-white/45 hover:bg-white/[0.04]"
                           )}
-                          key={file.path}
                           onClick={() => {
                             setSelectedStream(stream);
-                            setActivePath(file.path);
+                            setSelectedRepo(repo.fullName);
+                            setOpenRepos((prev) => ({
+                              ...prev,
+                              [key]: !repoExpanded,
+                            }));
                           }}
                           type="button"
                         >
-                          {file.path}
+                          <span className="truncate">{repo.name}</span>
+                          {repoExpanded ? (
+                            <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                          ) : (
+                            <ChevronRightIcon className="h-3 w-3 shrink-0" />
+                          )}
                         </button>
-                      ))}
-                      {selected && selectedStream === stream ? (
-                        <div className="flex items-center gap-1 px-1">
-                          <input
-                            className="h-6 min-w-0 flex-1 rounded border border-white/[0.08] bg-white/[0.03] px-2 text-[10px] text-white/70 outline-none"
-                            onChange={(event) =>
-                              setNewFilePath(event.target.value)
-                            }
-                            placeholder="folder/file.md"
-                            value={newFilePath}
-                          />
-                          <button
-                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] text-white/45 hover:bg-white/[0.05]"
-                            onClick={() => {
-                              addFile(newFilePath).catch(() => undefined);
-                            }}
-                            type="button"
-                          >
-                            <FilePlusIcon className="h-3 w-3" />
-                            Add
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
+                        {repoExpanded ? (
+                          <div className="mt-0.5 ml-2 space-y-0.5 border-white/[0.06] border-l pl-2">
+                            <FileTreeList
+                              activePath={
+                                selected && repoSelected ? activePath : null
+                              }
+                              depth={0}
+                              nodes={fileTree}
+                              onSelectFile={(path) => {
+                                setSelectedStream(stream);
+                                setSelectedRepo(repo.fullName);
+                                setActivePath(path);
+                              }}
+                              onToggleFolder={(path) =>
+                                setOpenFolders((prev) => ({
+                                  ...prev,
+                                  [path]: !(prev[path] ?? true),
+                                }))
+                              }
+                              openFolders={openFolders}
+                            />
+                            {selected && repoSelected ? (
+                              <div className="flex items-center gap-1 px-1 pt-1">
+                                <input
+                                  className="h-6 min-w-0 flex-1 rounded border border-white/[0.08] bg-white/[0.03] px-2 text-[10px] text-white/70 outline-none"
+                                  onChange={(event) =>
+                                    setNewFilePath(event.target.value)
+                                  }
+                                  placeholder="folder/file.md"
+                                  value={newFilePath}
+                                />
+                                <button
+                                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] text-white/45 hover:bg-white/[0.05]"
+                                  onClick={() => {
+                                    addFile(newFilePath).catch(() => undefined);
+                                  }}
+                                  type="button"
+                                >
+                                  <FilePlusIcon className="h-3 w-3" />
+                                  Add
+                                </button>
+                              </div>
+                            ) : null}
+                            <a
+                              className="block truncate px-2 py-0.5 text-[9px] text-white/25 hover:text-white/45"
+                              href={githubRepoUrl(repo.fullName)}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              {repo.fullName}
+                            </a>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        </aside>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      {sidebarFooter ? (
+        <div className="shrink-0 border-white/[0.06] border-t p-3">
+          {sidebarFooter}
+        </div>
+      ) : null}
+    </>
+  );
 
-        <main className="mt-3 flex min-h-0 w-full flex-col rounded-xl border border-white/[0.06] bg-white/[0.015] md:mt-0 md:w-[50%]">
-          <div className="flex items-center justify-between px-3 py-2">
-            <p className="truncate text-[11px] text-white/50">
-              {activePath ?? "Select a file"}
-            </p>
-            <button
-              className="inline-flex items-center gap-1 rounded border border-white/[0.08] px-2 py-1 text-[10px] text-white/60 hover:bg-white/[0.05] disabled:opacity-50"
-              disabled={!(dirty && activePath && selectedStream) || saving}
-              onClick={() => {
-                saveFile().catch(() => undefined);
-              }}
-              type="button"
-            >
-              <SaveIcon className="h-3 w-3" />
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 px-3 pb-3">
-            <textarea
-              className="h-full w-full resize-none rounded-lg border border-white/[0.08] bg-black/20 p-3 font-mono text-[12px] text-white/75 outline-none"
-              onChange={(event) => {
-                setEditorValue(event.target.value);
-                setDirty(true);
-              }}
-              placeholder="Select a context file to edit…"
-              value={editorValue}
-            />
-            {saveError ? (
-              <p className="mt-2 text-[10px] text-red-400/90">{saveError}</p>
-            ) : null}
-          </div>
-        </main>
+  const editorPanel = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-white/[0.06] border-b px-3 py-2">
+        <p className="min-w-0 truncate font-mono text-[11px] text-white/55">
+          {activePath
+            ? `${selectedRepo?.split("/")[1] ?? selectedStream ?? ""}/${activePath}`
+            : "Select a file"}
+        </p>
+        <button
+          className="inline-flex shrink-0 items-center gap-1 rounded border border-white/[0.08] px-2 py-1 text-[10px] text-white/60 hover:bg-white/[0.05] disabled:opacity-50"
+          disabled={!(dirty && activePath && selectedStream) || saving}
+          onClick={() => {
+            saveFile().catch(() => undefined);
+          }}
+          type="button"
+        >
+          <SaveIcon className="h-3 w-3" />
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+      <div className="relative min-h-0 flex-1 p-2">
+        <textarea
+          className="absolute inset-2 resize-none rounded-lg border border-white/[0.08] bg-black/25 p-3 font-mono text-[13px] text-white/80 leading-relaxed outline-none focus:border-white/[0.14]"
+          onChange={(event) => {
+            setEditorValue(event.target.value);
+            setDirty(true);
+          }}
+          placeholder="Select a context file to edit…"
+          value={editorValue}
+        />
+      </div>
+      {saveError ? (
+        <p className="shrink-0 px-3 pb-2 text-[10px] text-red-400/90">
+          {saveError}
+        </p>
+      ) : null}
+    </div>
+  );
 
-        <aside className="mt-3 flex min-h-0 w-full flex-col gap-2 overflow-y-auto rounded-xl border border-white/[0.06] bg-white/[0.015] p-2 md:mt-0 md:w-[28%]">
-          {section(
-            "summary",
-            "Context summary",
-            <p className="text-[11px] text-white/60 leading-relaxed">
-              {selectedSummary}
-            </p>
-          )}
-          {section(
-            "updates",
-            "Updates",
+  const connectedRail = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
+      <div className="shrink-0 px-3 py-2">
+        <h2 className="font-semibold text-[10px] text-white/35 uppercase tracking-wider">
+          Connected
+        </h2>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <CollapsibleSidebarSection className="border-t-0 pt-0" title="Summary">
+          <p className="text-[11px] text-white/60 leading-relaxed">
+            {connectedLoading ? "Loading…" : selectedSummary}
+          </p>
+        </CollapsibleSidebarSection>
+        <CollapsibleSidebarSection title="Updates">
+          <ul className="space-y-1">
+            {workspaceUpdates
+              .slice(0, 10)
+              .map((update) => (
+                <li
+                  className="text-[10px] text-white/45"
+                  key={`${update.stream}-${update.path}-${update.at}`}
+                >
+                  {update.action} · {update.path}
+                </li>
+              ))}
+          </ul>
+        </CollapsibleSidebarSection>
+        <CollapsibleSidebarSection title="CRM">
+          <div className="space-y-2">
             <ul className="space-y-1">
-              {(workspace?.updates ?? [])
-                .filter((update) =>
-                  selectedStream ? update.stream === selectedStream : true
-                )
-                .slice(0, 10)
-                .map((update) => (
-                  <li
-                    className="text-[10px] text-white/45"
-                    key={`${update.stream}-${update.path}-${update.at}`}
-                  >
-                    {update.action} · {update.path}
-                  </li>
-                ))}
+              {crm.participants.slice(0, 20).map((participant) => (
+                <li
+                  className="text-[10px] text-white/50"
+                  key={participant.email}
+                >
+                  {participant.name ?? participant.email}
+                  {participant.company ? ` · ${participant.company}` : ""}
+                </li>
+              ))}
             </ul>
-          )}
-          {section(
-            "crm",
-            "CRM",
-            <div className="space-y-2">
+            {crm.deals.length > 0 ? (
               <ul className="space-y-1">
-                {crm.participants.slice(0, 20).map((participant) => (
-                  <li
-                    className="text-[10px] text-white/50"
-                    key={participant.email}
-                  >
-                    {participant.name ?? participant.email}
-                    {participant.company ? ` · ${participant.company}` : ""}
+                {crm.deals.slice(0, 10).map((deal) => (
+                  <li className="text-[10px] text-white/40" key={deal.name}>
+                    {deal.name}
+                    {deal.stage ? ` · ${deal.stage}` : ""}
                   </li>
                 ))}
               </ul>
-              {crm.deals.length > 0 ? (
-                <ul className="space-y-1">
-                  {crm.deals.slice(0, 10).map((deal) => (
-                    <li className="text-[10px] text-white/40" key={deal.name}>
-                      {deal.name}
-                      {deal.stage ? ` · ${deal.stage}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          )}
-          {section(
-            "tickets",
-            "Tickets",
+            ) : null}
+          </div>
+        </CollapsibleSidebarSection>
+        <CollapsibleSidebarSection title="Tickets">
+          <ul className="space-y-1">
+            {tickets.slice(0, 20).map((ticket) => (
+              <li className="text-[10px] text-white/50" key={ticket.id}>
+                {ticket.status ? `${ticket.status} · ` : ""}
+                {ticket.title}
+              </li>
+            ))}
+          </ul>
+        </CollapsibleSidebarSection>
+        <CollapsibleSidebarSection title="Messages">
+          <ul className="space-y-1">
+            {messages.slice(0, 20).map((message) => (
+              <li className="text-[10px] text-white/50" key={message.id}>
+                {message.sender} · {message.subject}
+              </li>
+            ))}
+          </ul>
+        </CollapsibleSidebarSection>
+        {(connected?.sections.slack.length ?? 0) > 0 ? (
+          <CollapsibleSidebarSection title="Slack">
             <ul className="space-y-1">
-              {tickets.slice(0, 20).map((ticket) => (
-                <li
-                  className="text-[10px] text-white/50"
-                  key={`${ticket.ref ?? "x"}-${ticket.title}`}
+              {(connected?.sections.slack ?? []).slice(0, 12).map((item) => (
+                <li className="text-[10px] text-white/50" key={item.id}>
+                  {item.channelName ? `#${item.channelName} · ` : ""}
+                  {item.text}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleSidebarSection>
+        ) : null}
+        {(connected?.sections.ctxHits.length ?? 0) > 0 ? (
+          <CollapsibleSidebarSection title="Context">
+            <ul className="space-y-1">
+              {(connected?.sections.ctxHits ?? []).slice(0, 10).map((hit) => (
+                <li className="text-[10px] text-white/50" key={hit.id}>
+                  {hit.title}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleSidebarSection>
+        ) : null}
+        <CollapsibleSidebarSection title="Events">
+          <ul className="space-y-1">
+            {streamEvents.slice(0, 20).map((event) => (
+              <li className="text-[10px] text-white/50" key={event.id}>
+                <button
+                  className="w-full text-left hover:text-white/75"
+                  onClick={() => onFocusChange({ type: "meeting", event })}
+                  type="button"
                 >
-                  {ticket.ref ? `#${ticket.ref} ` : ""}
-                  {ticket.title}
-                </li>
-              ))}
-            </ul>
-          )}
-          {section(
-            "repo",
-            "Repo actions",
-            <ul className="space-y-1">
-              {repos.slice(0, 8).map((repo) => (
-                <li className="text-[10px] text-white/50" key={repo.fullName}>
-                  <a
-                    className="hover:text-white/70"
-                    href={githubRepoUrl(repo.fullName)}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    {repo.fullName}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-          {section(
-            "messages",
-            "Messages",
-            <ul className="space-y-1">
-              {messages.slice(0, 20).map((message) => (
-                <li className="text-[10px] text-white/50" key={message.id}>
-                  {message.sender} · {message.subject}
-                </li>
-              ))}
-            </ul>
-          )}
-          {section(
-            "events",
-            "Events",
-            <ul className="space-y-1">
-              {recentMeetings.slice(0, 20).map((event) => (
-                <li className="text-[10px] text-white/50" key={event.id}>
-                  <button
-                    className="w-full text-left hover:text-white/75"
-                    onClick={() => onFocusChange({ type: "meeting", event })}
-                    type="button"
-                  >
-                    {event.title || "Untitled"}
-                    {event.start
-                      ? ` · ${format(new Date(event.start), "d MMM HH:mm")}`
-                      : ""}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
+                  {event.title || "Untitled"}
+                  {event.start
+                    ? ` · ${format(new Date(event.start), "d MMM HH:mm")}`
+                    : ""}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </CollapsibleSidebarSection>
       </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col px-4 pt-3 pb-4 md:px-6 md:pt-4">
+      <ThreeColumnLayout
+        center={editorPanel}
+        className="min-h-0 flex-1"
+        layoutId="context"
+        left={
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
+            {streamsTree}
+          </div>
+        }
+        right={connectedRail}
+      />
     </div>
   );
 }

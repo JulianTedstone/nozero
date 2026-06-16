@@ -68,6 +68,7 @@ import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth-client";
 import { formatSyncAge } from "@/lib/format-sync-age";
 import { hydrateCalendarMirrorFromServer } from "@/lib/local-mirror/calendar-hydrate";
+import { hydrateFlightdeckMirrorFromServer } from "@/lib/local-mirror/flightdeck-hydrate";
 import {
   readCalendarEventsInRange,
   readMirrorMeta,
@@ -229,6 +230,7 @@ export function ModernCalendarView({
   const searchParams = useSearchParams();
   const [emailThreadId, setEmailThreadId] = useState<string | null>(null);
   const [emailMirrorVersion, setEmailMirrorVersion] = useState(0);
+  const [boardMirrorVersion, setBoardMirrorVersion] = useState(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
@@ -423,6 +425,7 @@ export function ModernCalendarView({
     enabled: isLoggedIn,
     onCalendarSynced: () => refreshEvents({ fetchNetwork: true }),
     onEmailSynced: () => setEmailMirrorVersion((v) => v + 1),
+    onBoardSynced: () => setBoardMirrorVersion((v) => v + 1),
   });
 
   useEffect(() => {
@@ -463,6 +466,8 @@ export function ModernCalendarView({
           setLastSyncedAt(new Date(hydratedMeta.lastSyncAt));
         }
         await refreshEvents({ fetchNetwork: false });
+        await hydrateFlightdeckMirrorFromServer(userId);
+        setBoardMirrorVersion((v) => v + 1);
       }
     })();
   }, [initialEvents, refreshEvents, userId]);
@@ -1582,30 +1587,6 @@ export function ModernCalendarView({
         </>
       )}
 
-      {activeTab === "context" && (
-        <div className="space-y-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-white/30">
-            Context
-          </p>
-          {contextFocus.type === "meeting" ? (
-            <button
-              className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-left text-[11px] text-white/55 hover:bg-white/[0.06]"
-              onClick={() => setContextFocus({ type: "none" })}
-              type="button"
-            >
-              <span className="block truncate font-medium text-white/70">
-                {contextFocus.event.title || "Meeting"}
-              </span>
-              <span className="text-white/30">Zoomed in — tap to overview</span>
-            </button>
-          ) : (
-            <p className="text-[11px] leading-relaxed text-white/25">
-              Open a meeting from Calendar or pick one in the main panel.
-            </p>
-          )}
-        </div>
-      )}
-
     </>
   );
 
@@ -1749,7 +1730,7 @@ export function ModernCalendarView({
       </AnimatePresence>
 
       {/* ── Desktop Sidebar ── */}
-      {activeTab !== "email" && activeTab !== "board" ? (
+      {activeTab !== "email" && activeTab !== "board" && activeTab !== "context" ? (
         <div className="hidden w-[260px] flex-shrink-0 flex-col overflow-hidden md:flex">
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {sidebarInner}
@@ -1915,12 +1896,16 @@ export function ModernCalendarView({
             navigation={contextNavigation}
             onFocusChange={setContextFocus}
             recentMeetings={recentContextMeetings}
+            sidebarFooter={sidebarUserFooter}
+            tabBar={appTabBar}
             userEmail={userEmail}
           />
         ) : activeTab === "board" ? (
           <FlightdeckBoardView
             initialStream={boardStreamFilter}
+            mirrorVersion={boardMirrorVersion}
             tabBar={appTabBar}
+            userId={userId}
           />
         ) : activeTab === "email" ? (
           <EmailView

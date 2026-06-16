@@ -3,6 +3,7 @@
 import { format, parseISO } from "date-fns";
 import { ChevronLeftIcon, ExternalLinkIcon, Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MarkdownContent } from "@/components/markdown-content";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-time-picker";
@@ -262,11 +263,7 @@ export function FlightdeckTaskPanel({
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        {item.body ? (
-          <p className="whitespace-pre-wrap text-[11px] text-white/45 leading-relaxed">
-            {item.body}
-          </p>
-        ) : null}
+        {item.body ? <MarkdownContent>{item.body}</MarkdownContent> : null}
 
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <DetailSelect
@@ -401,9 +398,11 @@ export function FlightdeckTaskPanel({
                   <p className="text-[10px] text-white/40">
                     {comment.author} · {formatCommentTime(comment.createdAt)}
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed">
-                    {comment.body}
-                  </p>
+                  <div className="mt-1">
+                    <MarkdownContent className="text-[11px]">
+                      {comment.body}
+                    </MarkdownContent>
+                  </div>
                 </div>
               </li>
             ))}

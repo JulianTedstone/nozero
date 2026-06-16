@@ -134,3 +134,41 @@ export function reposForAccount(
 export function githubRepoUrl(fullName: string): string {
   return `https://github.com/${fullName}`;
 }
+
+/** Connected context-message repos shown under each Flightdeck stream in the UI tree. */
+const STREAM_CONNECTED_REPOS: Record<string, string[]> = {
+  "npt-nopilot": ["context-message-nopilot", "context-message-ted"],
+  "npt-flightdeck": ["context-message-nopilot"],
+  "npt-360": ["context-message-360"],
+  "npt-job-search": ["context-message-ted"],
+  "npt-ted-health": ["context-message-ted"],
+  "npt-child-care": ["context-message-ted"],
+};
+
+/** Context repos linked to a stream (from bindings + stream map). */
+export function reposForStream(
+  stream: string,
+  bindings: ContextAccountBinding[],
+): ContextRepoRef[] {
+  const allowed = new Set(STREAM_CONNECTED_REPOS[stream] ?? []);
+  const fromBindings = bindings.flatMap((b) => b.repos);
+  const seen = new Set<string>();
+  const result: ContextRepoRef[] = [];
+
+  for (const repoRef of fromBindings) {
+    if (allowed.has(repoRef.name) && !seen.has(repoRef.fullName)) {
+      seen.add(repoRef.fullName);
+      result.push(repoRef);
+    }
+  }
+
+  for (const name of allowed) {
+    const fullName = `${GITHUB_OWNER}/${name}`;
+    if (!seen.has(fullName)) {
+      seen.add(fullName);
+      result.push(repo(name));
+    }
+  }
+
+  return result.sort((a, b) => a.name.localeCompare(b.name));
+}
