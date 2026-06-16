@@ -1110,7 +1110,7 @@ export function EmailView({
   );
 
   const centerColumnContent = (
-    <>
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
           {selectedId && detail && !detailLoading && !detailError ? (
             <div className="shrink-0 border-white/[0.06] border-b px-4 py-3 md:px-5">
               <div className="flex items-start gap-2">
@@ -1258,15 +1258,15 @@ export function EmailView({
             ) : null}
           </div>
 
-          <div className="mt-auto shrink-0 border-white/[0.06] border-t px-4 py-3">
+          <div className="mt-auto min-w-0 max-w-full shrink-0 border-white/[0.06] border-t px-4 py-3">
             {replyRecipients.length > 0 ? (
               <p className="mb-2 text-[10px] text-white/30">
                 Reply to {replyRecipients.join(", ")}
               </p>
             ) : null}
-            <div className="liquid-glass-input flex flex-col gap-2 rounded-xl px-3 py-2.5">
+            <div className="liquid-glass-input flex min-w-0 max-w-full flex-col gap-2 rounded-xl px-3 py-2.5">
               <textarea
-                className="min-h-[7.5rem] w-full resize-none bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="min-h-[7.5rem] w-full min-w-0 max-w-full resize-none bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!detail || sending || agentDraftLoading}
                 onChange={(e) => setReplyBody(e.target.value)}
                 onKeyDown={(e) => {
@@ -1358,7 +1358,7 @@ export function EmailView({
               </div>
             </div>
           </div>
-    </>
+    </div>
   );
 
   const rightRailContent = (
@@ -1504,11 +1504,11 @@ export function EmailView({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="hidden min-h-0 flex-1 lg:flex">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="hidden min-h-0 w-full min-w-0 flex-1 overflow-hidden lg:flex">
         <ThreeColumnLayout
           center={
-            <main className="flex min-h-0 min-w-0 flex-1 flex-col border-white/[0.06]">
+            <main className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-white/[0.06]">
               {centerColumnContent}
             </main>
           }

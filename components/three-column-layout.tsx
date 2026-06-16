@@ -39,6 +39,12 @@ function readStoredLayout(layoutId: string): Layout | undefined {
       typeof parsed.center === "number" &&
       typeof parsed.right === "number"
     ) {
+      const center = parsed.center;
+      const left = parsed.left;
+      const right = parsed.right;
+      if (center < 20 || left < 5 || right < 5) {
+        return DEFAULT_LAYOUT;
+      }
       return parsed;
     }
   } catch {
@@ -69,6 +75,19 @@ type ThreeColumnLayoutProps = {
   className?: string;
 };
 
+function isPanelCollapsed(size: number | undefined): boolean {
+  return (size ?? 0) < 1;
+}
+
+function syncCollapsedFromLayout(
+  layout: Layout,
+  setLeft: (v: boolean) => void,
+  setRight: (v: boolean) => void,
+) {
+  setLeft(isPanelCollapsed(layout.left));
+  setRight(isPanelCollapsed(layout.right));
+}
+
 export function ThreeColumnLayout({
   layoutId,
   left,
@@ -78,13 +97,39 @@ export function ThreeColumnLayout({
 }: ThreeColumnLayoutProps) {
   const leftPanelRef = usePanelRef();
   const rightPanelRef = usePanelRef();
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [defaultLayout, setDefaultLayout] = useState<Layout>(DEFAULT_LAYOUT);
+  const [defaultLayout] = useState<Layout>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_LAYOUT;
+    }
+    return readStoredLayout(layoutId) ?? DEFAULT_LAYOUT;
+  });
+  const [leftCollapsed, setLeftCollapsed] = useState(() =>
+    isPanelCollapsed(defaultLayout.left),
+  );
+  const [rightCollapsed, setRightCollapsed] = useState(() =>
+    isPanelCollapsed(defaultLayout.right),
+  );
 
   useEffect(() => {
-    setDefaultLayout(readStoredLayout(layoutId) ?? DEFAULT_LAYOUT);
-  }, [layoutId]);
+    syncCollapsedFromLayout(
+      defaultLayout,
+      setLeftCollapsed,
+      setRightCollapsed,
+    );
+    const frame = requestAnimationFrame(() => {
+      setLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false);
+      setRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [defaultLayout, leftPanelRef, rightPanelRef]);
+
+  const handleLayoutChanged = useCallback(
+    (layout: Layout) => {
+      writeStoredLayout(layoutId, layout);
+      syncCollapsedFromLayout(layout, setLeftCollapsed, setRightCollapsed);
+    },
+    [layoutId],
+  );
 
   const toggleLeft = useCallback(() => {
     const panel = leftPanelRef.current;
@@ -115,11 +160,11 @@ export function ThreeColumnLayout({
       className={cn("flex min-h-0 w-full flex-1", className)}
       defaultLayout={defaultLayout}
       id={layoutId}
-      onLayoutChanged={(layout) => writeStoredLayout(layoutId, layout)}
+      onLayoutChanged={handleLayoutChanged}
       orientation="horizontal"
     >
       <Panel
-        className="relative flex min-h-0 flex-col"
+        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
         collapsedSize={0}
         collapsible
         defaultSize={25}
@@ -131,19 +176,17 @@ export function ThreeColumnLayout({
         }}
         panelRef={leftPanelRef}
       >
-        <button
-          aria-label={leftCollapsed ? "Show left panel" : "Hide left panel"}
-          className="absolute top-2 right-1.5 z-10 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
-          onClick={toggleLeft}
-          type="button"
-        >
-          {leftCollapsed ? (
-            <PanelLeftOpenIcon className="h-3.5 w-3.5" />
-          ) : (
+        {!leftCollapsed ? (
+          <button
+            aria-label="Hide left panel"
+            className="absolute top-2 right-1.5 z-10 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            onClick={toggleLeft}
+            type="button"
+          >
             <PanelLeftCloseIcon className="h-3.5 w-3.5" />
-          )}
-        </button>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          </button>
+        ) : null}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {left}
         </div>
       </Panel>
@@ -151,7 +194,7 @@ export function ThreeColumnLayout({
       <Separator className="w-px bg-white/[0.06] transition-colors hover:bg-white/[0.12]" />
 
       <Panel
-        className="relative flex min-h-0 min-w-0 flex-col"
+        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
         id="center"
         minSize={34}
       >
@@ -175,13 +218,15 @@ export function ThreeColumnLayout({
             <PanelRightOpenIcon className="h-3.5 w-3.5" />
           </button>
         ) : null}
-        {center}
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
+          {center}
+        </div>
       </Panel>
 
       <Separator className="w-px bg-white/[0.06] transition-colors hover:bg-white/[0.12]" />
 
       <Panel
-        className="relative flex min-h-0 flex-col"
+        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
         collapsedSize={0}
         collapsible
         defaultSize={25}
@@ -193,19 +238,17 @@ export function ThreeColumnLayout({
         }}
         panelRef={rightPanelRef}
       >
-        <button
-          aria-label={rightCollapsed ? "Show right panel" : "Hide right panel"}
-          className="absolute top-2 left-1.5 z-10 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
-          onClick={toggleRight}
-          type="button"
-        >
-          {rightCollapsed ? (
-            <PanelRightOpenIcon className="h-3.5 w-3.5" />
-          ) : (
+        {!rightCollapsed ? (
+          <button
+            aria-label="Hide right panel"
+            className="absolute top-2 left-1.5 z-10 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            onClick={toggleRight}
+            type="button"
+          >
             <PanelRightCloseIcon className="h-3.5 w-3.5" />
-          )}
-        </button>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          </button>
+        ) : null}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {right}
         </div>
       </Panel>
