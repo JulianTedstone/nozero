@@ -808,7 +808,7 @@ export function EmailView({
   };
 
   const leftRailContent = (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="shrink-0 space-y-4 p-4 pb-2">
               {tabBar}
 
@@ -1258,15 +1258,15 @@ export function EmailView({
             ) : null}
           </div>
 
-          <div className="mt-auto min-w-0 max-w-full shrink-0 border-white/[0.06] border-t px-4 py-3">
+          <div className="mt-auto flex max-h-[33%] min-h-0 w-full min-w-0 max-w-full shrink-0 flex-col overflow-hidden border-white/[0.06] border-t px-4 py-3">
             {replyRecipients.length > 0 ? (
-              <p className="mb-2 text-[10px] text-white/30">
+              <p className="mb-2 shrink-0 text-[10px] text-white/30">
                 Reply to {replyRecipients.join(", ")}
               </p>
             ) : null}
-            <div className="liquid-glass-input flex min-w-0 max-w-full flex-col gap-2 rounded-xl px-3 py-2.5">
+            <div className="liquid-glass-input flex min-h-0 min-w-0 max-w-full flex-1 flex-col gap-2 overflow-hidden rounded-xl px-3 py-2.5">
               <textarea
-                className="min-h-[7.5rem] w-full min-w-0 max-w-full resize-none bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="min-h-[3.5rem] w-full min-w-0 max-w-full flex-1 resize-none overflow-y-auto bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!detail || sending || agentDraftLoading}
                 onChange={(e) => setReplyBody(e.target.value)}
                 onKeyDown={(e) => {
@@ -1286,10 +1286,10 @@ export function EmailView({
                   detail ? "Write a reply… (⌘↵ to send)" : undefined
                 }
                 ref={composeRef}
-                rows={5}
+                rows={2}
                 value={replyBody}
               />
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex shrink-0 items-center justify-between gap-2">
                 {sendError ? (
                   <p className="min-w-0 truncate text-[10px] text-amber-400/80">
                     {sendError}
@@ -1505,17 +1505,17 @@ export function EmailView({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="hidden min-h-0 w-full min-w-0 flex-1 overflow-hidden lg:flex">
+      <div className="hidden min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:flex">
         <ThreeColumnLayout
           center={
-            <main className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-white/[0.06]">
+            <main className="@container flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-white/[0.06]">
               {centerColumnContent}
             </main>
           }
           layoutId="email"
           left={leftRailContent}
           right={
-            <div className="min-h-0 overflow-y-auto p-3 md:p-4">
+            <div className="min-h-0 min-w-0 overflow-y-auto p-3 md:p-4">
               {rightRailContent}
             </div>
           }

@@ -42,7 +42,14 @@ function readStoredLayout(layoutId: string): Layout | undefined {
       const center = parsed.center;
       const left = parsed.left;
       const right = parsed.right;
-      if (center < 20 || left < 5 || right < 5) {
+      if (
+        center > 68 ||
+        center < 20 ||
+        left < 15 ||
+        right < 15 ||
+        left + right + center < 99 ||
+        left + right + center > 101
+      ) {
         return DEFAULT_LAYOUT;
       }
       return parsed;
@@ -117,16 +124,44 @@ export function ThreeColumnLayout({
       setRightCollapsed,
     );
     const frame = requestAnimationFrame(() => {
-      setLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false);
-      setRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false);
+      const leftPanel = leftPanelRef.current;
+      const rightPanel = rightPanelRef.current;
+      let resetLayout = false;
+      if (leftPanel?.isCollapsed()) {
+        leftPanel.expand();
+        resetLayout = true;
+      }
+      if (rightPanel?.isCollapsed()) {
+        rightPanel.expand();
+        resetLayout = true;
+      }
+      if (resetLayout) {
+        writeStoredLayout(layoutId, DEFAULT_LAYOUT);
+      }
+      setLeftCollapsed(leftPanel?.isCollapsed() ?? false);
+      setRightCollapsed(rightPanel?.isCollapsed() ?? false);
     });
     return () => cancelAnimationFrame(frame);
-  }, [defaultLayout, leftPanelRef, rightPanelRef]);
+  }, [defaultLayout, layoutId, leftPanelRef, rightPanelRef]);
 
   const handleLayoutChanged = useCallback(
     (layout: Layout) => {
-      writeStoredLayout(layoutId, layout);
+      const left = layout.left ?? 0;
+      const right = layout.right ?? 0;
+      const center = layout.center ?? 0;
       syncCollapsedFromLayout(layout, setLeftCollapsed, setRightCollapsed);
+      if (left < 1 || right < 1) {
+        return;
+      }
+      const normalized: Layout =
+        left < 15 || right < 15 || center > 68
+          ? DEFAULT_LAYOUT
+          : {
+              left: Math.max(left, 18),
+              center: Math.min(Math.max(center, 34), 64),
+              right: Math.max(right, 18),
+            };
+      writeStoredLayout(layoutId, normalized);
     },
     [layoutId],
   );
@@ -157,7 +192,7 @@ export function ThreeColumnLayout({
 
   return (
     <Group
-      className={cn("flex min-h-0 w-full flex-1", className)}
+      className={cn("flex h-full min-h-0 w-full min-w-0 flex-1", className)}
       defaultLayout={defaultLayout}
       id={layoutId}
       onLayoutChanged={handleLayoutChanged}
