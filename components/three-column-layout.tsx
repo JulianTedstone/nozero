@@ -6,18 +6,13 @@ import {
   PanelRightCloseIcon,
   PanelRightOpenIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   Group,
+  type Layout,
   Panel,
   Separator,
   usePanelRef,
-  type Layout,
 } from "react-resizable-panels";
 import { cn } from "@/lib/utils";
 
@@ -30,10 +25,14 @@ const DEFAULT_LAYOUT: Layout = {
 };
 
 function readStoredLayout(layoutId: string): Layout | undefined {
-  if (typeof window === "undefined") return undefined;
+  if (typeof window === "undefined") {
+    return undefined;
+  }
   try {
     const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${layoutId}`);
-    if (!raw) return undefined;
+    if (!raw) {
+      return undefined;
+    }
     const parsed = JSON.parse(raw) as Layout;
     if (
       typeof parsed.left === "number" &&
@@ -49,11 +48,13 @@ function readStoredLayout(layoutId: string): Layout | undefined {
 }
 
 function writeStoredLayout(layoutId: string, layout: Layout) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    return;
+  }
   try {
     window.localStorage.setItem(
       `${STORAGE_PREFIX}${layoutId}`,
-      JSON.stringify(layout),
+      JSON.stringify(layout)
     );
   } catch {
     // ignore quota errors
@@ -87,16 +88,26 @@ export function ThreeColumnLayout({
 
   const toggleLeft = useCallback(() => {
     const panel = leftPanelRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
+    if (!panel) {
+      return;
+    }
+    if (panel.isCollapsed()) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
   }, [leftPanelRef]);
 
   const toggleRight = useCallback(() => {
     const panel = rightPanelRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
+    if (!panel) {
+      return;
+    }
+    if (panel.isCollapsed()) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
   }, [rightPanelRef]);
 
   return (
@@ -147,7 +158,7 @@ export function ThreeColumnLayout({
         {leftCollapsed ? (
           <button
             aria-label="Show left panel"
-            className="absolute top-2 left-1.5 z-10 rounded-md border border-white/[0.08] bg-black/40 p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70 lg:hidden"
+            className="absolute top-2 left-1.5 z-10 rounded-md border border-white/[0.08] bg-black/40 p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70"
             onClick={toggleLeft}
             type="button"
           >
