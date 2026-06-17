@@ -885,9 +885,9 @@ export function EventDetailPanel({
             <FormItem>
               <FormControl>
                 <div className={glassRow}>
-                  <TextIcon className="size-4 shrink-0 text-white/30" />
+                  <TextIcon className="size-4 shrink-0 text-ink-subtle" />
                   <Input
-                    className={`h-full min-h-0 flex-1 rounded-none border-0 bg-transparent px-0 font-medium text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 ${lockedInputClass ?? ""}`}
+                    className={`h-full min-h-0 flex-1 rounded-none border-0 bg-transparent px-0 font-medium text-sm text-ink placeholder:text-ink-subtle shadow-none focus-visible:ring-0 ${lockedInputClass ?? ""}`}
                     disabled={organizerFieldsLocked}
                     placeholder="Event title"
                     readOnly={organizerFieldsLocked}
@@ -913,9 +913,9 @@ export function EventDetailPanel({
             <FormItem>
               <FormControl>
                 <div className="liquid-glass-input flex min-w-0 items-start gap-3 rounded-lg px-3 py-2.5">
-                  <TextIcon className="mt-1 size-4 shrink-0 text-white/30" />
+                  <TextIcon className="mt-1 size-4 shrink-0 text-ink-subtle" />
                   <Textarea
-                    className={`field-sizing-fixed min-h-[4.5rem] min-w-0 flex-1 resize-none rounded-none border-0 bg-transparent p-0 py-0.5 pl-0.5 text-white/80 text-xs leading-relaxed shadow-none placeholder:text-white/25 focus-visible:ring-0 ${lockedInputClass ?? ""}`}
+                    className={`field-sizing-fixed min-h-[4.5rem] min-w-0 flex-1 resize-none rounded-none border-0 bg-transparent p-0 py-0.5 pl-0.5 text-ink text-xs leading-relaxed shadow-none placeholder:text-ink-subtle focus-visible:ring-0 ${lockedInputClass ?? ""}`}
                     disabled={organizerFieldsLocked}
                     placeholder="Add notes"
                     readOnly={organizerFieldsLocked}
@@ -930,7 +930,7 @@ export function EventDetailPanel({
 
         {event && onOpenContext ? (
           <Button
-            className="h-9 w-full justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] text-[11px] text-white/50 hover:bg-white/[0.05] hover:text-white/70"
+            className="h-9 w-full justify-center gap-2 rounded-xl border border-line bg-surface-sunk text-[11px] text-ink-muted hover:bg-accent hover:text-ink"
             onClick={() => onOpenContext(event)}
             type="button"
             variant="ghost"
@@ -968,7 +968,7 @@ export function EventDetailPanel({
                 <ParticipantsInput
                   allowRemove={capabilities.canRemoveParticipants}
                   disabled={!capabilities.canAddParticipants}
-                  icon={<UsersIcon className="size-4 text-white/30" />}
+                  icon={<UsersIcon className="size-4 text-ink-subtle" />}
                   onChange={(next) => {
                     field.onChange(next);
                     void persistGuestInvites(next);
@@ -984,7 +984,7 @@ export function EventDetailPanel({
 
         {userId && assignAccountEmail ? (
           <div className={glassRow}>
-            <HashIcon className="size-4 shrink-0 text-white/30" />
+            <HashIcon className="size-4 shrink-0 text-ink-subtle" />
             <AccountCodeAssignSelect
               accountEmail={assignAccountEmail}
               disabled={!capabilities.canEditUserMetadata}
@@ -1000,7 +1000,7 @@ export function EventDetailPanel({
 
         {userId ? (
           <div className={glassRow}>
-            <LayoutDashboardIcon className="size-4 shrink-0 text-white/30" />
+            <LayoutDashboardIcon className="size-4 shrink-0 text-ink-subtle" />
             <FlightdeckStreamSelect
               disabled={!capabilities.canEditUserMetadata}
               onChange={(stream) => {
@@ -1014,7 +1014,7 @@ export function EventDetailPanel({
 
         {accountOptions.length > 0 ? (
           <div className={glassRow}>
-            <CircleUserIcon className="size-4 shrink-0 text-white/30" />
+            <CircleUserIcon className="size-4 shrink-0 text-ink-subtle" />
             <Select
               disabled={!isOrganizer && !isCreating}
               onValueChange={(email) => {
@@ -1028,13 +1028,13 @@ export function EventDetailPanel({
             >
               <SelectTrigger
                 className={cn(
-                  "!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-white/80 text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-white/40",
+                  "!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-ink text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-ink-subtle",
                   !isOrganizer && !isCreating && "opacity-70",
                 )}
               >
                 <SelectValue placeholder="Calendar account" />
               </SelectTrigger>
-              <SelectContent className="rounded-xl border border-white/[0.12] shadow-2xl">
+              <SelectContent className="rounded-xl border border-line shadow-2xl">
                 {accountOptions.map((account) => (
                   <SelectItem key={account.email} value={account.email}>
                     {account.label}
@@ -1058,9 +1058,9 @@ export function EventDetailPanel({
             <FormItem>
               <FormControl>
                 <div className={glassRow}>
-                  <MapPinIcon className="size-4 shrink-0 text-white/30" />
+                  <MapPinIcon className="size-4 shrink-0 text-ink-subtle" />
                   <input
-                    className={`min-h-0 min-w-0 flex-1 bg-transparent py-0 text-white/80 text-xs leading-normal outline-none placeholder:text-white/25 ${lockedInputClass ?? ""}`}
+                    className={`min-h-0 min-w-0 flex-1 bg-transparent py-0 text-ink text-xs leading-normal outline-none placeholder:text-ink-subtle ${lockedInputClass ?? ""}`}
                     disabled={organizerFieldsLocked}
                     placeholder="Add location"
                     readOnly={organizerFieldsLocked}
@@ -1080,7 +1080,7 @@ export function EventDetailPanel({
             <FormItem>
               <FormControl>
                 <div className={glassRow}>
-                  <VideoIcon className="size-4 shrink-0 text-white/30" />
+                  <VideoIcon className="size-4 shrink-0 text-ink-subtle" />
                   {conferenceUrl ? (
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <a
@@ -1095,7 +1095,7 @@ export function EventDetailPanel({
                       </a>
                       {!organizerFieldsLocked ? (
                         <button
-                          className="shrink-0 text-white/30 hover:text-white/60"
+                          className="shrink-0 text-ink-subtle hover:text-ink-muted"
                           onClick={() => field.onChange("")}
                           type="button"
                         >
@@ -1106,7 +1106,7 @@ export function EventDetailPanel({
                   ) : (
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <input
-                        className={`min-h-0 min-w-0 flex-1 bg-transparent py-0 text-white/80 text-xs leading-normal outline-none placeholder:text-white/25 ${lockedInputClass ?? ""}`}
+                        className={`min-h-0 min-w-0 flex-1 bg-transparent py-0 text-ink text-xs leading-normal outline-none placeholder:text-ink-subtle ${lockedInputClass ?? ""}`}
                         disabled={organizerFieldsLocked}
                         placeholder="Paste Meet / Teams / Zoom link"
                         readOnly={organizerFieldsLocked}
@@ -1114,7 +1114,7 @@ export function EventDetailPanel({
                       />
                       {!organizerFieldsLocked ? (
                         <button
-                          className="shrink-0 rounded-md bg-white/[0.06] px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.10] hover:text-white/70"
+                          className="shrink-0 rounded-md bg-accent px-2 py-1 text-[10px] text-ink-muted hover:bg-accent hover:text-ink"
                           onClick={() => {
                             window.open("https://meet.google.com/new", "_blank");
                           }}
@@ -1145,7 +1145,7 @@ export function EventDetailPanel({
             <FormItem>
               <FormControl>
                 <div className={glassRow}>
-                  <CalendarIcon className="size-4 shrink-0 text-white/30" />
+                  <CalendarIcon className="size-4 shrink-0 text-ink-subtle" />
                   <DatePicker
                     disabled={organizerFieldsLocked}
                     onChange={(nextStartDate) => {
@@ -1174,7 +1174,7 @@ export function EventDetailPanel({
             <FormItem>
               <FormControl>
                 <div className={glassRow}>
-                  <CalendarIcon className="size-4 shrink-0 text-white/30" />
+                  <CalendarIcon className="size-4 shrink-0 text-ink-subtle" />
                   <DatePicker
                     disabled={organizerFieldsLocked}
                     onChange={field.onChange}
@@ -1190,7 +1190,7 @@ export function EventDetailPanel({
         />
 
         <div className={glassRow}>
-          <ClockIcon className="size-4 shrink-0 text-white/30" />
+          <ClockIcon className="size-4 shrink-0 text-ink-subtle" />
           <FormField
             control={form.control}
             name="startTime"
@@ -1208,7 +1208,7 @@ export function EventDetailPanel({
               </FormItem>
             )}
           />
-          <span className="shrink-0 text-white/25 text-xs">–</span>
+          <span className="shrink-0 text-ink-subtle text-xs">–</span>
           <FormField
             control={form.control}
             name="endTime"
@@ -1230,8 +1230,8 @@ export function EventDetailPanel({
 
         {isEditing && isRecurringSeries && organizerFieldsLocked ? (
           <div className={glassRow}>
-            <RepeatIcon className="size-4 shrink-0 text-white/30" />
-            <span className="text-xs text-white/60">
+            <RepeatIcon className="size-4 shrink-0 text-ink-subtle" />
+            <span className="text-xs text-ink-muted">
               {recurrencePreset !== "none"
                 ? recurrenceLabel(
                     recurrenceRuleFromPreset(
@@ -1335,11 +1335,11 @@ export function EventDetailPanel({
               ))}
             </div>
 
-            <div className="border-t border-white/[0.06] px-5 py-3">
+            <div className="border-t border-line px-5 py-3">
               <div className="flex items-center gap-2">
                 {isEditing && isOrganizer ? (
                   <Button
-                    className="h-8 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-red-400 text-xs hover:bg-red-500/20"
+                    className="h-8 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-destructive text-xs hover:bg-red-500/20"
                     disabled={isLoading}
                     onClick={handleDelete}
                     type="button"
@@ -1351,7 +1351,7 @@ export function EventDetailPanel({
                 ) : null}
                 <div className="ml-auto flex gap-2">
                   <Button
-                    className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 text-xs hover:bg-white/[0.08]"
+                    className="h-8 rounded-lg border border-line bg-surface-sunk px-4 text-xs hover:bg-accent"
                     disabled={isLoading}
                     onClick={onClose}
                     type="button"
@@ -1361,7 +1361,7 @@ export function EventDetailPanel({
                   </Button>
                   {isOrganizer ? (
                     <Button
-                      className="h-8 rounded-lg bg-white px-4 font-medium text-black text-xs hover:bg-white/90"
+                      className="h-8 rounded-lg bg-primary px-4 font-medium text-primary-foreground text-xs hover:bg-primary"
                       disabled={isLoading}
                       type="submit"
                     >

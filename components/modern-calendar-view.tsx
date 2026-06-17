@@ -832,7 +832,7 @@ export function ModernCalendarView({
             <div className="w-12 flex-shrink-0 md:w-16">
               {hours.map((hour) => (
                 <div
-                  className="py-1 pr-2 text-right text-[11px] text-white/30 md:pr-3"
+                  className="py-1 pr-2 text-right text-[11px] text-ink-subtle md:pr-3"
                   key={hour}
                   style={{ height: HOUR_HEIGHT_PX }}
                 >
@@ -841,14 +841,14 @@ export function ModernCalendarView({
               ))}
             </div>
             <div
-              className="relative flex-1 border-l border-white/[0.04]"
+              className="relative flex-1 border-l border-line"
               onClick={() => openCreatePanel(currentDate)}
             >
               {halfHourLines.map((slot) => (
                 <div
                   className={cn(
-                    "pointer-events-none absolute inset-x-0 border-b border-white/[0.04]",
-                    slot % 2 === 1 && "border-dashed border-white/[0.03]",
+                    "pointer-events-none absolute inset-x-0 border-b border-line",
+                    slot % 2 === 1 && "border-dashed border-line",
                   )}
                   key={slot}
                   style={{ top: (slot / 2) * HOUR_HEIGHT_PX }}
@@ -898,21 +898,21 @@ export function ModernCalendarView({
 
     return (
       <div className="liquid-glass-subtle flex h-full flex-col overflow-hidden rounded-2xl">
-        <div className="sticky top-0 z-10 grid grid-cols-8 bg-white/[0.02]">
+        <div className="sticky top-0 z-10 grid grid-cols-8 bg-surface-sunk">
           <div className="w-12 p-2 md:w-16" />
           {weekDays.map((day) => (
             <div
               className="px-0.5 py-2 text-center md:px-1 md:py-2.5"
               key={day.toISOString()}
             >
-              <div className="text-[9px] text-white/30 md:text-[10px]">
+              <div className="text-[9px] text-ink-subtle md:text-[10px]">
                 {format(day, isMobile ? "EEEEE" : "EEE")}
               </div>
               <div
                 className={cn(
                   "mx-auto mt-0.5 flex h-6 w-6 items-center justify-center rounded-lg font-medium text-[10px] md:h-7 md:w-7 md:text-xs",
                   isSameDay(day, new Date()) &&
-                    "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30",
+                    "bg-active/20 text-ink ring-1 ring-active/40",
                 )}
               >
                 {format(day, "d")}
@@ -925,7 +925,7 @@ export function ModernCalendarView({
             <div>
               {hours.map((hour) => (
                 <div
-                  className="py-1 pr-1 text-right text-[9px] text-white/25 md:pr-2 md:text-[10px]"
+                  className="py-1 pr-1 text-right text-[9px] text-ink-subtle md:pr-2 md:text-[10px]"
                   key={hour}
                   style={{ height: HOUR_HEIGHT_PX }}
                 >
@@ -941,7 +941,7 @@ export function ModernCalendarView({
 
               return (
                 <div
-                  className="relative border-r border-white/[0.04]"
+                  className="relative border-r border-line"
                   key={day.toISOString()}
                   onClick={() => openCreatePanel(day)}
                   style={{ height: DAY_GRID_HEIGHT }}
@@ -949,9 +949,9 @@ export function ModernCalendarView({
                   {halfHourLines.map((slot) => (
                     <div
                       className={cn(
-                        "pointer-events-none absolute inset-x-0 border-b border-white/[0.04]",
+                        "pointer-events-none absolute inset-x-0 border-b border-line",
                         slot % 2 === 1 &&
-                          "border-dashed border-white/[0.03]",
+                          "border-dashed border-line",
                       )}
                       key={slot}
                       style={{ top: (slot / 2) * HOUR_HEIGHT_PX }}
@@ -1025,7 +1025,7 @@ export function ModernCalendarView({
             : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
           ).map((day, i) => (
             <div
-              className="py-2 text-center font-medium text-[10px] text-white/30 md:py-2.5 md:text-[11px]"
+              className="py-2 text-center font-medium text-[10px] text-ink-subtle md:py-2.5 md:text-[11px]"
               key={i}
             >
               {day}
@@ -1139,9 +1139,9 @@ export function ModernCalendarView({
                       return (
                         <div
                           className={cn(
-                            "min-h-[48px] cursor-pointer border-r border-b border-white/[0.04] p-1 transition-colors hover:bg-white/[0.02] md:min-h-[90px] md:p-2",
+                            "min-h-[48px] cursor-pointer border-r border-b border-line p-1 transition-colors hover:bg-surface-sunk md:min-h-[90px] md:p-2",
                             !isCurrentMonth && "opacity-30",
-                            isSameDay(day, new Date()) && "bg-blue-500/[0.04]"
+                            isSameDay(day, new Date()) && "bg-active/[0.06]"
                           )}
                           key={day.toISOString()}
                           onClick={() =>
@@ -1153,10 +1153,10 @@ export function ModernCalendarView({
                           <div className="mb-0.5 md:mb-1.5">
                             <span
                               className={cn(
-                                "flex h-6 w-6 items-center justify-center rounded-lg font-medium text-[11px] transition-colors hover:bg-white/[0.06]",
+                                "flex h-6 w-6 items-center justify-center rounded-lg font-medium text-[11px] transition-colors hover:bg-accent",
                                 isSameDay(day, new Date())
-                                  ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30"
-                                  : "text-white/60"
+                                  ? "bg-active/20 text-ink ring-1 ring-active/40"
+                                  : "text-ink-muted"
                               )}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1199,7 +1199,7 @@ export function ModernCalendarView({
                               ))}
                             {singleDayEvents.length > singleLimit &&
                               singleLimit > 0 && (
-                                <div className="pl-2 text-[10px] text-white/30">
+                                <div className="pl-2 text-[10px] text-ink-subtle">
                                   +{singleDayEvents.length - singleLimit} more
                                 </div>
                               )}
@@ -1301,7 +1301,7 @@ export function ModernCalendarView({
               className="liquid-glass-subtle flex h-full min-h-0 flex-col overflow-hidden rounded-xl"
               key={monthDate.toISOString()}
             >
-              <div className="shrink-0 border-white/[0.06] border-b px-2.5 py-1.5 md:px-3 md:py-2">
+              <div className="shrink-0 border-line border-b px-2.5 py-1.5 md:px-3 md:py-2">
                 <div className="font-semibold text-[11px] md:text-xs">
                   {format(monthDate, "MMMM")}
                 </div>
@@ -1311,7 +1311,7 @@ export function ModernCalendarView({
                   <div className="grid grid-cols-7 gap-0.5">
                     {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
                       <div
-                        className="text-center font-medium text-[8px] text-white/25 md:text-[9px]"
+                        className="text-center font-medium text-[8px] text-ink-subtle md:text-[9px]"
                         key={i}
                       >
                         {d}
@@ -1327,13 +1327,13 @@ export function ModernCalendarView({
                     return (
                       <button
                         className={cn(
-                          "flex aspect-square items-center justify-center rounded-md text-[8px] transition-colors hover:bg-white/[0.06] md:text-[9px]",
+                          "flex aspect-square items-center justify-center rounded-md text-[8px] transition-colors hover:bg-accent md:text-[9px]",
                           !isSameMonth(day, monthDate) && "opacity-20",
                           isSameDay(day, new Date()) &&
-                            "bg-blue-500/20 font-semibold text-blue-400 ring-1 ring-blue-500/30",
+                            "bg-active/20 font-semibold text-ink ring-1 ring-active/40",
                           hasEvents &&
                             !isSameDay(day, new Date()) &&
-                            "bg-white/[0.04] font-medium"
+                            "bg-surface-sunk font-medium"
                         )}
                         key={day.toISOString()}
                         onClick={() => {
@@ -1405,8 +1405,8 @@ export function ModernCalendarView({
           className={cn(
             "flex flex-1 flex-col items-center gap-1 rounded-lg py-2 transition-colors",
             activeTab === id
-              ? "bg-white/[0.08] text-white/80"
-              : "text-white/25 hover:text-white/40",
+              ? "bg-accent text-ink"
+              : "text-ink-subtle hover:text-ink-subtle",
           )}
         >
           <Icon className="h-3.5 w-3.5" />
@@ -1424,12 +1424,12 @@ export function ModernCalendarView({
       {/* Mini Calendar */}
       <div className="liquid-glass-subtle rounded-xl p-3">
         <div className="mb-2.5 flex items-center justify-between">
-          <h3 className="font-semibold text-[11px] text-white/70">
+          <h3 className="font-semibold text-[11px] text-ink">
             {format(miniCalendarDate, "MMMM yyyy")}
           </h3>
           <div className="flex gap-0.5">
             <Button
-              className="h-5 w-5 rounded-md text-white/30 hover:bg-white/[0.06] hover:text-white/60"
+              className="h-5 w-5 rounded-md text-ink-subtle hover:bg-accent hover:text-ink-muted"
               onClick={() =>
                 setMiniCalendarDate(subMonths(miniCalendarDate, 1))
               }
@@ -1439,7 +1439,7 @@ export function ModernCalendarView({
               <ChevronLeftIcon className="h-3 w-3" />
             </Button>
             <Button
-              className="h-5 w-5 rounded-md text-white/30 hover:bg-white/[0.06] hover:text-white/60"
+              className="h-5 w-5 rounded-md text-ink-subtle hover:bg-accent hover:text-ink-muted"
               onClick={() =>
                 setMiniCalendarDate(addMonths(miniCalendarDate, 1))
               }
@@ -1453,7 +1453,7 @@ export function ModernCalendarView({
         <div className="mb-1 grid grid-cols-7 gap-0.5">
           {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
             <div
-              className="text-center font-medium text-[9px] text-white/25"
+              className="text-center font-medium text-[9px] text-ink-subtle"
               key={i}
             >
               {day}
@@ -1468,16 +1468,16 @@ export function ModernCalendarView({
             return (
               <button
                 className={cn(
-                  "flex aspect-square items-center justify-center rounded-md text-[10px] transition-all hover:bg-white/[0.06]",
+                  "flex aspect-square items-center justify-center rounded-md text-[10px] transition-all hover:bg-accent",
                   !isSameMonth(day, miniCalendarDate) && "opacity-20",
                   isSameDay(day, new Date()) &&
-                    "bg-blue-500/20 font-semibold text-blue-400 ring-1 ring-blue-500/30",
+                    "bg-active/20 font-semibold text-ink ring-1 ring-active/40",
                   hasEvents &&
                     !isSameDay(day, new Date()) &&
-                    "bg-white/[0.03] font-medium",
+                    "bg-surface-sunk font-medium",
                   isSameDay(day, currentDate) &&
                     !isSameDay(day, new Date()) &&
-                    "ring-1 ring-white/20"
+                    "ring-1 ring-line"
                 )}
                 key={day.toISOString()}
                 onClick={() => navigateMiniDay(day)}
@@ -1492,7 +1492,7 @@ export function ModernCalendarView({
 
       {/* Create Event */}
       <Button
-        className="h-9 w-full rounded-xl bg-white/95 font-medium text-black text-xs hover:bg-white"
+        className="h-9 w-full rounded-xl bg-primary font-medium text-primary-foreground text-xs hover:bg-primary/90"
         onClick={() => openCreatePanel(new Date())}
       >
         <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
@@ -1510,16 +1510,16 @@ export function ModernCalendarView({
             >
               <span className="section-label">My Calendars</span>
               {calendarsExpanded ? (
-                <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
               ) : (
-                <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
               )}
             </button>
             <button
               type="button"
               onClick={() => void runCalendarSync()}
               disabled={syncStatus === "syncing"}
-              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 text-[9px] text-white/45 hover:bg-white/[0.06] disabled:opacity-50"
+              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-line bg-surface-sunk px-2 text-[9px] text-ink-muted hover:bg-accent disabled:opacity-50"
               title="Sync calendars now"
             >
               {syncStatus === "syncing" ? (
@@ -1533,7 +1533,7 @@ export function ModernCalendarView({
           <p
             className={cn(
               "mb-2 truncate text-[9px]",
-              syncStatus === "error" ? "text-amber-400/80" : "text-white/30",
+              syncStatus === "error" ? "text-destructive" : "text-ink-subtle",
             )}
           >
             {syncStatus === "syncing" && "Syncing calendars…"}
@@ -1548,7 +1548,7 @@ export function ModernCalendarView({
                 ? `Last sync ${formatSyncAge(lastSyncedAt)}`
                 : "Waiting for first sync…")}
             {backgroundExtending && syncStatus !== "syncing" && (
-              <span className="text-white/25"> · loading more history…</span>
+              <span className="text-ink-subtle"> · loading more history…</span>
             )}
           </p>
           {calendarsExpanded && (
@@ -1571,9 +1571,9 @@ export function ModernCalendarView({
                         calendar.visible ? "Hide calendar" : "Show calendar"
                       }
                     />
-                    <span className="truncate text-[11px] text-white/50">
+                    <span className="truncate text-[11px] text-ink-muted">
                       {calendar.name}
-                      <span className="ml-1 text-white/25">
+                      <span className="ml-1 text-ink-subtle">
                         ({friendlyAccountName(calendar.accountEmail)})
                       </span>
                     </span>
@@ -1594,7 +1594,7 @@ export function ModernCalendarView({
 
   const userAvatarButton = (
     <Button
-      className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/[0.08] bg-transparent p-0 hover:bg-white/[0.06]"
+      className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-line bg-transparent p-0 hover:bg-accent"
       size="icon"
       variant="ghost"
     >
@@ -1608,21 +1608,21 @@ export function ModernCalendarView({
   );
 
   const sidebarUserFooter = isLoggedIn ? (
-    <div className="flex shrink-0 items-center gap-2 border-white/[0.06] border-t p-4">
+    <div className="flex shrink-0 items-center gap-2 border-line border-t p-4">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>{userAvatarButton}</DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          className="mb-2 w-56 rounded-2xl border border-white/[0.12] bg-popover p-1.5 shadow-2xl ring-1 ring-white/10"
+          className="mb-2 w-56 rounded-2xl border border-line bg-popover p-1.5 shadow-2xl ring-1 ring-line"
           side="top"
         >
           <DropdownMenuLabel className="px-3 py-2.5">
             <p className="font-semibold text-white text-xs">{userName}</p>
-            <p className="text-[10px] text-white/55">{userEmail}</p>
+            <p className="text-[10px] text-ink-muted">{userEmail}</p>
           </DropdownMenuLabel>
-          <DropdownMenuSeparator className="bg-white/[0.06]" />
+          <DropdownMenuSeparator className="bg-accent" />
           <DropdownMenuItem
-            className="cursor-pointer rounded-xl text-red-300 text-xs focus:bg-white/[0.06] focus:text-red-300"
+            className="cursor-pointer rounded-xl text-destructive text-xs focus:bg-accent focus:text-destructive"
             onClick={async () => {
               await authClient.signOut();
               window.location.href = "/";
@@ -1634,7 +1634,7 @@ export function ModernCalendarView({
         </DropdownMenuContent>
       </DropdownMenu>
       <Button
-        className="h-9 w-9 shrink-0 rounded-lg border border-white/[0.06] bg-white/[0.03] text-white/45 hover:bg-white/[0.06] hover:text-white/70"
+        className="h-9 w-9 shrink-0 rounded-lg border border-line bg-surface-sunk text-ink-muted hover:bg-accent hover:text-ink"
         onClick={() => router.push("/settings")}
         size="icon"
         title="Settings"
@@ -1706,11 +1706,11 @@ export function ModernCalendarView({
               transition={{ type: "spring", stiffness: 400, damping: 35 }}
             >
               <div className="flex items-center justify-between px-4 py-3">
-                <span className="font-semibold text-sm text-white/80">
+                <span className="font-semibold text-sm text-ink">
                   nozero
                 </span>
                 <Button
-                  className="h-7 w-7 rounded-lg text-white/40 hover:bg-white/[0.06]"
+                  className="h-7 w-7 rounded-lg text-ink-subtle hover:bg-accent"
                   onClick={() => setSidebarOpen(false)}
                   size="icon"
                   variant="ghost"
@@ -1755,7 +1755,7 @@ export function ModernCalendarView({
           <div className="flex items-center gap-1.5 md:gap-3">
             {/* Mobile hamburger */}
             <Button
-              className="h-8 w-8 rounded-lg text-white/50 hover:bg-white/[0.06] md:hidden"
+              className="h-8 w-8 rounded-lg text-ink-muted hover:bg-accent md:hidden"
               onClick={() => setSidebarOpen(true)}
               size="icon"
               variant="ghost"
@@ -1765,7 +1765,7 @@ export function ModernCalendarView({
 
             <div className="flex items-center gap-0.5">
               <Button
-                className="h-7 w-7 rounded-lg border border-white/[0.06] bg-white/[0.03] text-white/50 hover:bg-white/[0.06]"
+                className="h-7 w-7 rounded-lg border border-line bg-surface-sunk text-ink-muted hover:bg-accent"
                 onClick={handlePrevious}
                 size="icon"
                 variant="ghost"
@@ -1773,7 +1773,7 @@ export function ModernCalendarView({
                 <ChevronLeftIcon className="h-3.5 w-3.5" />
               </Button>
               <Button
-                className="h-7 w-7 rounded-lg border border-white/[0.06] bg-white/[0.03] text-white/50 hover:bg-white/[0.06]"
+                className="h-7 w-7 rounded-lg border border-line bg-surface-sunk text-ink-muted hover:bg-accent"
                 onClick={handleNext}
                 size="icon"
                 variant="ghost"
@@ -1782,12 +1782,12 @@ export function ModernCalendarView({
               </Button>
             </div>
 
-            <h2 className="font-bold text-sm tracking-tight md:text-base">
+            <h2 className="title-serif text-base md:text-lg">
               {headerTitle}
             </h2>
 
             <Button
-              className="hidden h-7 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[11px] text-white/50 hover:bg-white/[0.06] md:inline-flex"
+              className="hidden h-7 rounded-lg border border-line bg-surface-sunk px-2.5 text-[11px] text-ink-muted hover:bg-accent md:inline-flex"
               onClick={() => setCurrentDate(new Date())}
               size="sm"
               variant="ghost"
@@ -1798,8 +1798,8 @@ export function ModernCalendarView({
             {isLoggedIn && (
               <Button
                 className={cn(
-                  "hidden h-7 gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[11px] text-white/50 hover:bg-white/[0.06] md:inline-flex",
-                  syncStatus === "error" && "border-amber-500/20 text-amber-400/80",
+                  "hidden h-7 gap-1.5 rounded-lg border border-line bg-surface-sunk px-2.5 text-[11px] text-ink-muted hover:bg-accent md:inline-flex",
+                  syncStatus === "error" && "border-amber-500/20 text-destructive",
                 )}
                 disabled={syncStatus === "syncing"}
                 onClick={() => void runCalendarSync()}
@@ -1822,7 +1822,7 @@ export function ModernCalendarView({
           <div className="flex items-center gap-1.5 md:gap-2.5">
             {/* Mobile Today button */}
             <Button
-              className="h-7 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 text-[11px] text-white/50 hover:bg-white/[0.06] md:hidden"
+              className="h-7 rounded-lg border border-line bg-surface-sunk px-2 text-[11px] text-ink-muted hover:bg-accent md:hidden"
               onClick={() => setCurrentDate(new Date())}
               size="sm"
               variant="ghost"
@@ -1834,7 +1834,7 @@ export function ModernCalendarView({
               onValueChange={(v) => setViewMode(v as ViewMode)}
               value={viewMode}
             >
-              <TabsList className="h-9 gap-0.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-0.5">
+              <TabsList className="h-9 gap-0.5 rounded-lg border border-line bg-surface-sunk p-0.5">
                 {(
                   [
                     { value: "day", label: "Day", short: "D" },
@@ -1844,7 +1844,7 @@ export function ModernCalendarView({
                   ] as const
                 ).map((tab) => (
                   <TabsTrigger
-                    className="h-8 min-w-0 flex-1 rounded-md px-1.5 text-[11px] text-white/45 after:hidden hover:text-white/70 data-active:border-white/[0.06] data-active:bg-white/[0.08] data-active:text-white/90 md:px-2.5"
+                    className="h-8 min-w-0 flex-1 rounded-md px-1.5 text-[11px] text-ink-muted after:hidden hover:text-ink data-active:border-line data-active:bg-accent data-active:text-ink md:px-2.5"
                     key={tab.value}
                     value={tab.value}
                   >
@@ -1857,9 +1857,9 @@ export function ModernCalendarView({
 
             {/* Search — desktop only */}
             <div className="relative hidden md:block">
-              <SearchIcon className="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-white/25" />
+              <SearchIcon className="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-ink-subtle" />
               <input
-                className="h-9 w-40 rounded-lg border border-white/[0.06] bg-white/[0.03] py-0 pr-3 pl-8 text-white/70 text-xs leading-none outline-none placeholder:text-white/20 focus:border-white/[0.12]"
+                className="h-9 w-40 rounded-lg border border-line bg-surface-sunk py-0 pr-3 pl-8 text-ink text-xs leading-none outline-none placeholder:text-ink-subtle focus:border-line"
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search events"
                 ref={searchInputRef}
@@ -1870,9 +1870,9 @@ export function ModernCalendarView({
             {/* AI toggle — desktop only (mobile accesses via sidebar or FAB area) */}
             <Button
               className={cn(
-                "hidden h-9 w-9 shrink-0 rounded-full border border-white/[0.06] text-white/40 hover:bg-white/[0.06] md:inline-flex",
+                "hidden h-9 w-9 shrink-0 rounded-full border border-line text-ink-subtle hover:bg-accent md:inline-flex",
                 rightPanel === "ai" &&
-                  "border-blue-500/20 bg-blue-500/10 text-blue-400"
+                  "border-active/30 bg-active/10 text-ink"
               )}
               onClick={() =>
                 rightPanel === "ai" ? closePanel() : openAiPanel()
@@ -1920,7 +1920,7 @@ export function ModernCalendarView({
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8">
-            <span className="text-sm text-white/30">Coming soon</span>
+            <span className="text-sm text-ink-subtle">Coming soon</span>
           </div>
         )}
       </div>
@@ -1940,14 +1940,14 @@ export function ModernCalendarView({
               />
               <motion.div
                 animate={{ y: 0 }}
-                className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] min-h-0 flex-col overflow-hidden rounded-t-2xl border-white/[0.08] border-t bg-background"
+                className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] min-h-0 flex-col overflow-hidden rounded-t-2xl border-line border-t bg-background"
                 exit={{ y: "100%" }}
                 initial={{ y: "100%" }}
                 transition={{ type: "spring", stiffness: 400, damping: 38 }}
               >
                 {/* Drag handle */}
                 <div className="flex shrink-0 justify-center py-2">
-                  <div className="h-1 w-8 rounded-full bg-white/20" />
+                  <div className="h-1 w-8 rounded-full bg-primary/20" />
                 </div>
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   {panelContent}
@@ -1973,14 +1973,14 @@ export function ModernCalendarView({
       {isMobile && rightPanel === "none" && (
         <motion.button
           animate={{ scale: 1, opacity: 1 }}
-          className="fixed right-5 bottom-5 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-black/40 shadow-lg active:scale-95"
+          className="fixed right-5 bottom-5 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary shadow-black/40 shadow-lg active:scale-95"
           exit={{ scale: 0, opacity: 0 }}
           initial={{ scale: 0, opacity: 0 }}
           onClick={() => openCreatePanel(new Date())}
           type="button"
           whileTap={{ scale: 0.9 }}
         >
-          <PlusIcon className="h-6 w-6 text-black" />
+          <PlusIcon className="h-6 w-6 text-primary-foreground" />
         </motion.button>
       )}
     </div>

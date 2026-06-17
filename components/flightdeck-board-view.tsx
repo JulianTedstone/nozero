@@ -467,8 +467,8 @@ export function FlightdeckBoardView({
         className={cn(
           "w-full rounded-lg border px-2.5 py-2 text-left transition-colors",
           selected?.id === item.id
-            ? "border-white/[0.14] bg-white/[0.08]"
-            : "border-white/[0.04] bg-white/[0.03] hover:border-white/[0.1] hover:bg-white/[0.05]"
+            ? "border-line bg-accent"
+            : "border-line bg-surface-sunk hover:border-line hover:bg-accent"
         )}
         onClick={() => {
           setSelected(item);
@@ -476,7 +476,7 @@ export function FlightdeckBoardView({
         }}
         type="button"
       >
-        <p className="line-clamp-3 text-[11px] text-white/75 leading-snug">
+        <p className="line-clamp-3 text-[11px] text-ink leading-snug">
           {item.title}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -521,10 +521,10 @@ export function FlightdeckBoardView({
       key={status}
     >
       <div className="flex items-baseline justify-between gap-2 px-0.5 pb-1.5">
-        <h2 className="truncate font-medium text-[9px] text-white/35 uppercase tracking-wide">
+        <h2 className="truncate font-medium text-[9px] text-ink-subtle uppercase tracking-wide">
           {status}
         </h2>
-        <span className="shrink-0 text-[9px] text-white/25 tabular-nums">
+        <span className="shrink-0 text-[9px] text-ink-subtle tabular-nums">
           {cards.length}
         </span>
       </div>
@@ -617,7 +617,7 @@ export function FlightdeckBoardView({
             </div>
           ) : null}
           <Button
-            className="h-8 gap-1.5 rounded-xl bg-white/95 font-medium text-[11px] text-black hover:bg-white"
+            className="h-8 gap-1.5 rounded-xl bg-primary font-medium text-[11px] text-primary-foreground hover:bg-primary/90"
             disabled={!actionsEnabled}
             onClick={() => {
               setCaptureError(null);
@@ -635,16 +635,16 @@ export function FlightdeckBoardView({
             New Task
           </Button>
           <div className="relative min-w-[10rem] flex-1">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-ink-subtle" />
             <input
-              className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-3 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
+              className="h-8 w-full rounded-lg border border-line bg-surface-sunk pr-3 pl-8 text-[11px] text-ink outline-none placeholder:text-ink-subtle focus:border-line"
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search board…"
               value={search}
             />
           </div>
           <select
-            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
+            className="h-8 rounded-lg border border-line bg-surface-sunk px-2 text-[11px] text-ink-muted outline-none"
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
             value={groupBy}
           >
@@ -653,7 +653,7 @@ export function FlightdeckBoardView({
             <option value="approver">Group by: Approver</option>
           </select>
           <select
-            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
+            className="h-8 rounded-lg border border-line bg-surface-sunk px-2 text-[11px] text-ink-muted outline-none"
             onChange={(e) => setSortBy(e.target.value as SortBy)}
             value={sortBy}
           >
@@ -662,7 +662,7 @@ export function FlightdeckBoardView({
             <option value="priority-asc">Sort: Priority (asc)</option>
           </select>
           <select
-            className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/60 outline-none"
+            className="h-8 rounded-lg border border-line bg-surface-sunk px-2 text-[11px] text-ink-muted outline-none"
             onChange={(e) => setStreamFilter(e.target.value || null)}
             value={streamFilter ?? ""}
           >
@@ -674,7 +674,7 @@ export function FlightdeckBoardView({
             ))}
           </select>
           <Button
-            className="h-8 gap-1.5 border-white/[0.08] bg-white/[0.04] text-[11px] text-white/60"
+            className="h-8 gap-1.5 border-line bg-surface-sunk text-[11px] text-ink-muted"
             disabled={refreshing}
             onClick={() => {
               load({ silent: true }).catch(() => undefined);
@@ -690,10 +690,10 @@ export function FlightdeckBoardView({
         </div>
 
         {error ? (
-          <p className="mt-2 text-[11px] text-amber-400/80">{error}</p>
+          <p className="mt-2 text-[11px] text-destructive">{error}</p>
         ) : null}
         {actionsEnabled ? null : (
-          <p className="mt-2 text-[10px] text-white/30">
+          <p className="mt-2 text-[10px] text-ink-subtle">
             Board actions are read-only until NOZERO_TOWER_API_KEY is configured
             (restart the dev server after adding it to .env.local).
           </p>
@@ -702,13 +702,13 @@ export function FlightdeckBoardView({
 
       <div className="relative min-h-0 flex-1">
         {loading && !payload ? (
-          <div className="flex h-full items-center justify-center gap-2 text-white/35 text-xs">
+          <div className="flex h-full items-center justify-center gap-2 text-ink-subtle text-xs">
             <Loader2Icon className="h-4 w-4 animate-spin" />
             Loading Flightdeck…
           </div>
         ) : (
           <div className="flex h-full min-w-0 gap-2 p-4 md:p-6">
-            <div className="flex min-w-0 flex-1 flex-col divide-y divide-white/[0.06] overflow-y-auto">
+            <div className="flex min-w-0 flex-1 flex-col divide-y divide-line overflow-y-auto">
               {groupedRows.map(([groupLabel, groupItems]) => {
                 if (groupBy === "stream" && hiddenStreams[groupLabel]) {
                   return null;
@@ -750,7 +750,7 @@ export function FlightdeckBoardView({
                           aria-label={
                             groupExpanded ? "Collapse lane" : "Expand lane"
                           }
-                          className="rounded p-0.5 text-white/35 hover:text-white/60"
+                          className="rounded p-0.5 text-ink-subtle hover:text-ink-muted"
                           onClick={() =>
                             setExpandedGroups((prev) => ({
                               ...prev,
@@ -768,22 +768,22 @@ export function FlightdeckBoardView({
                         {groupBy === "stream" ? (
                           <input
                             checked={!hiddenStreams[groupLabel]}
-                            className="h-3.5 w-3.5 rounded border-white/[0.2] bg-transparent"
+                            className="h-3.5 w-3.5 rounded border-line bg-transparent"
                             onChange={() => toggleStreamVisibility(groupLabel)}
                             type="checkbox"
                           />
                         ) : null}
                         <div className="min-w-0">
-                          <p className="truncate text-[11px] text-white/60 leading-tight">
+                          <p className="truncate text-[11px] text-ink-muted leading-tight">
                             {groupLabel}
                           </p>
                           {totalsSummary ? (
-                            <p className="mt-0.5 truncate text-[9px] text-white/28">
+                            <p className="mt-0.5 truncate text-[9px] text-ink-subtle">
                               {totalsSummary}
                             </p>
                           ) : null}
                         </div>
-                        <span className="shrink-0 text-[9px] text-white/28 tabular-nums">
+                        <span className="shrink-0 text-[9px] text-ink-subtle tabular-nums">
                           {groupItems.length}
                         </span>
                       </div>
@@ -797,10 +797,10 @@ export function FlightdeckBoardView({
                             )}
                             key={`${groupLabel}-${col.key}`}
                           >
-                            <p className="text-[10px] text-white/45 tabular-nums">
+                            <p className="text-[10px] text-ink-muted tabular-nums">
                               {col.count}
                             </p>
-                            <p className="truncate text-[9px] text-white/25 uppercase tracking-wide">
+                            <p className="truncate text-[9px] text-ink-subtle uppercase tracking-wide">
                               {col.label}
                             </p>
                           </div>
@@ -811,7 +811,7 @@ export function FlightdeckBoardView({
                         <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-within/section:opacity-100">
                           <button
                             aria-label="Reorder stream"
-                            className="cursor-grab rounded p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60 active:cursor-grabbing"
+                            className="cursor-grab rounded p-1 text-ink-subtle hover:bg-accent hover:text-ink-muted active:cursor-grabbing"
                             draggable
                             onDragEnd={() => setDragStream(null)}
                             onDragStart={() => setDragStream(groupLabel)}
@@ -823,7 +823,7 @@ export function FlightdeckBoardView({
                             aria-label={
                               isPinned ? "Unpin stream" : "Pin stream open"
                             }
-                            className="rounded p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+                            className="rounded p-1 text-ink-subtle hover:bg-accent hover:text-ink-muted"
                             onClick={() => togglePinStream(groupLabel)}
                             type="button"
                           >
@@ -834,7 +834,7 @@ export function FlightdeckBoardView({
                             )}
                           </button>
                           <button
-                            className="rounded px-2 py-0.5 text-[10px] text-white/40 hover:bg-white/[0.05] hover:text-white/65"
+                            className="rounded px-2 py-0.5 text-[10px] text-ink-subtle hover:bg-accent hover:text-ink-muted"
                             onClick={() => showOnlyStream(groupLabel)}
                             type="button"
                           >
@@ -886,17 +886,17 @@ export function FlightdeckBoardView({
       </div>
 
       <Dialog onOpenChange={setNewTaskOpen} open={newTaskOpen}>
-        <DialogContent className="border-white/[0.08] bg-[#121214] text-white/85">
+        <DialogContent className="border-line bg-[#121214] text-ink">
           <DialogHeader>
-            <DialogTitle className="text-white/90">New task</DialogTitle>
+            <DialogTitle className="text-ink">New task</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1">
             <div className="space-y-1.5">
-              <Label className="text-white/50" htmlFor="fd-task-title">
+              <Label className="text-ink-muted" htmlFor="fd-task-title">
                 Title
               </Label>
               <Input
-                className="border-white/[0.08] bg-white/[0.03] text-white/80"
+                className="border-line bg-surface-sunk text-ink"
                 id="fd-task-title"
                 onChange={(e) => setNewTaskTitle(e.target.value)}
                 placeholder="What needs doing?"
@@ -904,24 +904,24 @@ export function FlightdeckBoardView({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-white/50">Stream</Label>
+              <Label className="text-ink-muted">Stream</Label>
               <FlightdeckStreamSelect
                 onChange={setNewTaskStream}
                 streams={payload?.streams}
                 value={newTaskStream}
                 variant="field"
               />
-              <p className="text-[10px] text-white/30">
+              <p className="text-[10px] text-ink-subtle">
                 Pick an existing stream or type a new name — it will be created
                 on capture.
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-white/50" htmlFor="fd-task-owner">
+              <Label className="text-ink-muted" htmlFor="fd-task-owner">
                 Owner
               </Label>
               <select
-                className="flex h-9 w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white/80 outline-none"
+                className="flex h-9 w-full rounded-md border border-line bg-surface-sunk px-3 text-sm text-ink outline-none"
                 id="fd-task-owner"
                 onChange={(e) => setNewTaskOwner(e.target.value)}
                 value={newTaskOwner}
@@ -934,11 +934,11 @@ export function FlightdeckBoardView({
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-white/50" htmlFor="fd-task-body">
+              <Label className="text-ink-muted" htmlFor="fd-task-body">
                 Notes (optional)
               </Label>
               <textarea
-                className="min-h-[5rem] w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white/80 outline-none placeholder:text-white/25"
+                className="min-h-[5rem] w-full rounded-md border border-line bg-surface-sunk px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-subtle"
                 id="fd-task-body"
                 onChange={(e) => setNewTaskBody(e.target.value)}
                 placeholder="Context, links, acceptance criteria…"
@@ -946,12 +946,12 @@ export function FlightdeckBoardView({
               />
             </div>
             {captureError ? (
-              <p className="text-[11px] text-red-400/90">{captureError}</p>
+              <p className="text-[11px] text-destructive">{captureError}</p>
             ) : null}
           </div>
           <DialogFooter>
             <Button
-              className="border-white/[0.08] bg-white/[0.04] text-white/70"
+              className="border-line bg-surface-sunk text-ink"
               onClick={() => setNewTaskOpen(false)}
               type="button"
               variant="outline"
@@ -959,7 +959,7 @@ export function FlightdeckBoardView({
               Cancel
             </Button>
             <Button
-              className="bg-white/95 text-black hover:bg-white"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={captureBusy}
               onClick={() => {
                 captureTask().catch(() => undefined);

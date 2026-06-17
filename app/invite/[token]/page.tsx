@@ -118,9 +118,9 @@ export default function InvitePage() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-[#0a0a0c] p-4">
       <div className="w-full max-w-md">
-        <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#111114]">
-          <div className="border-white/[0.06] border-b px-6 py-5">
-            <p className="font-medium text-[13px] text-white/50 tracking-tight">
+        <div className="overflow-hidden rounded-3xl border border-line bg-[#111114]">
+          <div className="border-line border-b px-6 py-5">
+            <p className="font-medium text-[13px] text-ink-muted tracking-tight">
               nozero
             </p>
           </div>
@@ -129,18 +129,18 @@ export default function InvitePage() {
           <div className="px-6 py-6">
             {state === "loading" && (
               <div className="flex flex-col items-center gap-3 py-12">
-                <LoaderIcon className="h-6 w-6 animate-spin text-white/40" />
-                <p className="text-sm text-white/50">Loading invitation...</p>
+                <LoaderIcon className="h-6 w-6 animate-spin text-ink-subtle" />
+                <p className="text-sm text-ink-muted">Loading invitation...</p>
               </div>
             )}
 
             {state === "error" && (
               <div className="flex flex-col items-center gap-3 py-12">
-                <XCircleIcon className="h-8 w-8 text-red-400" />
-                <p className="font-medium text-sm text-white/80">
+                <XCircleIcon className="h-8 w-8 text-destructive" />
+                <p className="font-medium text-sm text-ink">
                   Invalid or expired invitation
                 </p>
-                <p className="text-white/40 text-xs">
+                <p className="text-ink-subtle text-xs">
                   This invite link may no longer be valid.
                 </p>
               </div>
@@ -148,8 +148,8 @@ export default function InvitePage() {
 
             {(state === "ready" || state === "responding") && invite && (
               <>
-                <p className="mb-1 text-white/40 text-xs">
-                  <strong className="text-white/70">
+                <p className="mb-1 text-ink-subtle text-xs">
+                  <strong className="text-ink">
                     {invite.organizerName}
                   </strong>{" "}
                   invited you to:
@@ -158,22 +158,22 @@ export default function InvitePage() {
                   {invite.eventTitle}
                 </h1>
 
-                <div className="mb-6 space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+                <div className="mb-6 space-y-3 rounded-2xl border border-line bg-surface-sunk p-4">
                   <div className="flex items-start gap-3">
-                    <ClockIcon className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+                    <ClockIcon className="mt-0.5 h-4 w-4 shrink-0 text-ink-subtle" />
                     <div>
-                      <p className="text-sm text-white/80">
+                      <p className="text-sm text-ink">
                         {formatDate(invite.eventStart)}
                       </p>
-                      <p className="text-white/50 text-xs">
+                      <p className="text-ink-muted text-xs">
                         {formatTime(invite.eventStart, invite.eventEnd)}
                       </p>
                     </div>
                   </div>
                   {invite.eventLocation && (
                     <div className="flex items-start gap-3">
-                      <MapPinIcon className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
-                      <p className="text-sm text-white/80">
+                      <MapPinIcon className="mt-0.5 h-4 w-4 shrink-0 text-ink-subtle" />
+                      <p className="text-sm text-ink">
                         {invite.eventLocation}
                       </p>
                     </div>
@@ -182,7 +182,7 @@ export default function InvitePage() {
 
                 <div className="flex gap-3">
                   <button
-                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-white font-semibold text-black text-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground text-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                     disabled={state === "responding"}
                     onClick={() => respond("accept")}
                   >
@@ -194,7 +194,7 @@ export default function InvitePage() {
                     Accept
                   </button>
                   <button
-                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] font-medium text-sm text-white/70 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl border border-line bg-surface-sunk font-medium text-sm text-ink transition-colors hover:bg-accent disabled:opacity-50"
                     disabled={state === "responding"}
                     onClick={() => respond("decline")}
                   >
@@ -213,7 +213,7 @@ export default function InvitePage() {
                   </div>
                 ) : (
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15 ring-1 ring-red-500/30">
-                    <XCircleIcon className="h-7 w-7 text-red-400" />
+                    <XCircleIcon className="h-7 w-7 text-destructive" />
                   </div>
                 )}
 
@@ -223,17 +223,17 @@ export default function InvitePage() {
                       ? "You're in!"
                       : "Invitation declined"}
                   </h2>
-                  <p className="mt-1 text-sm text-white/50">
+                  <p className="mt-1 text-sm text-ink-muted">
                     {responseMessage}
                   </p>
                 </div>
 
                 {invite && (
-                  <div className="mt-2 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                    <p className="font-medium text-sm text-white/80">
+                  <div className="mt-2 w-full rounded-2xl border border-line bg-surface-sunk p-4">
+                    <p className="font-medium text-sm text-ink">
                       {invite.eventTitle}
                     </p>
-                    <p className="mt-1 text-white/40 text-xs">
+                    <p className="mt-1 text-ink-subtle text-xs">
                       {formatDate(invite.eventStart)} &middot;{" "}
                       {formatTime(invite.eventStart, invite.eventEnd)}
                     </p>
@@ -244,7 +244,7 @@ export default function InvitePage() {
           </div>
         </div>
 
-        <p className="mt-4 text-center text-[11px] text-white/20">
+        <p className="mt-4 text-center text-[11px] text-ink-subtle">
           Powered by nozero
         </p>
       </div>

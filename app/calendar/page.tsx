@@ -49,7 +49,7 @@ export default async function CalendarPage() {
     <div className="h-dvh overflow-hidden bg-background">
       <Suspense
         fallback={
-          <div className="flex h-full items-center justify-center text-sm text-white/30">
+          <div className="flex h-full items-center justify-center text-sm text-ink-subtle">
             Loading…
           </div>
         }

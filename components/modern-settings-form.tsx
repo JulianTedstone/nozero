@@ -1457,7 +1457,7 @@ export function ModernSettingsForm({
                 className={cn(
                   "h-5 w-5 rounded-full transition-all",
                   (editDraft.color ?? account?.color) === c
-                    ? "ring-2 ring-white/60 ring-offset-1 ring-offset-black/40"
+                    ? "ring-2 ring-line ring-offset-1 ring-offset-black/40"
                     : ""
                 )}
                 style={{ backgroundColor: c }}
@@ -1503,7 +1503,7 @@ export function ModernSettingsForm({
                 <p>
                   Your normal Apple ID password will not work. Create one at{" "}
                   <a
-                    className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                    className="text-active underline underline-offset-2 hover:text-active"
                     href="https://appleid.apple.com/account/manage"
                     rel="noopener noreferrer"
                     target="_blank"
@@ -1794,7 +1794,7 @@ export function ModernSettingsForm({
           </Link>
           <div className="mt-4 flex items-start justify-between gap-3 md:block">
             <div>
-              <h1 className="font-bold text-xl tracking-tight md:text-lg">
+              <h1 className="title-serif text-xl md:text-2xl">
                 Settings
               </h1>
               <p className="mt-1 text-muted-foreground text-xs md:hidden">
@@ -2250,7 +2250,7 @@ export function ModernSettingsForm({
                   <button
                     type="button"
                     onClick={async () => { await authClient.signOut(); window.location.href = "/"; }}
-                    className="h-8 flex-1 rounded-xl border border-red-500/20 bg-red-500/10 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                    className="h-8 flex-1 rounded-xl border border-red-500/20 bg-red-500/10 text-xs font-medium text-destructive hover:bg-red-500/20 transition-colors"
                   >
                     Sign Out
                   </button>
@@ -2268,7 +2268,7 @@ export function ModernSettingsForm({
                   Connect email and calendar accounts for sync. No accounts means no email or calendar pull.
                 </p>
                 {!googleAccountLinkConfigured ? (
-                  <p className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-100/90">
+                  <p className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-destructive">
                     Google calendar and Gmail linking is not configured on this server.
                     CalDAV and IMAP still work. {GOOGLE_ACCOUNT_LINK_SETUP_HINT}
                   </p>
@@ -2333,7 +2333,7 @@ export function ModernSettingsForm({
                           <button
                             type="button"
                             onClick={() => deleteAccount(account.id)}
-                            className="flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                            className="flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-red-500/10 hover:text-destructive"
                           >
                             <TrashIcon className="h-3 w-3" />
                           </button>
@@ -2421,7 +2421,7 @@ export function ModernSettingsForm({
                   Connect Krisp for meeting transcripts and action items in Context.
                 </p>
                 <a
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-white/[0.1] transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-accent transition-colors"
                   href="/api/accounts/krisp/connect"
                 >
                   Connect Krisp

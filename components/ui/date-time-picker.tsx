@@ -138,18 +138,18 @@ function CompactCalendar({
       <div className="mb-1 flex items-center justify-between">
         <button
           aria-label="Previous month"
-          className="flex size-6 items-center justify-center rounded-md text-white/30 transition-colors hover:bg-white/[0.06] hover:text-white/60"
+          className="flex size-6 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-accent hover:text-ink-muted"
           onClick={goPrev}
           type="button"
         >
           <ChevronLeftIcon className="size-3" />
         </button>
-        <span className="font-medium text-[11px] text-white/60 tabular-nums tracking-tight">
+        <span className="font-medium text-[11px] text-ink-muted tabular-nums tracking-tight">
           {format(viewMonth, "MMM yyyy")}
         </span>
         <button
           aria-label="Next month"
-          className="flex size-6 items-center justify-center rounded-md text-white/30 transition-colors hover:bg-white/[0.06] hover:text-white/60"
+          className="flex size-6 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-accent hover:text-ink-muted"
           onClick={goNext}
           type="button"
         >
@@ -160,7 +160,7 @@ function CompactCalendar({
       <div className="mb-0.5 grid grid-cols-7">
         {WEEKDAYS.map((wd, i) => (
           <div
-            className="py-0.5 text-center font-medium text-[10px] text-white/20"
+            className="py-0.5 text-center font-medium text-[10px] text-ink-subtle"
             key={`wd-${String(i)}`}
           >
             {wd}
@@ -181,10 +181,10 @@ function CompactCalendar({
                 "flex h-7 items-center justify-center rounded-md text-[11px] tabular-nums transition-colors duration-100",
                 isOutside && "text-white/[0.12]",
                 !(isOutside || isSelected) &&
-                  "text-white/60 hover:bg-white/[0.06] hover:text-white/80",
+                  "text-ink-muted hover:bg-accent hover:text-ink",
                 isToday &&
                   !isSelected &&
-                  "bg-white/[0.07] font-medium text-white",
+                  "bg-accent font-medium text-white",
                 isSelected && "bg-white font-semibold text-black"
               )}
               key={day.toISOString()}
@@ -247,7 +247,7 @@ function TimeSlotList({
               "flex h-7 w-full items-center rounded-md px-2.5 text-[11px] tabular-nums transition-colors duration-100",
               isSelected
                 ? "bg-white font-medium text-black"
-                : "text-white/50 hover:bg-white/[0.06] hover:text-white/80"
+                : "text-ink-muted hover:bg-accent hover:text-ink"
             )}
             key={`${hours}:${minutes}`}
             onClick={() => onSelect(hours, minutes)}
@@ -307,7 +307,7 @@ export function DatePicker({
         <span
           className={cn(
             "min-w-0 flex-1 truncate tabular-nums",
-            selectedDate ? "font-medium text-white/90" : "text-white/35"
+            selectedDate ? "font-medium text-ink" : "text-ink-subtle"
           )}
         >
           {selectedDate
@@ -319,15 +319,15 @@ export function DatePicker({
       <PopoverContent
         align="start"
         className={cn(
-          "w-[248px] gap-0 overflow-hidden rounded-xl border border-white/[0.08] bg-popover p-2.5 shadow-[var(--glass-shadow)] ring-0",
+          "w-[248px] gap-0 overflow-hidden rounded-xl border border-line bg-popover p-2.5 shadow-[var(--glass-shadow)] ring-0",
           popoverClassName
         )}
         sideOffset={6}
       >
         <CompactCalendar onSelect={handleSelect} selected={selectedDate} />
-        <div className="mt-1 flex justify-end border-white/[0.06] border-t pt-1">
+        <div className="mt-1 flex justify-end border-line border-t pt-1">
           <button
-            className="rounded-md px-2 py-0.5 font-medium text-[10px] text-white/30 transition-colors hover:bg-white/[0.06] hover:text-white/50"
+            className="rounded-md px-2 py-0.5 font-medium text-[10px] text-ink-subtle transition-colors hover:bg-accent hover:text-ink-muted"
             onClick={goToday}
             type="button"
           >
@@ -367,7 +367,7 @@ export function TimePicker({
         <span
           className={cn(
             "min-w-0 flex-1 truncate tabular-nums",
-            parsedValue ? "font-medium text-white/90" : "text-white/35"
+            parsedValue ? "font-medium text-ink" : "text-ink-subtle"
           )}
         >
           {parsedValue
@@ -379,7 +379,7 @@ export function TimePicker({
       <PopoverContent
         align="start"
         className={cn(
-          "w-[136px] gap-0 overflow-hidden rounded-xl border border-white/[0.08] bg-popover p-1 shadow-[var(--glass-shadow)] ring-0",
+          "w-[136px] gap-0 overflow-hidden rounded-xl border border-line bg-popover p-1 shadow-[var(--glass-shadow)] ring-0",
           popoverClassName
         )}
         sideOffset={6}
@@ -437,12 +437,12 @@ export function DateTimePicker({
         disabled={disabled}
       >
         {showIcon && (
-          <CalendarIcon className="size-3.5 shrink-0 text-white/35" />
+          <CalendarIcon className="size-3.5 shrink-0 text-ink-subtle" />
         )}
         <span
           className={cn(
             "min-w-0 flex-1 truncate tabular-nums",
-            selectedDate ? "font-medium text-white/90" : "text-white/35"
+            selectedDate ? "font-medium text-ink" : "text-ink-subtle"
           )}
         >
           {label}
@@ -452,7 +452,7 @@ export function DateTimePicker({
       <PopoverContent
         align="start"
         className={cn(
-          "w-[356px] flex-row gap-0 overflow-hidden rounded-xl border border-white/[0.08] bg-popover p-0 shadow-[var(--glass-shadow)] ring-0",
+          "w-[356px] flex-row gap-0 overflow-hidden rounded-xl border border-line bg-popover p-0 shadow-[var(--glass-shadow)] ring-0",
           popoverClassName
         )}
         sideOffset={6}
@@ -460,7 +460,7 @@ export function DateTimePicker({
         <div className="flex-1 p-2.5">
           <CompactCalendar onSelect={updateDate} selected={selectedDate} />
         </div>
-        <div className="w-[108px] border-white/[0.06] border-l">
+        <div className="w-[108px] border-line border-l">
           <TimeSlotList
             onSelect={updateTime}
             selectedHours={selectedDate?.getHours() ?? DEFAULT_HOUR}

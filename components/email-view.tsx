@@ -991,7 +991,7 @@ export function EmailView({
                 </p>
               )
             ) : (
-              <ul className="divide-y divide-white/[0.04]">
+              <ul className="divide-y divide-line">
                 {threads.map((thread) => {
                   const active = selectedId === thread.id;
                   return (

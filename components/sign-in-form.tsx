@@ -85,15 +85,15 @@ export default function SignInForm() {
           transition={{ ...spring, delay: 0.05 }}
         >
           <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-primary">
-            <CalendarIcon className="size-6 text-black" strokeWidth={2} />
+            <CalendarIcon className="size-6 text-primary-foreground" strokeWidth={2} />
           </div>
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary">
             nopilot
           </p>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
+          <h1 className="title-serif text-3xl text-ink">
             Sign in to nozero
           </h1>
-          <p className="mt-1.5 text-sm text-white/40">
+          <p className="mt-1.5 text-sm text-ink-subtle">
             AI-powered calendar, built for focus
           </p>
         </motion.div>
@@ -106,7 +106,7 @@ export default function SignInForm() {
           transition={{ ...spring, delay: 0.12 }}
         >
           {(error || errorMessage) && (
-            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3.5 py-3 text-[13px] leading-snug text-red-300">
+            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3.5 py-3 text-[13px] leading-snug text-destructive">
               {error || errorMessage}
             </div>
           )}
@@ -114,7 +114,7 @@ export default function SignInForm() {
           <form className="mb-4 flex flex-col gap-3" onSubmit={handlePasswordSignIn}>
             <input
               autoComplete="email"
-              className="liquid-glass-input h-12 w-full rounded-xl px-3.5 text-[13px] text-white placeholder:text-white/30 focus:outline-none"
+              className="liquid-glass-input h-12 w-full rounded-xl px-3.5 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none"
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Email"
               required
@@ -123,7 +123,7 @@ export default function SignInForm() {
             />
             <input
               autoComplete="current-password"
-              className="liquid-glass-input h-12 w-full rounded-xl px-3.5 text-[13px] text-white placeholder:text-white/30 focus:outline-none"
+              className="liquid-glass-input h-12 w-full rounded-xl px-3.5 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none"
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
               required
@@ -142,13 +142,13 @@ export default function SignInForm() {
           </form>
 
           <div className="mb-4 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/10" />
-            <span className="text-[11px] text-white/30">or</span>
-            <div className="h-px flex-1 bg-white/10" />
+            <div className="h-px flex-1 bg-line" />
+            <span className="text-[11px] text-ink-subtle">or</span>
+            <div className="h-px flex-1 bg-line" />
           </div>
 
           <motion.button
-            className="liquid-glass-input group flex h-12 w-full items-center justify-center gap-3 rounded-xl text-[13px] font-medium text-white transition-colors hover:bg-white/[0.08] disabled:pointer-events-none disabled:opacity-40"
+            className="liquid-glass-input group flex h-12 w-full items-center justify-center gap-3 rounded-xl text-[13px] font-medium text-ink transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
             disabled={isLoading}
             onClick={handleGoogleSignIn}
             type="button"
@@ -157,8 +157,8 @@ export default function SignInForm() {
           >
             {isLoading ? (
               <>
-                <div className="size-4 animate-spin rounded-full border-2 border-white/20 border-t-white/70" />
-                <span className="text-white/70">Signing in…</span>
+                <div className="size-4 animate-spin rounded-full border-2 border-line border-t-white/70" />
+                <span className="text-ink">Signing in…</span>
               </>
             ) : (
               <>
@@ -189,16 +189,16 @@ export default function SignInForm() {
         {/* Footer */}
         <motion.p
           animate={{ opacity: 1 }}
-          className="mt-6 text-center text-[11px] leading-relaxed text-white/25"
+          className="mt-6 text-center text-[11px] leading-relaxed text-ink-subtle"
           initial={{ opacity: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
         >
           By continuing you agree to our{" "}
-          <Link className="text-white/35 underline decoration-white/10 underline-offset-2 transition-colors hover:text-white/50" href="/terms">
+          <Link className="text-ink-subtle underline decoration-white/10 underline-offset-2 transition-colors hover:text-ink-muted" href="/terms">
             Terms
           </Link>{" "}
           and{" "}
-          <Link className="text-white/35 underline decoration-white/10 underline-offset-2 transition-colors hover:text-white/50" href="/privacy">
+          <Link className="text-ink-subtle underline decoration-white/10 underline-offset-2 transition-colors hover:text-ink-muted" href="/privacy">
             Privacy Policy
           </Link>
         </motion.p>

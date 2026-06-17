@@ -50,9 +50,9 @@ const STATUS_STYLES: Record<
   { icon: React.ElementType; color: string }
 > = {
   accepted: { icon: CheckIcon, color: "text-emerald-400" },
-  pending: { icon: ClockIcon, color: "text-amber-400" },
-  declined: { icon: XIcon, color: "text-red-400" },
-  "needs-action": { icon: ClockIcon, color: "text-white/35" },
+  pending: { icon: ClockIcon, color: "text-destructive" },
+  declined: { icon: XIcon, color: "text-destructive" },
+  "needs-action": { icon: ClockIcon, color: "text-ink-subtle" },
 };
 
 export function ParticipantsInput({
@@ -189,7 +189,7 @@ export function ParticipantsInput({
     <div className="relative">
       <div
         className={cn(
-          "flex w-full gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5",
+          "flex w-full gap-3 rounded-xl border border-line bg-surface-sunk px-3 py-2.5",
           className,
         )}
         onClick={() => inputRef.current?.focus()}
@@ -207,18 +207,18 @@ export function ParticipantsInput({
 
                 return (
                   <span
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.06] px-2 py-1"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-line bg-accent px-2 py-1"
                     key={participant.email}
                   >
                     <StatusIcon
                       className={cn("h-3 w-3 shrink-0", statusInfo.color)}
                     />
-                    <span className="min-w-0 truncate text-[11px] text-white/80">
+                    <span className="min-w-0 truncate text-[11px] text-ink">
                       {participant.email}
                     </span>
                     {!disabled && allowRemove ? (
                       <button
-                        className="shrink-0 rounded-full p-0.5 text-white/30 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+                        className="shrink-0 rounded-full p-0.5 text-ink-subtle transition-colors hover:bg-accent hover:text-ink"
                         onClick={(event) => {
                           event.stopPropagation();
                           removeParticipant(participant.email);
@@ -238,7 +238,7 @@ export function ParticipantsInput({
             <input
               autoComplete="off"
               className={cn(
-                "w-full bg-transparent text-white/85 text-xs outline-none placeholder:text-white/25",
+                "w-full bg-transparent text-ink text-xs outline-none placeholder:text-ink-subtle",
                 disabled && "cursor-not-allowed opacity-70",
                 inputClassName,
               )}
@@ -321,7 +321,7 @@ export function ParticipantsInput({
             />
 
             {loading ? (
-              <Loader2Icon className="h-3.5 w-3.5 shrink-0 animate-spin text-white/35" />
+              <Loader2Icon className="h-3.5 w-3.5 shrink-0 animate-spin text-ink-subtle" />
             ) : null}
           </div>
         </div>
@@ -329,7 +329,7 @@ export function ParticipantsInput({
 
       {open && suggestions.length > 0 ? (
         <ul
-          className="absolute top-[calc(100%+6px)] z-50 max-h-52 w-full overflow-y-auto rounded-xl border border-white/[0.1] bg-[#141414] py-1 shadow-xl"
+          className="absolute top-[calc(100%+6px)] z-50 max-h-52 w-full overflow-y-auto rounded-xl border border-line bg-[#141414] py-1 shadow-xl"
           role="listbox"
         >
           {suggestions.map((suggestion, index) => {
@@ -345,8 +345,8 @@ export function ParticipantsInput({
               <li key={suggestion.email} role="option">
                 <button
                   className={cn(
-                    "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors hover:bg-white/[0.06]",
-                    index === activeIndex && "bg-white/[0.08]",
+                    "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors hover:bg-accent",
+                    index === activeIndex && "bg-accent",
                   )}
                   onMouseDown={(event) => {
                     event.preventDefault();
@@ -354,10 +354,10 @@ export function ParticipantsInput({
                   }}
                   type="button"
                 >
-                  <span className="truncate text-xs text-white/90">
+                  <span className="truncate text-xs text-ink">
                     {suggestion.name || suggestion.email}
                   </span>
-                  <span className="truncate text-[11px] text-white/45">
+                  <span className="truncate text-[11px] text-ink-muted">
                     {suggestion.name ? subtitle : SOURCE_LABELS[suggestion.source]}
                   </span>
                 </button>

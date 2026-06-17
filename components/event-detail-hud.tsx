@@ -124,23 +124,23 @@ export function EventDetailHud({
     : null;
 
   return (
-    <div className="border-b border-white/[0.06] px-5 py-4">
+    <div className="border-b border-line px-5 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-2">
-          <h3 className="truncate font-semibold text-base text-white/95">
+          <h3 className="truncate font-semibold text-base text-ink">
             {title.trim() || (isCreating ? "New event" : "Untitled event")}
           </h3>
 
-          <p className="text-[11px] text-white/45">{organiserLabel}</p>
+          <p className="text-[11px] text-ink-muted">{organiserLabel}</p>
 
           {schedule ? (
-            <p className="text-xs text-white/60">{schedule}</p>
+            <p className="text-xs text-ink-muted">{schedule}</p>
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
             {mapsUrl ? (
               <a
-                className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[11px] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white/75"
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-sunk px-2 py-1 text-[11px] text-ink-muted transition-colors hover:bg-accent hover:text-ink"
                 href={mapsUrl}
                 rel="noopener noreferrer"
                 target="_blank"
@@ -154,7 +154,7 @@ export function EventDetailHud({
 
             {conferenceUrl && provider ? (
               <a
-                className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[11px] text-blue-300/90 transition-colors hover:bg-white/[0.08]"
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-sunk px-2 py-1 text-[11px] text-blue-300/90 transition-colors hover:bg-accent"
                 href={conferenceUrl}
                 rel="noopener noreferrer"
                 target="_blank"
@@ -171,7 +171,7 @@ export function EventDetailHud({
           </div>
 
           {countdown ? (
-            <p className="text-[11px] font-medium text-amber-200/80">
+            <p className="text-[11px] font-medium text-destructive">
               {countdown}
             </p>
           ) : null}
@@ -180,7 +180,7 @@ export function EventDetailHud({
         <div className="flex shrink-0 items-center gap-0.5">
           {onOpenContext && !isCreating ? (
             <Button
-              className="h-7 gap-1.5 rounded-lg px-2 text-[11px] text-white/45 hover:bg-white/[0.06] hover:text-white/70"
+              className="h-7 gap-1.5 rounded-lg px-2 text-[11px] text-ink-muted hover:bg-accent hover:text-ink"
               onClick={onOpenContext}
               size="sm"
               title="Open in Context"
@@ -191,7 +191,7 @@ export function EventDetailHud({
             </Button>
           ) : null}
           <Button
-            className="h-7 w-7 shrink-0 rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white/70"
+            className="h-7 w-7 shrink-0 rounded-lg text-ink-subtle hover:bg-accent hover:text-ink"
             onClick={onClose}
             size="icon"
             variant="ghost"

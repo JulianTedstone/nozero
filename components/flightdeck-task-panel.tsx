@@ -54,11 +54,11 @@ function DetailSelect({
 
   return (
     <div className="space-y-1">
-      <Label className="text-[10px] text-white/30" htmlFor={id}>
+      <Label className="text-[10px] text-ink-subtle" htmlFor={id}>
         {label}
       </Label>
       <select
-        className="flex h-8 w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-[11px] text-white/80 outline-none disabled:opacity-50"
+        className="flex h-8 w-full rounded-md border border-line bg-surface-sunk px-2 text-[11px] text-ink outline-none disabled:opacity-50"
         disabled={disabled}
         id={id}
         onChange={(event) => onChange(event.target.value)}
@@ -225,22 +225,22 @@ export function FlightdeckTaskPanel({
   return (
     <aside
       className={cn(
-        "absolute top-0 right-0 z-20 flex h-full w-full flex-col border-white/[0.08] border-l bg-[#0d0d0f]/95 backdrop-blur-md",
+        "absolute top-0 right-0 z-20 flex h-full w-full flex-col border-line border-l bg-[#0d0d0f]/95 backdrop-blur-md",
         expanded ? "md:w-[50vw] md:max-w-[50vw]" : "md:w-[24rem] md:max-w-md"
       )}
     >
       <div className="flex items-start justify-between gap-2 px-4 py-3">
         <div className="min-w-0">
-          <p className="text-[10px] text-white/30">
+          <p className="text-[10px] text-ink-subtle">
             #{item.ref ?? "draft"} · {item.status}
           </p>
-          <h3 className="mt-1 text-sm text-white/85 leading-snug">
+          <h3 className="mt-1 text-sm text-ink leading-snug">
             {item.title}
           </h3>
         </div>
         <div className="flex items-center gap-1">
           <button
-            className="rounded-lg p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            className="rounded-lg p-1 text-ink-subtle hover:bg-accent hover:text-ink-muted"
             onClick={() => setExpanded((prev) => !prev)}
             title={expanded ? "Shrink panel" : "Expand panel"}
             type="button"
@@ -253,7 +253,7 @@ export function FlightdeckTaskPanel({
             />
           </button>
           <button
-            className="rounded-lg p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            className="rounded-lg p-1 text-ink-subtle hover:bg-accent hover:text-ink-muted"
             onClick={onClose}
             type="button"
           >
@@ -307,24 +307,24 @@ export function FlightdeckTaskPanel({
             value={item.priority}
           />
           <div className="space-y-1">
-            <Label className="text-[10px] text-white/30">Next Action</Label>
+            <Label className="text-[10px] text-ink-subtle">Next Action</Label>
             <DatePicker
               disabled={fieldsDisabled}
               key={`${itemRef}-next-action`}
               onChange={(date) => patchField({ "Next Action": date })}
-              triggerClassName="h-8 w-full justify-start border-white/[0.08] bg-white/[0.03] px-2 text-[11px]"
+              triggerClassName="h-8 w-full justify-start border-line bg-surface-sunk px-2 text-[11px]"
               value={item.nextAction ?? undefined}
             />
           </div>
           <div className="space-y-1">
             <Label
-              className="text-[10px] text-white/30"
+              className="text-[10px] text-ink-subtle"
               htmlFor="fd-recurrence"
             >
               Recurrence
             </Label>
             <Input
-              className="h-8 border-white/[0.08] bg-white/[0.03] text-[11px] text-white/80"
+              className="h-8 border-line bg-surface-sunk text-[11px] text-ink"
               defaultValue={item.recurrence ?? ""}
               disabled={fieldsDisabled}
               id="fd-recurrence"
@@ -340,13 +340,13 @@ export function FlightdeckTaskPanel({
           </div>
           <div className="space-y-1">
             <Label
-              className="text-[10px] text-white/30"
+              className="text-[10px] text-ink-subtle"
               htmlFor="fd-project-link"
             >
               Project Link
             </Label>
             <Input
-              className="h-8 border-white/[0.08] bg-white/[0.03] text-[11px] text-white/80"
+              className="h-8 border-line bg-surface-sunk text-[11px] text-ink"
               defaultValue={item.projectLink ?? ""}
               disabled={fieldsDisabled}
               id="fd-project-link"
@@ -363,20 +363,20 @@ export function FlightdeckTaskPanel({
         </div>
 
         <div className="space-y-2 pt-3">
-          <p className="text-[10px] text-white/30 uppercase tracking-wider">
+          <p className="text-[10px] text-ink-subtle uppercase tracking-wider">
             Comments
           </p>
           {commentsLoading ? (
-            <div className="flex items-center gap-2 text-[11px] text-white/35">
+            <div className="flex items-center gap-2 text-[11px] text-ink-subtle">
               <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
               Loading thread…
             </div>
           ) : null}
           {commentsError ? (
-            <p className="text-[10px] text-red-400/90">{commentsError}</p>
+            <p className="text-[10px] text-destructive">{commentsError}</p>
           ) : null}
           {!commentsLoading && comments.length === 0 ? (
-            <p className="text-[11px] text-white/30">No comments yet.</p>
+            <p className="text-[11px] text-ink-subtle">No comments yet.</p>
           ) : null}
           <ul className="space-y-2">
             {comments.map((comment, index) => (
@@ -391,11 +391,11 @@ export function FlightdeckTaskPanel({
                   className={cn(
                     "max-w-[92%] rounded-2xl px-3 py-2",
                     index % 2 === 0
-                      ? "rounded-bl-md bg-white/[0.06] text-white/75"
-                      : "rounded-br-md bg-sky-500/15 text-white/80"
+                      ? "rounded-bl-md bg-accent text-ink"
+                      : "rounded-br-md bg-sky-500/15 text-ink"
                   )}
                 >
-                  <p className="text-[10px] text-white/40">
+                  <p className="text-[10px] text-ink-subtle">
                     {comment.author} · {formatCommentTime(comment.createdAt)}
                   </p>
                   <div className="mt-1">
@@ -411,7 +411,7 @@ export function FlightdeckTaskPanel({
           {commentsEnabled ? (
             <div className="space-y-2 pt-1">
               <textarea
-                className="min-h-[4.5rem] w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[11px] text-white/80 outline-none placeholder:text-white/25"
+                className="min-h-[4.5rem] w-full rounded-xl border border-line bg-surface-sunk px-3 py-2 text-[11px] text-ink outline-none placeholder:text-ink-subtle"
                 disabled={commentBusy}
                 onChange={(event) => setCommentDraft(event.target.value)}
                 placeholder="Add a comment…"
@@ -419,7 +419,7 @@ export function FlightdeckTaskPanel({
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label
-                  className="flex cursor-pointer items-center gap-2 text-[11px] text-white/50"
+                  className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-muted"
                   htmlFor="fd-tag-owner"
                 >
                   <Checkbox
@@ -431,7 +431,7 @@ export function FlightdeckTaskPanel({
                   Tag Owner
                 </label>
                 <Button
-                  className="h-7 bg-white/90 text-[10px] text-black hover:bg-white"
+                  className="h-7 bg-primary text-[10px] text-primary-foreground hover:bg-primary/90"
                   disabled={commentBusy || !commentDraft.trim()}
                   onClick={() => postComment().catch(() => undefined)}
                   size="sm"
@@ -446,21 +446,21 @@ export function FlightdeckTaskPanel({
               </div>
             </div>
           ) : (
-            <p className="text-[10px] text-white/30">
+            <p className="text-[10px] text-ink-subtle">
               Comments require GITHUB_TOKEN on the server.
             </p>
           )}
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-white/[0.06] border-t px-4 py-3">
+      <div className="shrink-0 space-y-2 border-line border-t px-4 py-3">
         {actionError ? (
-          <p className="text-[10px] text-red-400/90">{actionError}</p>
+          <p className="text-[10px] text-destructive">{actionError}</p>
         ) : null}
         <div className="flex flex-wrap gap-2">
           {actionsForStatus(item.status).map((verb) => (
             <Button
-              className="h-7 border-white/[0.08] bg-white/[0.04] text-[10px] text-white/65 capitalize"
+              className="h-7 border-line bg-surface-sunk text-[10px] text-ink-muted capitalize"
               disabled={actionBusy || !actionsEnabled}
               key={verb}
               onClick={() => onRunAction(verb).catch(() => undefined)}
@@ -473,7 +473,7 @@ export function FlightdeckTaskPanel({
         </div>
         {item.url ? (
           <a
-            className="inline-flex items-center gap-1 text-[10px] text-white/45 hover:text-white/70"
+            className="inline-flex items-center gap-1 text-[10px] text-ink-muted hover:text-ink"
             href={item.url}
             rel="noopener noreferrer"
             target="_blank"

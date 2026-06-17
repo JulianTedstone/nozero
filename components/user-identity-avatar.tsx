@@ -57,7 +57,7 @@ export function UserIdentityAvatar({
           dim,
           "flex-shrink-0 overflow-hidden",
           round,
-          "ring-2 ring-white/[0.08]",
+          "ring-2 ring-line",
           className,
         )}
       >
@@ -75,7 +75,7 @@ export function UserIdentityAvatar({
     <div
       className={cn(
         dim,
-        "flex flex-shrink-0 items-center justify-center font-bold text-white ring-2 ring-white/[0.08]",
+        "flex flex-shrink-0 items-center justify-center font-bold text-white ring-2 ring-line",
         round,
         textSz,
         className,

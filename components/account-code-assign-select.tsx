@@ -143,7 +143,7 @@ export function AccountCodeAssignSelect({
 
   if (!accountEmail) {
     return (
-      <span className="text-white/40 text-xs">
+      <span className="text-ink-subtle text-xs">
         Connect a calendar account to assign codes
       </span>
     );
@@ -158,7 +158,7 @@ export function AccountCodeAssignSelect({
         onValueChange={handleSelectChange}
         value={selectValue}
       >
-        <SelectTrigger className="!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-white/80 text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-white/40">
+        <SelectTrigger className="!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-ink text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-ink-subtle">
           <SelectValue placeholder="Project code">
             {selected
               ? `${selected.code} — ${selected.label}`
@@ -167,7 +167,7 @@ export function AccountCodeAssignSelect({
                 : "Project code"}
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="max-w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-white/[0.12] shadow-2xl">
+        <SelectContent className="max-w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-line shadow-2xl">
           <SelectItem value={NONE_VALUE}>Project code</SelectItem>
           {codes.map((code) => (
             <SelectItem key={code.id} value={code.id}>
@@ -185,7 +185,7 @@ export function AccountCodeAssignSelect({
       </Select>
 
       <Dialog onOpenChange={setCreateOpen} open={createOpen}>
-        <DialogContent className="rounded-2xl border border-white/[0.12] bg-background/95 sm:max-w-md">
+        <DialogContent className="rounded-2xl border border-line bg-background/95 sm:max-w-md">
           <DialogHeader>
             <DialogTitle>New account code</DialogTitle>
           </DialogHeader>

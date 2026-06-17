@@ -11,7 +11,7 @@ export default function PrivacyPolicy() {
       <div className="noise-filter pointer-events-none fixed inset-0 opacity-20" />
 
       {/* Header */}
-      <header className="relative z-10 border-white/10 border-b py-6">
+      <header className="relative z-10 border-line border-b py-6">
         <div className="container mx-auto px-4 md:px-6">
           <div className="flex items-center">
             <Link
@@ -172,7 +172,7 @@ export default function PrivacyPolicy() {
       </motion.main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-white/10 border-t py-6">
+      <footer className="relative z-10 border-line border-t py-6">
         <div className="container mx-auto px-4 md:px-6">
           <div className="text-center text-gray-500 text-sm">
             &copy; {new Date().getFullYear()} nozero. Open Source under

@@ -30,22 +30,22 @@ export function CollapsibleSidebarSection({
   };
 
   return (
-    <section className={cn("border-white/[0.06] border-t pt-3", className)}>
+    <section className={cn("border-line border-t pt-3", className)}>
       <button
         className="mb-2 flex w-full items-center gap-2 text-left"
         onClick={toggle}
         type="button"
       >
-        <span className="h-px min-w-0 flex-1 bg-white/[0.08]" />
-        <span className="shrink-0 font-medium text-[9px] text-white/35 uppercase tracking-wider">
+        <span className="h-px min-w-0 flex-1 bg-accent" />
+        <span className="shrink-0 font-medium text-[9px] text-ink-subtle uppercase tracking-wider">
           {title}
         </span>
         {open ? (
-          <ChevronDownIcon className="h-3 w-3 shrink-0 text-white/30" />
+          <ChevronDownIcon className="h-3 w-3 shrink-0 text-ink-subtle" />
         ) : (
-          <ChevronRightIcon className="h-3 w-3 shrink-0 text-white/30" />
+          <ChevronRightIcon className="h-3 w-3 shrink-0 text-ink-subtle" />
         )}
-        <span className="h-px min-w-0 flex-1 bg-white/[0.08]" />
+        <span className="h-px min-w-0 flex-1 bg-accent" />
       </button>
       {open ? children : null}
     </section>

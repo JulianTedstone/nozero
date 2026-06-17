@@ -34,18 +34,18 @@ export function EventDetailSection({
 }: EventDetailSectionProps) {
   return (
     <Collapsible
-      className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]"
+      className="overflow-hidden rounded-xl border border-line bg-surface-sunk"
       defaultOpen={defaultOpen}
       onOpenChange={onOpenChange}
       open={open}
     >
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03]",
+          "flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-sunk",
         )}
         type="button"
       >
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-white/45">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
           {label}
         </span>
         {locked && lockTooltip ? (
@@ -55,16 +55,16 @@ export function EventDetailSection({
               onClick={(event) => event.stopPropagation()}
               render={
                 <span className="inline-flex">
-                  <LockIcon className="size-3 text-white/30" />
+                  <LockIcon className="size-3 text-ink-subtle" />
                 </span>
               }
             />
             <TooltipContent>{lockTooltip}</TooltipContent>
           </Tooltip>
         ) : null}
-        <ChevronDownIcon className="ml-auto size-3.5 text-white/30 transition-transform in-data-[panel-open]:rotate-180" />
+        <ChevronDownIcon className="ml-auto size-3.5 text-ink-subtle transition-transform in-data-[panel-open]:rotate-180" />
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 border-t border-white/[0.06] px-3 py-3">
+      <CollapsibleContent className="space-y-2 border-t border-line px-3 py-3">
         {children}
       </CollapsibleContent>
     </Collapsible>

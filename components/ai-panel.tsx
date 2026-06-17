@@ -190,11 +190,11 @@ export function AiPanel({ userId, onClose, onEventMutated, persona = "Bertrand" 
     >
       <div className="flex items-center justify-between px-5 py-4">
         <div>
-          <h3 className="text-sm font-semibold text-white/90">{persona}</h3>
-          <p className="text-[10px] text-white/30">Calendar assistant</p>
+          <h3 className="text-sm font-semibold text-ink">{persona}</h3>
+          <p className="text-[10px] text-ink-subtle">Calendar assistant</p>
         </div>
         <Button
-          className="h-7 w-7 rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white/70"
+          className="h-7 w-7 rounded-lg text-ink-subtle hover:bg-accent hover:text-ink"
           onClick={onClose}
           size="icon"
           variant="ghost"
@@ -225,7 +225,7 @@ export function AiPanel({ userId, onClose, onEventMutated, persona = "Bertrand" 
                       "min-w-[3.5rem]",
                     msg.role === "user"
                       ? "bg-blue-500/90 text-white"
-                      : "bg-white/[0.04] text-white/80"
+                      : "bg-surface-sunk text-ink"
                   )}
                   layout={isLatest && msg.role === "assistant"}
                   transition={{ layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } }}
@@ -253,9 +253,9 @@ export function AiPanel({ userId, onClose, onEventMutated, persona = "Bertrand" 
                             initial={{ opacity: 0, y: 4 }}
                             transition={{ duration: 0.2, ease: "easeOut" }}
                           >
-                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/35" />
-                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/35 [animation-delay:0.15s]" />
-                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/35 [animation-delay:0.3s]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:0.15s]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:0.3s]" />
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -275,7 +275,7 @@ export function AiPanel({ userId, onClose, onEventMutated, persona = "Bertrand" 
       <div className="px-4 py-3">
         <div className="liquid-glass-input flex items-center gap-2 rounded-xl px-3 py-2">
           <input
-            className="flex-1 bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25"
+            className="flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-subtle"
             disabled={isStreaming}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -284,7 +284,7 @@ export function AiPanel({ userId, onClose, onEventMutated, persona = "Bertrand" 
             value={input}
           />
           <Button
-            className="h-7 w-7 rounded-lg bg-blue-500/80 text-white hover:bg-blue-500 disabled:opacity-30"
+            className="h-7 w-7 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30"
             disabled={!input.trim() || isStreaming}
             onClick={sendMessage}
             size="icon"

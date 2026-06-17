@@ -102,7 +102,7 @@ type ThreeColumnLayoutProps = {
 };
 
 const TOGGLE_BTN =
-  "absolute top-2 z-20 rounded-md p-1 text-ink-subtle transition-colors hover:bg-accent hover:text-ink";
+  "absolute top-2 z-20 rounded-md p-1 text-ink-subtle opacity-0 transition hover:bg-accent hover:text-ink group-hover:opacity-100 focus-visible:opacity-100";
 const TOGGLE_BTN_FLOAT =
   "absolute top-2 z-20 rounded-md border border-line bg-surface/80 p-1 text-ink-muted backdrop-blur transition-colors hover:bg-accent hover:text-ink";
 
@@ -257,7 +257,7 @@ export function ThreeColumnLayout({
       {/* Left rail */}
       <div
         className={cn(
-          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden bg-col-side",
+          "group relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden bg-col-side",
           transition,
           leftCollapsed && "pointer-events-none",
         )}
@@ -330,7 +330,7 @@ export function ThreeColumnLayout({
       {/* Right rail */}
       <div
         className={cn(
-          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden bg-col-side",
+          "group relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden bg-col-side",
           transition,
           rightCollapsed && "pointer-events-none",
         )}

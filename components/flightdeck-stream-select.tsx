@@ -148,7 +148,7 @@ export function FlightdeckStreamSelect({
     return (
       <>
         <Input
-          className="border-white/[0.08] bg-white/[0.03] text-white/80"
+          className="border-line bg-surface-sunk text-ink"
           disabled={disabled || loading}
           list={listId}
           onChange={(event) => {
@@ -174,12 +174,12 @@ export function FlightdeckStreamSelect({
         onValueChange={handleSelectChange}
         value={selectValue}
       >
-        <SelectTrigger className="!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-white/80 text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-white/40">
+        <SelectTrigger className="!h-full min-h-0 min-w-0 flex-1 justify-between gap-2 rounded-none border-0 bg-transparent px-0 py-0 text-ink text-xs shadow-none focus:ring-0 [&_svg]:size-3.5 [&_svg]:text-ink-subtle">
           <SelectValue placeholder="Stream">
             {value ?? "Stream"}
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="max-w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-white/[0.12] shadow-2xl">
+        <SelectContent className="max-w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-line shadow-2xl">
           <SelectItem value={NONE_VALUE}>Stream</SelectItem>
           {streamOptions.map((stream) => (
             <SelectItem key={stream} value={stream}>
@@ -196,7 +196,7 @@ export function FlightdeckStreamSelect({
       </Select>
 
       <Dialog onOpenChange={setCreateOpen} open={createOpen}>
-        <DialogContent className="rounded-2xl border border-white/[0.12] bg-background/95 sm:max-w-md">
+        <DialogContent className="rounded-2xl border border-line bg-background/95 sm:max-w-md">
           <DialogHeader>
             <DialogTitle>New Flightdeck stream</DialogTitle>
           </DialogHeader>

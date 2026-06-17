@@ -58,7 +58,7 @@ export function RecurrenceSelect({
       >
         <SelectTrigger className={triggerClassName}>
           <div className="flex min-w-0 items-center gap-2">
-            <RepeatIcon className="size-4 shrink-0 text-white/30" />
+            <RepeatIcon className="size-4 shrink-0 text-ink-subtle" />
             <SelectValue placeholder="Does not repeat">{displayLabel}</SelectValue>
           </div>
         </SelectTrigger>
@@ -83,9 +83,9 @@ export function RecurrenceSelect({
       {value === "custom" && (
         <div className="liquid-glass-input space-y-2 rounded-xl p-3">
           <div className="flex items-center gap-2">
-            <span className="shrink-0 text-white/40 text-xs">Every</span>
+            <span className="shrink-0 text-ink-subtle text-xs">Every</span>
             <Input
-              className="h-8 w-16 border-white/10 bg-white/5 text-xs"
+              className="h-8 w-16 border-line bg-surface-sunk text-xs"
               min={1}
               onChange={(e) => {
                 const interval = Math.max(
@@ -109,7 +109,7 @@ export function RecurrenceSelect({
               }}
               value={customRule?.frequency ?? "weekly"}
             >
-              <SelectTrigger className="h-8 flex-1 border-white/10 bg-white/5 text-xs">
+              <SelectTrigger className="h-8 flex-1 border-line bg-surface-sunk text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -152,7 +152,7 @@ export function RecurrenceSelect({
                     : "never"
               }
             >
-              <SelectTrigger className="h-8 flex-1 border-white/10 bg-white/5 text-xs">
+              <SelectTrigger className="h-8 flex-1 border-line bg-surface-sunk text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -164,7 +164,7 @@ export function RecurrenceSelect({
             {customRule?.count !== undefined && (
               <>
                 <Input
-                  className="h-8 w-16 border-white/10 bg-white/5 text-xs"
+                  className="h-8 w-16 border-line bg-surface-sunk text-xs"
                   min={1}
                   onChange={(e) => {
                     onCustomRuleChange({
@@ -179,7 +179,7 @@ export function RecurrenceSelect({
                   type="number"
                   value={customRule.count}
                 />
-                <span className="text-white/40 text-xs">occurrences</span>
+                <span className="text-ink-subtle text-xs">occurrences</span>
               </>
             )}
             {customRule?.until !== undefined && (
@@ -194,7 +194,7 @@ export function RecurrenceSelect({
                   });
                 }}
                 placeholder="End date"
-                triggerClassName="h-8 flex-1 border-white/10 bg-white/5 text-xs"
+                triggerClassName="h-8 flex-1 border-line bg-surface-sunk text-xs"
                 value={
                   customRule.until
                     ? format(new Date(customRule.until), "yyyy-MM-dd")

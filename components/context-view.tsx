@@ -95,7 +95,7 @@ function FileTreeList({
           return (
             <div key={node.path}>
               <button
-                className="flex w-full items-center gap-1 rounded px-2 py-1 text-left text-[10px] text-white/45 hover:bg-white/[0.04]"
+                className="flex w-full items-center gap-1 rounded px-2 py-1 text-left text-[10px] text-ink-muted hover:bg-surface-sunk"
                 onClick={() => onToggleFolder(node.path)}
                 style={{ paddingLeft: 8 + depth * 10 }}
                 type="button"
@@ -125,8 +125,8 @@ function FileTreeList({
             className={cn(
               "block w-full truncate rounded px-2 py-1 text-left text-[10px]",
               activePath === node.path
-                ? "bg-white/[0.07] text-white/75"
-                : "text-white/40 hover:bg-white/[0.04]"
+                ? "bg-accent text-ink"
+                : "text-ink-subtle hover:bg-surface-sunk"
             )}
             key={node.path}
             onClick={() => onSelectFile(node.path)}
@@ -455,12 +455,12 @@ export function ContextView({
   const streamsTree = (
     <>
       {tabBar ? (
-        <div className="shrink-0 space-y-3 border-white/[0.06] border-b p-3">
+        <div className="shrink-0 space-y-3 border-line border-b p-3">
           {tabBar}
         </div>
       ) : null}
       <div className="px-3 py-2">
-        <h2 className="font-semibold text-[10px] text-white/35 uppercase tracking-wider">
+        <h2 className="font-semibold text-[10px] text-ink-subtle uppercase tracking-wider">
           Streams
         </h2>
       </div>
@@ -475,8 +475,8 @@ export function ContextView({
                 className={cn(
                   "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px]",
                   selected
-                    ? "bg-white/[0.08] text-white/80"
-                    : "text-white/50 hover:bg-white/[0.05]"
+                    ? "bg-accent text-ink"
+                    : "text-ink-muted hover:bg-accent"
                 )}
                 onClick={() => {
                   setSelectedStream(stream);
@@ -495,7 +495,7 @@ export function ContextView({
                 )}
               </button>
               {expanded ? (
-                <div className="mt-1 ml-2 space-y-1 border-white/[0.06] border-l pl-2">
+                <div className="mt-1 ml-2 space-y-1 border-line border-l pl-2">
                   {streamRepos.map((repo) => {
                     const key = repoKeyFor(stream, repo.fullName);
                     const repoExpanded = openRepos[key] ?? selected;
@@ -512,8 +512,8 @@ export function ContextView({
                           className={cn(
                             "flex w-full items-center justify-between rounded px-2 py-1 text-left text-[10px]",
                             repoSelected
-                              ? "bg-white/[0.06] text-white/70"
-                              : "text-white/45 hover:bg-white/[0.04]"
+                              ? "bg-accent text-ink"
+                              : "text-ink-muted hover:bg-surface-sunk"
                           )}
                           onClick={() => {
                             setSelectedStream(stream);
@@ -534,17 +534,17 @@ export function ContextView({
                           )}
                         </button>
                         {repoExpanded ? (
-                          <div className="mt-0.5 ml-2 space-y-0.5 border-white/[0.06] border-l pl-2">
+                          <div className="mt-0.5 ml-2 space-y-0.5 border-line border-l pl-2">
                             {isTreeLoading && repoFileTree.length === 0 ? (
-                              <p className="px-2 py-1 text-[10px] text-white/30">
+                              <p className="px-2 py-1 text-[10px] text-ink-subtle">
                                 Loading files…
                               </p>
                             ) : repoTreeError ? (
-                              <p className="px-2 py-1 text-[10px] text-amber-400/70">
+                              <p className="px-2 py-1 text-[10px] text-destructive">
                                 {repoTreeError}
                               </p>
                             ) : repoFileTree.length === 0 ? (
-                              <p className="px-2 py-1 text-[10px] text-white/25">
+                              <p className="px-2 py-1 text-[10px] text-ink-subtle">
                                 No files yet.
                               </p>
                             ) : null}
@@ -570,7 +570,7 @@ export function ContextView({
                             {selected && repoSelected ? (
                               <div className="flex items-center gap-1 px-1 pt-1">
                                 <input
-                                  className="h-6 min-w-0 flex-1 rounded border border-white/[0.08] bg-white/[0.03] px-2 text-[10px] text-white/70 outline-none"
+                                  className="h-6 min-w-0 flex-1 rounded border border-line bg-surface-sunk px-2 text-[10px] text-ink outline-none"
                                   onChange={(event) =>
                                     setNewFilePath(event.target.value)
                                   }
@@ -578,7 +578,7 @@ export function ContextView({
                                   value={newFilePath}
                                 />
                                 <button
-                                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] text-white/45 hover:bg-white/[0.05]"
+                                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] text-ink-muted hover:bg-accent"
                                   onClick={() => {
                                     addFile(newFilePath).catch(() => undefined);
                                   }}
@@ -590,7 +590,7 @@ export function ContextView({
                               </div>
                             ) : null}
                             <a
-                              className="block truncate px-2 py-0.5 text-[9px] text-white/25 hover:text-white/45"
+                              className="block truncate px-2 py-0.5 text-[9px] text-ink-subtle hover:text-ink-muted"
                               href={githubRepoUrl(repo.fullName)}
                               rel="noreferrer"
                               target="_blank"
@@ -609,7 +609,7 @@ export function ContextView({
         })}
       </div>
       {sidebarFooter ? (
-        <div className="shrink-0 border-white/[0.06] border-t p-3">
+        <div className="shrink-0 border-line border-t p-3">
           {sidebarFooter}
         </div>
       ) : null}
@@ -617,15 +617,15 @@ export function ContextView({
   );
 
   const editorPanel = (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-white/[0.06] border-b px-3 py-2">
-        <p className="min-w-0 truncate font-mono text-[11px] text-white/55">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-line border-b px-3 py-2">
+        <p className="min-w-0 truncate font-mono text-[11px] text-ink-muted">
           {activePath
             ? `${selectedRepo?.split("/")[1] ?? selectedStream ?? ""}/${activePath}${fileLoading ? " · loading…" : ""}`
             : "Select a file"}
         </p>
         <button
-          className="inline-flex shrink-0 items-center gap-1 rounded border border-white/[0.08] px-2 py-1 text-[10px] text-white/60 hover:bg-white/[0.05] disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1 rounded border border-line px-2 py-1 text-[10px] text-ink-muted hover:bg-accent disabled:opacity-50"
           disabled={!(dirty && activePath && selectedRepo) || saving}
           onClick={() => {
             saveFile().catch(() => undefined);
@@ -638,7 +638,7 @@ export function ContextView({
       </div>
       <div className="relative min-h-0 flex-1 p-2">
         <textarea
-          className="absolute inset-2 resize-none rounded-lg border border-white/[0.08] bg-black/25 p-3 font-mono text-[13px] text-white/80 leading-relaxed outline-none focus:border-white/[0.14]"
+          className="absolute inset-2 resize-none rounded-lg border border-line bg-black/25 p-3 font-mono text-[13px] text-ink leading-relaxed outline-none focus:border-line"
           onChange={(event) => {
             setEditorValue(event.target.value);
             setDirty(true);
@@ -648,7 +648,7 @@ export function ContextView({
         />
       </div>
       {saveError ? (
-        <p className="shrink-0 px-3 pb-2 text-[10px] text-red-400/90">
+        <p className="shrink-0 px-3 pb-2 text-[10px] text-destructive">
           {saveError}
         </p>
       ) : null}
@@ -656,15 +656,15 @@ export function ContextView({
   );
 
   const connectedRail = (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface">
       <div className="shrink-0 px-3 py-2">
-        <h2 className="font-semibold text-[10px] text-white/35 uppercase tracking-wider">
+        <h2 className="font-semibold text-[10px] text-ink-subtle uppercase tracking-wider">
           Connected
         </h2>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         <CollapsibleSidebarSection className="border-t-0 pt-0" title="Summary">
-          <p className="text-[11px] text-white/60 leading-relaxed">
+          <p className="text-[11px] text-ink-muted leading-relaxed">
             {connectedLoading ? "Loading…" : selectedSummary}
           </p>
         </CollapsibleSidebarSection>
@@ -674,7 +674,7 @@ export function ContextView({
               .slice(0, 10)
               .map((update) => (
                 <li
-                  className="text-[10px] text-white/45"
+                  className="text-[10px] text-ink-muted"
                   key={`${update.stream}-${update.path}-${update.at}`}
                 >
                   {update.action} · {update.path}
@@ -687,7 +687,7 @@ export function ContextView({
             <ul className="space-y-1">
               {crm.participants.slice(0, 20).map((participant) => (
                 <li
-                  className="text-[10px] text-white/50"
+                  className="text-[10px] text-ink-muted"
                   key={participant.email}
                 >
                   {participant.name ?? participant.email}
@@ -698,7 +698,7 @@ export function ContextView({
             {crm.deals.length > 0 ? (
               <ul className="space-y-1">
                 {crm.deals.slice(0, 10).map((deal) => (
-                  <li className="text-[10px] text-white/40" key={deal.name}>
+                  <li className="text-[10px] text-ink-subtle" key={deal.name}>
                     {deal.name}
                     {deal.stage ? ` · ${deal.stage}` : ""}
                   </li>
@@ -710,7 +710,7 @@ export function ContextView({
         <CollapsibleSidebarSection title="Tickets">
           <ul className="space-y-1">
             {tickets.slice(0, 20).map((ticket) => (
-              <li className="text-[10px] text-white/50" key={ticket.id}>
+              <li className="text-[10px] text-ink-muted" key={ticket.id}>
                 {ticket.status ? `${ticket.status} · ` : ""}
                 {ticket.title}
               </li>
@@ -720,7 +720,7 @@ export function ContextView({
         <CollapsibleSidebarSection title="Messages">
           <ul className="space-y-1">
             {messages.slice(0, 20).map((message) => (
-              <li className="text-[10px] text-white/50" key={message.id}>
+              <li className="text-[10px] text-ink-muted" key={message.id}>
                 {message.sender} · {message.subject}
               </li>
             ))}
@@ -730,7 +730,7 @@ export function ContextView({
           <CollapsibleSidebarSection title="Slack">
             <ul className="space-y-1">
               {(connected?.sections.slack ?? []).slice(0, 12).map((item) => (
-                <li className="text-[10px] text-white/50" key={item.id}>
+                <li className="text-[10px] text-ink-muted" key={item.id}>
                   {item.channelName ? `#${item.channelName} · ` : ""}
                   {item.text}
                 </li>
@@ -742,7 +742,7 @@ export function ContextView({
           <CollapsibleSidebarSection title="Context">
             <ul className="space-y-1">
               {(connected?.sections.ctxHits ?? []).slice(0, 10).map((hit) => (
-                <li className="text-[10px] text-white/50" key={hit.id}>
+                <li className="text-[10px] text-ink-muted" key={hit.id}>
                   {hit.title}
                 </li>
               ))}
@@ -752,9 +752,9 @@ export function ContextView({
         <CollapsibleSidebarSection title="Events">
           <ul className="space-y-1">
             {streamEvents.slice(0, 20).map((event) => (
-              <li className="text-[10px] text-white/50" key={event.id}>
+              <li className="text-[10px] text-ink-muted" key={event.id}>
                 <button
-                  className="w-full text-left hover:text-white/75"
+                  className="w-full text-left hover:text-ink"
                   onClick={() => onFocusChange({ type: "meeting", event })}
                   type="button"
                 >
@@ -778,7 +778,7 @@ export function ContextView({
         className="min-h-0 flex-1"
         layoutId="context"
         left={
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface">
             {streamsTree}
           </div>
         }

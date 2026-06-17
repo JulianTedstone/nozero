@@ -29,7 +29,7 @@ export function InlineFieldPicker({
 
   if (disabled) {
     return (
-      <span className={cn("text-[10px] text-white/25", className)}>
+      <span className={cn("text-[10px] text-ink-subtle", className)}>
         {label}
       </span>
     );
@@ -44,12 +44,12 @@ export function InlineFieldPicker({
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
     >
-      <span className="pointer-events-none truncate text-[10px] text-white/25 transition-opacity group-hover:opacity-0">
+      <span className="pointer-events-none truncate text-[10px] text-ink-subtle transition-opacity group-hover:opacity-0">
         {label}
       </span>
       <select
         aria-label={ariaLabel}
-        className="absolute inset-0 cursor-pointer rounded border border-white/[0.12] bg-[#141416] px-1 text-[10px] text-white/70 opacity-0 outline-none transition-opacity focus:opacity-100 group-hover:opacity-100"
+        className="absolute inset-0 cursor-pointer rounded border border-line bg-[#141416] px-1 text-[10px] text-ink opacity-0 outline-none transition-opacity focus:opacity-100 group-hover:opacity-100"
         onChange={(event) => {
           if (event.target.value) {
             onChange(event.target.value);
