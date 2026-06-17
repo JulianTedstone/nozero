@@ -249,10 +249,10 @@ export function ContextView({
       `Context for ${selectedStream}`)
     : "Select a stream to start.";
 
-  const crm = connected?.sections.crm ?? { participants: [], deals: [] };
-  const tickets = connected?.sections.tickets ?? [];
-  const messages = connected?.sections.messages ?? [];
-  const connectedEvents = connected?.sections.events ?? [];
+  const crm = connected?.sections?.crm ?? { participants: [], deals: [] };
+  const tickets = connected?.sections?.tickets ?? [];
+  const messages = connected?.sections?.messages ?? [];
+  const connectedEvents = connected?.sections?.events ?? [];
   const streamEvents =
     connectedEvents.length > 0
       ? connectedEvents
@@ -262,8 +262,8 @@ export function ContextView({
             (event.flightdeckStream ?? "").toLowerCase() ===
               selectedStream.toLowerCase()
         );
-  const workspaceUpdates = connected?.sections.updates?.length
-    ? connected.sections.updates
+  const workspaceUpdates = connected?.sections?.updates?.length
+    ? connected.sections?.updates
     : (workspace?.updates ?? []).filter((update) =>
         selectedStream ? update.stream === selectedStream : true
       );
@@ -316,7 +316,13 @@ export function ContextView({
       .then((res) => res.json())
       .then((data) => {
         if (!controller.signal.aborted) {
-          setConnected(data as ConnectedBundle);
+          // Only store a well-formed bundle; an error or malformed response
+          // (e.g. {error}) must not poison the section accessors.
+          setConnected(
+            data && typeof data === "object" && "sections" in data
+              ? (data as ConnectedBundle)
+              : null,
+          );
         }
       })
       .catch(() => {
@@ -617,7 +623,7 @@ export function ContextView({
   );
 
   const editorPanel = (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-2 border-line border-b px-3 py-2">
         <p className="min-w-0 truncate font-mono text-[11px] text-ink-muted">
           {activePath
@@ -656,7 +662,7 @@ export function ContextView({
   );
 
   const connectedRail = (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 px-3 py-2">
         <h2 className="font-semibold text-[10px] text-ink-subtle uppercase tracking-wider">
           Connected
@@ -726,10 +732,10 @@ export function ContextView({
             ))}
           </ul>
         </CollapsibleSidebarSection>
-        {(connected?.sections.slack.length ?? 0) > 0 ? (
+        {(connected?.sections?.slack.length ?? 0) > 0 ? (
           <CollapsibleSidebarSection title="Slack">
             <ul className="space-y-1">
-              {(connected?.sections.slack ?? []).slice(0, 12).map((item) => (
+              {(connected?.sections?.slack ?? []).slice(0, 12).map((item) => (
                 <li className="text-[10px] text-ink-muted" key={item.id}>
                   {item.channelName ? `#${item.channelName} · ` : ""}
                   {item.text}
@@ -738,10 +744,10 @@ export function ContextView({
             </ul>
           </CollapsibleSidebarSection>
         ) : null}
-        {(connected?.sections.ctxHits.length ?? 0) > 0 ? (
+        {(connected?.sections?.ctxHits.length ?? 0) > 0 ? (
           <CollapsibleSidebarSection title="Context">
             <ul className="space-y-1">
-              {(connected?.sections.ctxHits ?? []).slice(0, 10).map((hit) => (
+              {(connected?.sections?.ctxHits ?? []).slice(0, 10).map((hit) => (
                 <li className="text-[10px] text-ink-muted" key={hit.id}>
                   {hit.title}
                 </li>
@@ -778,7 +784,7 @@ export function ContextView({
         className="min-h-0 flex-1"
         layoutId="context"
         left={
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {streamsTree}
           </div>
         }
