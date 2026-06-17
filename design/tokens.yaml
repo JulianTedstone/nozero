@@ -1,0 +1,156 @@
+# nozero design tokens — graphite ground, crimson action, yellow attention
+#
+# Source of truth for the app theme. Adapted from the nopilot brand-v3 system
+# (context-message-nopilot/site-redesign/brand-v3). W3C Design Tokens format.
+#
+# These values are currently mapped by hand into app/globals.css (the :root /
+# .dark CSS-variable layer + Tailwind @theme). A Style Dictionary step can be
+# wired later to generate that layer automatically — until then, KEEP THIS FILE
+# AND globals.css IN SYNC. See design/README.md.
+#
+# Two-signal discipline (do not break):
+#   crimson = ACTION  — the one button to press, brand mark, primary, links
+#   yellow  = ATTENTION — focus ring, selected row, live value, marked text
+#   They never swap jobs. Yellow is a fill, never a text colour (ink sits on it).
+
+$description: nozero brand tokens. Graphite ground, crimson primary, yellow active.
+
+# ---------------------------------------------------------------------------
+# 1. PRIMITIVE COLOUR  (raw ramps — never referenced directly in product code)
+# ---------------------------------------------------------------------------
+color:
+  neutral:
+    "0":   "#FFFFFF"
+    "50":  "#F8F8FA"
+    "100": "#F1F1F4"   # Coherence paper. Default light page ground.
+    "200": "#E6E4E8"
+    "300": "#CDCCD2"   # Hairlines / dividers on light.
+    "400": "#A6AAB0"
+    "500": "#6E747A"   # Muted body text on light.
+    "600": "#495258"   # Coherence graphite.
+    "700": "#353C40"
+    "800": "#272C2F"
+    "900": "#1C2022"   # Coherence ink. Primary text on light.
+    "950": "#14181A"   # Near-black. Dark-mode page ground base.
+  crimson:             # primary brand + call to action
+    "400": "#EC145A"
+    "500": "#E11A57"   # Primary crimson on dark. CTA and brand mark.
+    "600": "#C3094A"   # Primary crimson on light, hover ground.
+    "700": "#A8083F"   # Pressed / destructive.
+    wash:      "#FBE6EE"
+    wash-dark: "#2A1019"
+  yellow:              # active state + highlight (the returning signal)
+    "400": "#FFD24D"
+    "500": "#FFC10E"   # Coherence signal yellow. Active, focus, highlight fills.
+    "600": "#E0A400"
+    wash:  "#FFF6DA"
+  blue:                # calm secondary + data anchor / link on dark
+    "400": "#5B86E0"
+    "500": "#3B66CA"
+    "600": "#2A4DA0"
+  dataviz:             # ordered first-to-last series use
+    "1": "#E11A57"     # crimson — emphasis series
+    "2": "#3B66CA"     # blue
+    "3": "#2F8F86"     # teal
+    "4": "#FFC10E"     # yellow — highlighted point
+    "5": "#7B5EA7"     # violet
+    "6": "#6E747A"     # graphite baseline
+
+# ---------------------------------------------------------------------------
+# 2. SEMANTIC COLOUR  (what product code references, via globals.css vars)
+# ---------------------------------------------------------------------------
+semantic:
+  light:
+    bg:            "{color.neutral.100}"   # page ground
+    surface:       "{color.neutral.0}"     # cards, panels, sheets
+    surface-sunk:  "{color.neutral.50}"
+    line:          "{color.neutral.300}"   # hairlines, dividers, table rules
+    border:        "{color.neutral.200}"
+    text:          "{color.neutral.900}"
+    text-muted:    "{color.neutral.500}"
+    text-subtle:   "{color.neutral.400}"
+    primary:       "{color.crimson.600}"   # action
+    primary-hover: "{color.crimson.700}"
+    on-primary:    "{color.neutral.0}"
+    active:        "{color.yellow.500}"     # attention (focus ring, selected)
+    on-active:     "{color.neutral.900}"    # ink on yellow, never white
+    active-wash:   "{color.yellow.wash}"
+    link:          "{color.crimson.600}"
+    # Column elevation ladder (light): centre lifts toward white, sides recede.
+    col-shell:     "{color.neutral.100}"
+    col-side:      "#ECECEF"
+    col-center:    "{color.neutral.50}"
+    col-raised:    "{color.neutral.0}"
+  dark:
+    bg:            "{color.neutral.950}"
+    surface:       "#181C1F"
+    surface-sunk:  "#101315"
+    line:          "#2A2F33"
+    border:        "#262B2E"
+    text:          "#F1F5F9"
+    text-muted:    "#9AA0A6"
+    text-subtle:   "#6E747A"
+    primary:       "{color.crimson.500}"
+    primary-hover: "{color.crimson.400}"
+    on-primary:    "{color.neutral.0}"
+    active:        "{color.yellow.500}"
+    on-active:     "{color.neutral.950}"
+    active-wash:   "{color.crimson.wash-dark}"
+    link:          "#FF5C8A"
+    # Column elevation ladder (dark) — stepped back from pure black.
+    # gutter < side rail (secondary) < centre column (main focus) < raised card.
+    col-shell:     "#101315"   # outer shell / gutters (darkest)
+    col-side:      "#131619"   # side rails — secondary focus, recede
+    col-center:    "#181C1F"   # centre column — main focus, advances
+    col-raised:    "#1E2326"   # cards / tickets / panels (with 1px line)
+
+# ---------------------------------------------------------------------------
+# 3. TYPOGRAPHY
+# ---------------------------------------------------------------------------
+font:
+  family:
+    display: ["Newsreader", "Georgia", "serif"]            # h1-equiv titles only; italic = emphasis
+    body:    ["Inter", "-apple-system", "system-ui", "sans-serif"]
+    mono:    ["Geist Mono", "IBM Plex Mono", "ui-monospace", "monospace"]  # eyebrows, captions, plate numbers, code
+  size:      # web px
+    eyebrow: "12px"
+    caption: "12.5px"
+    small:   "14px"
+    body:    "16px"
+    h4:      "20px"
+    h3:      "24px"
+    h2:      "32px"
+    h1:      "48px"
+    display: "64px"
+  lineHeight:
+    tight:   1.12   # display, h1
+    snug:    1.25
+    normal:  1.4
+    relaxed: 1.6    # body
+  letterSpacing:
+    eyebrow: "0.2em"
+    tight:   "-0.01em"
+
+# ---------------------------------------------------------------------------
+# 4. SPACE, RADIUS, BORDER, SHADOW
+# ---------------------------------------------------------------------------
+space:        # 4px base; premium = generous. Default block gap 24/32.
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  lg: "16px"
+  xl: "24px"
+  "2xl": "32px"
+  "3xl": "48px"
+  "4xl": "64px"
+  "5xl": "96px"
+radius:
+  sm:   "6px"
+  md:   "10px"
+  lg:   "14px"   # cards, panels, the glyph corner
+  pill: "999px"
+border:
+  hair:   "1px"   # default hairline — does most of the dividing
+  accent: "3px"   # card accent edge, eyebrow bar — the only heavier rule
+shadow:
+  card: "0px 18px 40px -24px rgba(20,24,26,0.22)"   # used once, softly, on raised cards

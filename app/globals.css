@@ -6,50 +6,72 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Light theme */
-  --background: oklch(0.97 0 0);
-  --foreground: oklch(0.13 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0 0);
-  --primary: oklch(0.62 0.17 87);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.93 0 0);
-  --secondary-foreground: oklch(0.13 0 0);
-  --muted: oklch(0.93 0 0);
-  --muted-foreground: oklch(0.48 0 0);
-  --accent: oklch(0.93 0 0);
-  --accent-foreground: oklch(0.13 0 0);
-  --destructive: oklch(0.57 0.2 25);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0 0 0 / 10%);
-  --input: oklch(0 0 0 / 8%);
-  --ring: oklch(0.62 0.17 87);
-  --radius: 0.875rem;
+  /* ─── Brand semantic tokens — see design/tokens.yaml ─── */
+  --bg: #f1f1f4;
+  --surface: #ffffff;
+  --surface-sunk: #f8f8fa;
+  --line: #cdccd2;
+  --text: #1c2022;
+  --text-muted: #6e747a;
+  --text-subtle: #a6aab0;
+  --brand-primary: #c3094a;
+  --brand-primary-hover: #a8083f;
+  --on-primary: #ffffff;
+  --active: #ffc10e;
+  --on-active: #1c2022;
+  --active-wash: #fff6da;
+  --link: #c3094a;
+  /* Column elevation ladder (light): centre lifts, sides recede */
+  --col-shell: #ececef;
+  --col-side: #f1f1f4;
+  --col-center: #ffffff;
+  --col-raised: #ffffff;
 
-  --glass-blur: 40px;
-  --glass-bg: rgba(0, 0, 0, 0.04);
-  --glass-bg-hover: rgba(0, 0, 0, 0.07);
-  --glass-border: rgba(0, 0, 0, 0.10);
-  --glass-border-hover: rgba(0, 0, 0, 0.18);
+  /* ─── shadcn variables, mapped to the brand palette ─── */
+  --background: #f1f1f4;
+  --foreground: #1c2022;
+  --card: #ffffff;
+  --card-foreground: #1c2022;
+  --popover: #ffffff;
+  --popover-foreground: #1c2022;
+  --primary: #c3094a;
+  --primary-foreground: #ffffff;
+  --secondary: #f8f8fa;
+  --secondary-foreground: #1c2022;
+  --muted: #f1f1f4;
+  --muted-foreground: #6e747a;
+  --accent: #e6e4e8;
+  --accent-foreground: #1c2022;
+  --destructive: #a8083f;
+  --destructive-foreground: #ffffff;
+  --border: #e6e4e8;
+  --input: #cdccd2;
+  --ring: #ffc10e; /* yellow focus ring — attention */
+  --radius: 0.875rem; /* 14px — card/panel corner */
+
+  /* Glass kept quiet for legacy surfaces (system is flat by preference) */
+  --glass-blur: 20px;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-hover: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(28, 32, 34, 0.08);
+  --glass-border-hover: rgba(28, 32, 34, 0.14);
   --glass-highlight: rgba(255, 255, 255, 0.6);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-  --glass-shadow-elevated: 0 24px 80px rgba(0, 0, 0, 0.15);
+  --glass-shadow: 0 18px 40px -24px rgba(20, 24, 26, 0.18);
+  --glass-shadow-elevated: 0 24px 60px -24px rgba(20, 24, 26, 0.24);
 
-  --chart-1: oklch(0.55 0.1 165);
-  --chart-2: oklch(0.45 0.12 165);
-  --chart-3: oklch(0.38 0.1 165);
-  --chart-4: oklch(0.30 0.08 165);
-  --chart-5: oklch(0.24 0.06 165);
-  --sidebar: oklch(0.96 0 0);
-  --sidebar-foreground: oklch(0.13 0 0);
-  --sidebar-primary: oklch(0.62 0.17 87);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.91 0 0);
-  --sidebar-accent-foreground: oklch(0.13 0 0);
-  --sidebar-border: oklch(0 0 0 / 8%);
-  --sidebar-ring: oklch(0.62 0.17 87);
+  --chart-1: #e11a57;
+  --chart-2: #3b66ca;
+  --chart-3: #2f8f86;
+  --chart-4: #ffc10e;
+  --chart-5: #7b5ea7;
+  --sidebar: #f8f8fa;
+  --sidebar-foreground: #1c2022;
+  --sidebar-primary: #c3094a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f1f4;
+  --sidebar-accent-foreground: #1c2022;
+  --sidebar-border: #e6e4e8;
+  --sidebar-ring: #ffc10e;
 
   --mono-50: 0 0% 96%;
   --mono-100: 0 0% 92%;
@@ -65,48 +87,72 @@
 }
 
 .dark {
-  --background: oklch(0 0 0);
-  --foreground: oklch(0.93 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.13 0 0);
-  --popover-foreground: oklch(0.93 0 0);
-  --primary: oklch(0.84 0.17 87);
-  --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.16 0 0);
-  --secondary-foreground: oklch(0.93 0 0);
-  --muted: oklch(0.16 0 0);
-  --muted-foreground: oklch(0.5 0 0);
-  --accent: oklch(0.16 0 0);
-  --accent-foreground: oklch(0.93 0 0);
-  --destructive: oklch(0.65 0.2 25);
-  --destructive-foreground: oklch(0.93 0 0);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.84 0.17 87);
+  /* ─── Brand semantic tokens (dark) ─── */
+  --bg: #14181a;
+  --surface: #181c1f;
+  --surface-sunk: #101315;
+  --line: #2a2f33;
+  --text: #f1f5f9;
+  --text-muted: #9aa0a6;
+  --text-subtle: #6e747a;
+  --brand-primary: #e11a57;
+  --brand-primary-hover: #ec145a;
+  --on-primary: #ffffff;
+  --active: #ffc10e;
+  --on-active: #14181a;
+  --active-wash: #2a1019;
+  --link: #ff5c8a;
+  /* Column elevation ladder (dark) — stepped back from pure black.
+     gutter < side rail (secondary) < centre column (main) < raised card */
+  --col-shell: #101315;
+  --col-side: #131619;
+  --col-center: #181c1f;
+  --col-raised: #1e2326;
 
-  --chart-1: oklch(0.75 0.1 165);
-  --chart-2: oklch(0.65 0.12 165);
-  --chart-3: oklch(0.55 0.1 165);
-  --chart-4: oklch(0.48 0.08 165);
-  --chart-5: oklch(0.4 0.06 165);
-  --sidebar: oklch(0 0 0);
-  --sidebar-foreground: oklch(0.93 0 0);
-  --sidebar-primary: oklch(0.84 0.17 87);
-  --sidebar-primary-foreground: oklch(0 0 0);
-  --sidebar-accent: oklch(0.16 0 0);
-  --sidebar-accent-foreground: oklch(0.93 0 0);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.84 0.17 87);
+  /* ─── shadcn variables (dark), brand palette ─── */
+  --background: #14181a;
+  --foreground: #f1f5f9;
+  --card: #181c1f;
+  --card-foreground: #f1f5f9;
+  --popover: #16191c;
+  --popover-foreground: #f1f5f9;
+  --primary: #e11a57;
+  --primary-foreground: #ffffff;
+  --secondary: #1e2326;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1e2326;
+  --muted-foreground: #9aa0a6;
+  --accent: #22272a;
+  --accent-foreground: #f1f5f9;
+  --destructive: #e11a57;
+  --destructive-foreground: #ffffff;
+  --border: #262b2e;
+  --input: #2a2f33;
+  --ring: #ffc10e; /* yellow focus ring — attention */
 
-  --glass-blur: 40px;
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-bg-hover: rgba(255, 255, 255, 0.08);
-  --glass-border: rgba(255, 255, 255, 0.10);
-  --glass-border-hover: rgba(255, 255, 255, 0.16);
-  --glass-highlight: rgba(255, 255, 255, 0.10);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  --glass-shadow-elevated: 0 24px 80px rgba(0, 0, 0, 0.5);
+  --chart-1: #e11a57;
+  --chart-2: #3b66ca;
+  --chart-3: #2f8f86;
+  --chart-4: #ffc10e;
+  --chart-5: #7b5ea7;
+  --sidebar: #101315;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #e11a57;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e2326;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: #262b2e;
+  --sidebar-ring: #ffc10e;
+
+  /* Glass kept quiet (dark) */
+  --glass-blur: 20px;
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-bg-hover: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.5);
+  --glass-shadow-elevated: 0 24px 60px -24px rgba(0, 0, 0, 0.6);
 
   --mono-50: 0 0% 6%;
   --mono-100: 0 0% 10%;
@@ -141,6 +187,22 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  /* Brand semantic colours (utilities: bg-surface, text-ink-muted, border-line,
+     bg-active, bg-col-center, bg-col-side, …) */
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-line: var(--line);
+  --color-ink: var(--text);
+  --color-ink-muted: var(--text-muted);
+  --color-ink-subtle: var(--text-subtle);
+  --color-active: var(--active);
+  --color-on-active: var(--on-active);
+  --color-active-wash: var(--active-wash);
+  --color-link: var(--link);
+  --color-col-shell: var(--col-shell);
+  --color-col-side: var(--col-side);
+  --color-col-center: var(--col-center);
+  --color-col-raised: var(--col-raised);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -160,6 +222,8 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
+  --font-display: var(--font-display); /* Newsreader serif — h1-equiv titles only */
+  --font-mono: var(--font-mono); /* Geist Mono — instrument layer */
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
@@ -235,6 +299,51 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted-foreground);
+}
+
+/* ─── Brand utilities — graphite / crimson / yellow ─── */
+
+/* Lucide icons: 1.5px stroke everywhere, themed via currentColor. */
+svg.lucide {
+  stroke-width: 1.5;
+}
+
+/* Eyebrow / overline — the tertiary header voice (mono, uppercase, tracked). */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Serif display — reserved for h1-equivalent titles only. */
+.title-serif {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+}
+
+/* Content element — the ONE place a border belongs: card / ticket / panel.
+   Never nest these; columns and headers are separated by tone, not rules. */
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.surface-card-raised {
+  background: var(--col-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Yellow = attention. Fill / edge only; ink sits on top, never yellow text. */
+.row-selected {
+  background: color-mix(in srgb, var(--active) 9%, transparent);
+  box-shadow: inset 2px 0 0 0 var(--active);
 }
 
 /* ─── Liquid Glass Material System ────────────── */

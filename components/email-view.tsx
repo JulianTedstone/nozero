@@ -114,26 +114,26 @@ function ContextSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+    <section className="overflow-hidden rounded-xl border border-line bg-surface-sunk">
       <button
-        className="flex w-full items-center justify-between border-white/[0.06] border-b px-3 py-2 text-left"
+        className="flex w-full items-center justify-between px-3 py-2 text-left"
         onClick={() => setOpen((v) => !v)}
         type="button"
       >
-        <h3 className="font-semibold text-[10px] text-white/35 uppercase tracking-wider">
+        <h3 className="eyebrow text-[10px]">
           {title}
         </h3>
         <ChevronDownIcon
           className={cn(
-            "h-3 w-3 text-white/25 transition-transform",
+            "h-3 w-3 text-ink-subtle transition-transform",
             open && "rotate-180",
           )}
         />
       </button>
       {open ? (
-        <div className="px-3 py-2.5 text-[11px] text-white/55">
+        <div className="px-3 py-2.5 text-[11px] text-ink-muted">
           {isEmpty ? (
-            <p className="text-white/25">{empty ?? "Nothing here yet."}</p>
+            <p className="text-ink-subtle">{empty ?? "Nothing here yet."}</p>
           ) : (
             children
           )}
@@ -811,7 +811,7 @@ export function EmailView({
               {tabBar}
 
               <Button
-                className="h-9 w-full rounded-xl bg-white/95 font-medium text-black text-xs hover:bg-white"
+                className="h-9 w-full rounded-xl bg-primary font-medium text-primary-foreground text-xs hover:bg-primary/90"
                 onClick={handleNewMessage}
                 type="button"
               >
@@ -851,9 +851,9 @@ export function EmailView({
                             }}
                             type="button"
                           />
-                          <span className="truncate text-[11px] text-white/50">
+                          <span className="truncate text-[11px] text-ink-muted">
                             {account.label}
-                            <span className="ml-1 text-white/25">
+                            <span className="ml-1 text-ink-subtle">
                               ({friendlyAccountName(account.email)})
                             </span>
                           </span>
@@ -865,14 +865,14 @@ export function EmailView({
               ) : null}
 
               <div className="flex items-center gap-1">
-                <div className="flex flex-1 gap-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
+                <div className="flex flex-1 gap-1 rounded-lg border border-line bg-surface-sunk p-0.5">
                   {FILTER_TABS.map(({ id, label, icon: Icon }) => (
                     <button
                       className={cn(
                         "flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[9px] transition-colors",
                         filter === id
-                          ? "bg-white/[0.08] text-white/75"
-                          : "text-white/35 hover:text-white/50",
+                          ? "bg-accent text-ink"
+                          : "text-ink-subtle hover:text-ink-muted",
                       )}
                       key={id}
                       onClick={() => setFilter(id)}
@@ -886,7 +886,7 @@ export function EmailView({
                 </div>
                 <button
                   aria-label="Refresh mail"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/45 hover:bg-white/[0.06] hover:text-white/65 disabled:opacity-50"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-sunk text-ink-muted hover:bg-accent hover:text-ink-muted disabled:opacity-50"
                   disabled={listRefreshing}
                   onClick={() => {
                     void runEmailSync();
@@ -913,10 +913,10 @@ export function EmailView({
               <CollapsibleSidebarSection defaultOpen={false} title="Search">
                 <div className="space-y-2">
                   <div className="relative">
-                    <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-white/25" />
+                    <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2 text-ink-subtle" />
                     <input
                       aria-busy={searchQuery !== debouncedSearch}
-                      className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pr-8 pl-8 text-[11px] text-white/70 outline-none placeholder:text-white/25 focus:border-white/[0.14]"
+                      className="h-8 w-full rounded-lg border border-line bg-surface-sunk pr-8 pl-8 text-[11px] text-ink outline-none placeholder:text-ink-subtle focus:border-line"
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Filter mail…"
                       value={searchQuery}
@@ -924,7 +924,7 @@ export function EmailView({
                     {searchQuery ? (
                       <button
                         aria-label="Clear search"
-                        className="absolute top-1/2 right-2 -translate-y-1/2 text-white/30 hover:text-white/55"
+                        className="absolute top-1/2 right-2 -translate-y-1/2 text-ink-subtle hover:text-ink-muted"
                         onClick={() => setSearchQuery("")}
                         type="button"
                       >
@@ -942,8 +942,8 @@ export function EmailView({
                             className={cn(
                               "rounded-full border px-2 py-0.5 text-[9px] transition-colors",
                               active
-                                ? "border-white/20 bg-white/10 text-white/75"
-                                : "border-white/[0.06] text-white/35 hover:text-white/55",
+                                ? "border-line bg-accent text-ink"
+                                : "border-line text-ink-subtle hover:text-ink-muted",
                             )}
                             key={stream}
                             onClick={() =>
@@ -967,18 +967,18 @@ export function EmailView({
               ref={listRef}
             >
             {listLoading && threads.length === 0 ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-[11px] text-white/30">
+              <div className="flex items-center justify-center gap-2 py-12 text-[11px] text-ink-subtle">
                 <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                 Loading…
               </div>
             ) : threads.length === 0 ? (
               listError || syncError ? (
-                <div className="space-y-2 px-3 py-8 text-center text-[11px] text-amber-400/80">
+                <div className="space-y-2 px-3 py-8 text-center text-[11px] text-destructive">
                   <p>{listError ?? syncError}</p>
                   {(listError ?? syncError ?? "").includes("Gmail") ||
                   (listError ?? syncError ?? "").includes("gmail") ? (
                     <a
-                      className="inline-block text-[10px] text-amber-300/90 underline underline-offset-2 hover:text-amber-200"
+                      className="inline-block text-[10px] text-destructive underline underline-offset-2 hover:text-destructive"
                       href="/settings"
                     >
                       Reconnect Google in Settings
@@ -986,7 +986,7 @@ export function EmailView({
                   ) : null}
                 </div>
               ) : (
-                <p className="px-3 py-8 text-center text-[11px] text-white/30">
+                <p className="px-3 py-8 text-center text-[11px] text-ink-subtle">
                   No mail yet. Tap refresh to sync from Gmail or IMAP.
                 </p>
               )
@@ -1000,9 +1000,9 @@ export function EmailView({
                         className={cn(
                           "group w-full px-3 py-3 text-left transition-colors",
                           active
-                            ? "bg-white/[0.06]"
-                            : "hover:bg-white/[0.03]",
-                          thread.unread && !active && "bg-white/[0.02]",
+                            ? "row-selected"
+                            : "hover:bg-surface-sunk",
+                          thread.unread && !active && "bg-surface-sunk",
                         )}
                         onClick={() => {
                           threadAccountRef.current = thread.accountEmail;
@@ -1026,8 +1026,8 @@ export function EmailView({
                               className={cn(
                                 "truncate text-[11px]",
                                 thread.unread
-                                  ? "font-semibold text-white/85"
-                                  : "text-white/50",
+                                  ? "font-semibold text-ink"
+                                  : "text-ink-muted",
                               )}
                             >
                               {thread.sender}
@@ -1036,25 +1036,25 @@ export function EmailView({
                               className={cn(
                                 "mt-0.5 truncate text-[11px]",
                                 thread.unread
-                                  ? "font-medium text-white/75"
-                                  : "text-white/45",
+                                  ? "font-medium text-ink"
+                                  : "text-ink-muted",
                               )}
                             >
                               {thread.subject}
                             </p>
                             {thread.aiSummary ? (
-                              <p className="mt-1 line-clamp-2 text-[10px] text-white/30 leading-relaxed">
+                              <p className="mt-1 line-clamp-2 text-[10px] text-ink-subtle leading-relaxed">
                                 {thread.aiSummary}
                               </p>
                             ) : null}
                           </div>
-                          <span className="shrink-0 text-[10px] text-white/25">
+                          <span className="shrink-0 text-[10px] text-ink-subtle">
                             {formatThreadDate(thread.date)}
                           </span>
                         </div>
                         <div className="mt-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                           <button
-                            className="rounded p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+                            className="rounded p-1 text-ink-subtle hover:bg-accent hover:text-ink-muted"
                             onClick={(e) => handleArchive(e, thread)}
                             title="Archive"
                             type="button"
@@ -1062,7 +1062,7 @@ export function EmailView({
                             <ArchiveIcon className="h-3 w-3" />
                           </button>
                           <button
-                            className="rounded p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+                            className="rounded p-1 text-ink-subtle hover:bg-accent hover:text-ink-muted"
                             onClick={(e) => handleReplyFromList(e, thread)}
                             title="Reply"
                             type="button"
@@ -1070,7 +1070,7 @@ export function EmailView({
                             <ReplyIcon className="h-3 w-3" />
                           </button>
                           <button
-                            className="rounded p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+                            className="rounded p-1 text-ink-subtle hover:bg-accent hover:text-ink-muted"
                             onClick={(e) => handleForwardFromList(e, thread)}
                             title="Forward"
                             type="button"
@@ -1079,10 +1079,10 @@ export function EmailView({
                           </button>
                           <button
                             className={cn(
-                              "rounded p-1 hover:bg-white/[0.06]",
+                              "rounded p-1 hover:bg-accent",
                               thread.tracking
-                                ? "text-sky-400/80"
-                                : "text-white/35 hover:text-white/60",
+                                ? "text-active"
+                                : "text-ink-subtle hover:text-ink-muted",
                             )}
                             onClick={(e) => handleToggleTracking(e, thread)}
                             title="Track"
@@ -1098,7 +1098,7 @@ export function EmailView({
               </ul>
             )}
             {loadingMore ? (
-              <div className="flex justify-center py-3 text-[10px] text-white/30">
+              <div className="flex justify-center py-3 text-[10px] text-ink-subtle">
                 <Loader2Icon className="h-3 w-3 animate-spin" />
               </div>
             ) : null}
@@ -1110,11 +1110,11 @@ export function EmailView({
   const centerColumnContent = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {selectedId && detail && !detailLoading && !detailError ? (
-            <div className="shrink-0 border-white/[0.06] border-b px-4 py-3 md:px-5">
+            <div className="shrink-0 px-4 py-3 md:px-5">
               <div className="flex items-start gap-2">
                 <button
                   aria-label="Back to inbox"
-                  className="mt-0.5 shrink-0 rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70 lg:hidden"
+                  className="mt-0.5 shrink-0 rounded-md p-1 text-ink-muted hover:bg-accent hover:text-ink lg:hidden"
                   onClick={() => {
                     setSelectedId(null);
                     setMobileContextOpen(false);
@@ -1125,21 +1125,21 @@ export function EmailView({
                   <ArrowLeftIcon className="h-4 w-4" />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-semibold text-sm text-white/85">
+                  <h2 className="title-serif text-[15px] text-ink">
                     {detail.thread.subject}
                   </h2>
-                  <p className="mt-1 text-[10px] text-white/35">
+                  <p className="mt-1 text-[10px] text-ink-subtle">
                     {detail.thread.participants.join(" · ")}
                   </p>
                 </div>
-                <div className="flex shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.02] p-0.5">
+                <div className="flex shrink-0 rounded-lg border border-line bg-surface-sunk p-0.5">
                   {(["readable", "raw"] as const).map((mode) => (
                     <button
                       className={cn(
                         "rounded-md px-2 py-1 text-[10px] capitalize transition-colors",
                         bodyView === mode
-                          ? "bg-white/[0.08] text-white/75"
-                          : "text-white/35 hover:text-white/55",
+                          ? "bg-accent text-ink"
+                          : "text-ink-subtle hover:text-ink-muted",
                       )}
                       key={mode}
                       onClick={() => setBodyView(mode)}
@@ -1155,7 +1155,7 @@ export function EmailView({
                   ))}
                 </div>
                 <button
-                  className="shrink-0 rounded-md border border-white/[0.08] px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.04] lg:hidden"
+                  className="shrink-0 rounded-md border border-line px-2 py-1 text-[10px] text-ink-muted hover:bg-accent lg:hidden"
                   onClick={() => setMobileContextOpen(true)}
                   type="button"
                 >
@@ -1168,12 +1168,12 @@ export function EmailView({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {selectedId ? (
               detailLoading && !detail ? (
-                <div className="flex h-full items-center justify-center gap-2 text-[11px] text-white/30">
+                <div className="flex h-full items-center justify-center gap-2 text-[11px] text-ink-subtle">
                   <Loader2Icon className="h-4 w-4 animate-spin" />
                   Loading thread…
                 </div>
               ) : detailError ? (
-                <div className="flex h-full items-center justify-center p-6 text-center text-[11px] text-amber-400/80">
+                <div className="flex h-full items-center justify-center p-6 text-center text-[11px] text-destructive">
                   {detailError}
                 </div>
               ) : detail ? (
@@ -1198,7 +1198,7 @@ export function EmailView({
                             "max-w-[min(100%,36rem)] rounded-2xl px-4 py-3",
                             mine
                               ? "rounded-br-md text-white"
-                              : "rounded-bl-md border border-white/[0.06] bg-white/[0.03] text-white/70",
+                              : "rounded-bl-md border border-line bg-surface-sunk text-ink",
                           )}
                           style={
                             mine
@@ -1214,25 +1214,25 @@ export function EmailView({
                             <span className="font-medium text-[11px]">
                               {msg.from || "Unknown"}
                             </span>
-                            <span className="text-[10px] text-white/35">
+                            <span className="text-[10px] text-ink-subtle">
                               {formatMessageDate(msg.date)}
                             </span>
                           </div>
 
                           {bodyView === "readable" && msg.aiSummary ? (
-                            <div className="mb-2 space-y-1 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2 text-[10px]">
+                            <div className="mb-2 space-y-1 rounded-lg border border-line bg-black/20 px-2.5 py-2 text-[10px]">
                               {msg.aiSummary.previousContext ? (
                                 <p>
-                                  <span className="text-white/40">Context: </span>
+                                  <span className="text-ink-subtle">Context: </span>
                                   {msg.aiSummary.previousContext}
                                 </p>
                               ) : null}
                               <p>
-                                <span className="text-white/40">Summary: </span>
+                                <span className="text-ink-subtle">Summary: </span>
                                 {msg.aiSummary.summary}
                               </p>
                               {msg.aiSummary.actions.length > 0 ? (
-                                <ul className="list-inside list-disc text-white/55">
+                                <ul className="list-inside list-disc text-ink-muted">
                                   {msg.aiSummary.actions.map((a) => (
                                     <li key={`${a.action}-${a.owner}`}>
                                       {a.action}
@@ -1243,7 +1243,7 @@ export function EmailView({
                               ) : null}
                               {msg.aiSummary.suggestedResponse ? (
                                 <button
-                                  className="text-left text-white/50 italic hover:text-white/70"
+                                  className="text-left text-ink-muted italic hover:text-ink"
                                   onClick={() =>
                                     setReplyBody(msg.aiSummary!.suggestedResponse!)
                                   }
@@ -1259,7 +1259,7 @@ export function EmailView({
                             className={cn(
                               "whitespace-pre-wrap text-[12px] leading-relaxed",
                               bodyView === "raw" &&
-                                "font-mono text-[11px] text-white/55",
+                                "font-mono text-[11px] text-ink-muted",
                             )}
                           >
                             {bodyView === "raw"
@@ -1275,15 +1275,15 @@ export function EmailView({
             ) : null}
           </div>
 
-          <div className="mt-auto flex max-h-[33%] min-h-0 shrink-0 flex-col overflow-x-hidden border-white/[0.06] border-t px-4 py-3">
+          <div className="mt-auto flex max-h-[33%] min-h-0 shrink-0 flex-col overflow-x-hidden px-4 py-3">
             {replyRecipients.length > 0 ? (
-              <p className="mb-2 shrink-0 truncate text-[10px] text-white/30">
+              <p className="mb-2 shrink-0 truncate text-[10px] text-ink-subtle">
                 Reply to {replyRecipients.join(", ")}
               </p>
             ) : null}
             <div className="liquid-glass-input flex min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded-xl px-3 py-2.5">
               <textarea
-                className="min-h-[3.5rem] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[13px] text-white/80 outline-none placeholder:text-white/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="min-h-[3.5rem] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-subtle disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!detail || sending || agentDraftLoading}
                 onChange={(e) => setReplyBody(e.target.value)}
                 onKeyDown={(e) => {
@@ -1308,7 +1308,7 @@ export function EmailView({
               />
               <div className="flex shrink-0 items-center justify-between gap-2">
                 {sendError ? (
-                  <p className="min-w-0 truncate text-[10px] text-amber-400/80">
+                  <p className="min-w-0 truncate text-[10px] text-destructive">
                     {sendError}
                   </p>
                 ) : (
@@ -1317,7 +1317,7 @@ export function EmailView({
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     aria-label="Draft reply"
-                    className="rounded-lg p-1.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30"
+                    className="rounded-lg p-1.5 text-ink-muted hover:bg-accent hover:text-ink disabled:opacity-30"
                     disabled={!detail}
                     onClick={focusCompose}
                     title="Draft reply"
@@ -1327,7 +1327,7 @@ export function EmailView({
                   </button>
                   <button
                     aria-label={`Ask ${persona} to draft a reply`}
-                    className="rounded-lg p-1.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30"
+                    className="rounded-lg p-1.5 text-ink-muted hover:bg-accent hover:text-ink disabled:opacity-30"
                     disabled={!detail || agentDraftLoading}
                     onClick={() => {
                       void requestAgentDraft();
@@ -1343,7 +1343,7 @@ export function EmailView({
                   </button>
                   <button
                     aria-label="Forward"
-                    className="rounded-lg p-1.5 text-white/45 hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30"
+                    className="rounded-lg p-1.5 text-ink-muted hover:bg-accent hover:text-ink disabled:opacity-30"
                     disabled={!detail}
                     onClick={startForwardDraft}
                     title="Forward"
@@ -1352,7 +1352,7 @@ export function EmailView({
                     <ForwardIcon className="h-3.5 w-3.5" />
                   </button>
                   <Button
-                    className="h-7 w-7 rounded-lg bg-blue-500/80 text-white hover:bg-blue-500 disabled:opacity-30"
+                    className="h-7 w-7 rounded-lg bg-primary text-white hover:bg-primary disabled:opacity-30"
                     disabled={
                       sending ||
                       agentDraftLoading ||
@@ -1381,14 +1381,14 @@ export function EmailView({
   const rightRailContent = (
     <>
           {contextLoading && !context ? (
-            <div className="flex items-center gap-2 py-6 text-[10px] text-white/30">
+            <div className="flex items-center gap-2 py-6 text-[10px] text-ink-subtle">
               <Loader2Icon className="h-3 w-3 animate-spin" />
               Loading context…
             </div>
           ) : !detail ? null : (
             <div className="space-y-3">
               <ContextSection title="Thread purpose">
-                <p className="text-white/60 leading-relaxed">
+                <p className="text-ink-muted leading-relaxed">
                   {detail.thread.threadIntent ??
                     context?.threadIntent ??
                     context?.summary.text ??
@@ -1404,11 +1404,11 @@ export function EmailView({
                 <ul className="space-y-2">
                   {(context?.people ?? []).map((p) => (
                     <li key={p.email}>
-                      <p className="font-medium text-white/70">
+                      <p className="font-medium text-ink">
                         {p.name ?? p.email}
                       </p>
                       {p.company ? (
-                        <p className="text-[10px] text-white/35">{p.company}</p>
+                        <p className="text-[10px] text-ink-subtle">{p.company}</p>
                       ) : null}
                     </li>
                   ))}
@@ -1423,10 +1423,10 @@ export function EmailView({
                 <ul className="space-y-2">
                   {(context?.companies ?? []).map((c) => (
                     <li key={c.id ?? c.name}>
-                      <p className="font-medium text-white/70">{c.name}</p>
+                      <p className="font-medium text-ink">{c.name}</p>
                       {c.somaUrl ? (
                         <a
-                          className="inline-flex items-center gap-1 text-[10px] text-white/40 hover:text-white/60"
+                          className="inline-flex items-center gap-1 text-[10px] text-ink-subtle hover:text-ink-muted"
                           href={c.somaUrl}
                           rel="noreferrer"
                           target="_blank"
@@ -1448,10 +1448,10 @@ export function EmailView({
                 <ul className="mb-2 space-y-1">
                   {detail.thread.streams.map((s) => (
                     <li
-                      className="flex items-center gap-1.5 text-white/65"
+                      className="flex items-center gap-1.5 text-ink-muted"
                       key={s}
                     >
-                      <LayoutDashboardIcon className="h-3 w-3 text-white/30" />
+                      <LayoutDashboardIcon className="h-3 w-3 text-ink-subtle" />
                       {s}
                     </li>
                   ))}
@@ -1462,7 +1462,7 @@ export function EmailView({
                     .slice(0, 8)
                     .map((stream) => (
                       <button
-                        className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[9px] text-white/45 hover:bg-white/[0.04]"
+                        className="rounded-full border border-line px-2 py-0.5 text-[9px] text-ink-muted hover:bg-accent"
                         disabled={assigningStream}
                         key={stream}
                         onClick={() => assignStream(stream)}
@@ -1474,13 +1474,13 @@ export function EmailView({
                 </div>
                 <div className="mt-2 flex gap-1">
                   <input
-                    className="h-7 min-w-0 flex-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-[10px] text-white/70 outline-none"
+                    className="h-7 min-w-0 flex-1 rounded-md border border-line bg-surface-sunk px-2 text-[10px] text-ink outline-none"
                     onChange={(e) => setNewStreamName(e.target.value)}
                     placeholder="New stream…"
                     value={newStreamName}
                   />
                   <button
-                    className="flex h-7 items-center gap-0.5 rounded-md border border-white/[0.08] px-2 text-[10px] text-white/50 hover:bg-white/[0.04] disabled:opacity-50"
+                    className="flex h-7 items-center gap-0.5 rounded-md border border-line px-2 text-[10px] text-ink-muted hover:bg-accent disabled:opacity-50"
                     disabled={assigningStream || !newStreamName.trim()}
                     onClick={() => assignStream(newStreamName, true)}
                     type="button"
@@ -1503,10 +1503,10 @@ export function EmailView({
                   {(context?.tasks ?? []).map((t) => (
                     <li key={t.id}>
                       <div className="flex items-start gap-1.5">
-                        <LayoutDashboardIcon className="mt-0.5 h-3 w-3 shrink-0 text-white/30" />
+                        <LayoutDashboardIcon className="mt-0.5 h-3 w-3 shrink-0 text-ink-subtle" />
                         <div className="min-w-0">
-                          <p className="truncate text-white/65">{t.title}</p>
-                          <p className="text-[10px] text-white/30">
+                          <p className="truncate text-ink-muted">{t.title}</p>
+                          <p className="text-[10px] text-ink-subtle">
                             {[t.status, t.stream].filter(Boolean).join(" · ")}
                           </p>
                         </div>
@@ -1525,7 +1525,7 @@ export function EmailView({
       <div className="hidden min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:flex">
         <ThreeColumnLayout
           center={
-            <main className="@container flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-white/[0.06]">
+            <main className="@container flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
               {centerColumnContent}
             </main>
           }
@@ -1543,7 +1543,7 @@ export function EmailView({
         {/* Left column — thread list */}
         <aside
           className={cn(
-            "flex min-h-0 flex-col border-white/[0.06] border-b",
+            "flex min-h-0 flex-col",
             selectedId && "hidden",
           )}
         >
@@ -1553,7 +1553,7 @@ export function EmailView({
         {/* Center — thread + compose */}
         <main
           className={cn(
-            "flex min-h-0 min-w-0 flex-col border-white/[0.06] border-b",
+            "flex min-h-0 min-w-0 flex-col",
             !selectedId && "hidden",
           )}
         >
@@ -1573,17 +1573,17 @@ export function EmailView({
           className={cn(
             "min-h-0 flex-col overflow-y-auto p-3 md:p-4",
             mobileContextOpen
-              ? "fixed inset-y-0 right-0 z-50 flex w-full max-w-sm border-white/[0.08] border-l bg-[#0a0a0a] shadow-2xl"
+              ? "fixed inset-y-0 right-0 z-50 flex w-full max-w-sm bg-surface shadow-2xl"
               : "hidden",
           )}
         >
           {mobileContextOpen ? (
             <div className="mb-3 flex items-center justify-between">
-              <span className="font-semibold text-[11px] text-white/60 uppercase tracking-wider">
+              <span className="font-semibold text-[11px] text-ink-muted uppercase tracking-wider">
                 Context
               </span>
               <button
-                className="rounded p-1 text-white/40 hover:bg-white/[0.06]"
+                className="rounded p-1 text-ink-subtle hover:bg-accent"
                 onClick={() => setMobileContextOpen(false)}
                 type="button"
               >

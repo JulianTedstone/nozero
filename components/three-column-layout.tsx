@@ -102,9 +102,9 @@ type ThreeColumnLayoutProps = {
 };
 
 const TOGGLE_BTN =
-  "absolute top-2 z-20 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60";
+  "absolute top-2 z-20 rounded-md p-1 text-ink-subtle transition-colors hover:bg-accent hover:text-ink";
 const TOGGLE_BTN_FLOAT =
-  "absolute top-2 z-20 rounded-md border border-white/[0.08] bg-black/40 p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70";
+  "absolute top-2 z-20 rounded-md border border-line bg-surface/80 p-1 text-ink-muted backdrop-blur transition-colors hover:bg-accent hover:text-ink";
 
 export function ThreeColumnLayout({
   layoutId,
@@ -251,13 +251,13 @@ export function ThreeColumnLayout({
 
   return (
     <div
-      className={cn("flex h-full min-h-0 w-full min-w-0", className)}
+      className={cn("flex h-full min-h-0 w-full min-w-0 bg-col-shell", className)}
       ref={containerRef}
     >
       {/* Left rail */}
       <div
         className={cn(
-          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden",
+          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden bg-col-side",
           transition,
           leftCollapsed && "pointer-events-none",
         )}
@@ -282,7 +282,7 @@ export function ThreeColumnLayout({
       {!leftCollapsed && (
         <div
           aria-orientation="vertical"
-          className="group relative z-10 w-px shrink-0 cursor-col-resize bg-white/[0.06] transition-colors hover:bg-white/[0.12]"
+          className="group relative z-10 w-px shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-active/40"
           onPointerDown={(e) => startDrag("left", e)}
           role="separator"
         >
@@ -291,7 +291,7 @@ export function ThreeColumnLayout({
       )}
 
       {/* Center */}
-      <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-col-center">
         {leftCollapsed && (
           <button
             aria-label="Show left panel"
@@ -319,7 +319,7 @@ export function ThreeColumnLayout({
       {!rightCollapsed && (
         <div
           aria-orientation="vertical"
-          className="group relative z-10 w-px shrink-0 cursor-col-resize bg-white/[0.06] transition-colors hover:bg-white/[0.12]"
+          className="group relative z-10 w-px shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-active/40"
           onPointerDown={(e) => startDrag("right", e)}
           role="separator"
         >
@@ -330,7 +330,7 @@ export function ThreeColumnLayout({
       {/* Right rail */}
       <div
         className={cn(
-          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden",
+          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden bg-col-side",
           transition,
           rightCollapsed && "pointer-events-none",
         )}
