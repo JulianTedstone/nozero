@@ -6,78 +6,87 @@ import {
   PanelRightCloseIcon,
   PanelRightOpenIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
-  Group,
-  type Layout,
-  Panel,
-  Separator,
-  usePanelRef,
-} from "react-resizable-panels";
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 
-const STORAGE_PREFIX = "nozero:three-col:";
+// NOTE: This used to wrap `react-resizable-panels` (v4), which silently fails
+// to apply any size constraints under React 19.2 / Next 16 / Turbopack — panels
+// fell back to content-based widths (left/right rails crushed to ~3%). Replaced
+// with a self-contained flexbox + pointer-drag implementation so behaviour is
+// deterministic and verifiable (measured 25/50/25 vs the library's 2.8/94.3/2.8).
 
-const DEFAULT_LAYOUT: Layout = {
-  left: 25,
-  center: 50,
-  right: 25,
+const STORAGE_PREFIX = "nozero:three-col:";
+const LAYOUT_VERSION = 4; // bump to invalidate stored widths from older builds
+
+// All sizes are a percentage of the container's width.
+const LEFT_MIN = 25;
+const LEFT_MAX = 40;
+const RIGHT_MIN = 25;
+const RIGHT_MAX = 40;
+const CENTER_MIN = 20;
+const DEFAULT_LEFT = 25;
+const DEFAULT_RIGHT = 25;
+
+type StoredLayout = {
+  left: number;
+  right: number;
+  leftCollapsed: boolean;
+  rightCollapsed: boolean;
 };
 
-const LAYOUT_VERSION = 3; // bump when constraints change to force reset
+function clamp(value: number, lo: number, hi: number): number {
+  return Math.min(Math.max(value, lo), hi);
+}
 
-function readStoredLayout(layoutId: string): Layout | undefined {
+function readStored(layoutId: string): StoredLayout | null {
   if (typeof window === "undefined") {
-    return undefined;
+    return null;
   }
   try {
     const versionKey = `${STORAGE_PREFIX}version`;
     if (window.localStorage.getItem(versionKey) !== String(LAYOUT_VERSION)) {
-      Object.keys(window.localStorage)
-        .filter((k) => k.startsWith(STORAGE_PREFIX) && k !== versionKey)
-        .forEach((k) => window.localStorage.removeItem(k));
+      for (const key of Object.keys(window.localStorage)) {
+        if (key.startsWith(STORAGE_PREFIX) && key !== versionKey) {
+          window.localStorage.removeItem(key);
+        }
+      }
       window.localStorage.setItem(versionKey, String(LAYOUT_VERSION));
-      return undefined;
+      return null;
     }
     const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${layoutId}`);
     if (!raw) {
-      return undefined;
+      return null;
     }
-    const parsed = JSON.parse(raw) as Layout;
-    if (
-      typeof parsed.left === "number" &&
-      typeof parsed.center === "number" &&
-      typeof parsed.right === "number"
-    ) {
-      const center = parsed.center;
-      const left = parsed.left;
-      const right = parsed.right;
-      if (
-        center > 70 ||
-        center < 20 ||
-        left < 25 ||
-        right < 25 ||
-        left + right + center < 99 ||
-        left + right + center > 101
-      ) {
-        return DEFAULT_LAYOUT;
-      }
-      return parsed;
+    const parsed = JSON.parse(raw) as Partial<StoredLayout>;
+    if (typeof parsed.left !== "number" || typeof parsed.right !== "number") {
+      return null;
     }
+    return {
+      left: clamp(parsed.left, LEFT_MIN, LEFT_MAX),
+      right: clamp(parsed.right, RIGHT_MIN, RIGHT_MAX),
+      leftCollapsed: Boolean(parsed.leftCollapsed),
+      rightCollapsed: Boolean(parsed.rightCollapsed),
+    };
   } catch {
-    // ignore corrupt layout
+    return null;
   }
-  return undefined;
 }
 
-function writeStoredLayout(layoutId: string, layout: Layout) {
+function writeStored(layoutId: string, layout: StoredLayout) {
   if (typeof window === "undefined") {
     return;
   }
   try {
     window.localStorage.setItem(
       `${STORAGE_PREFIX}${layoutId}`,
-      JSON.stringify(layout)
+      JSON.stringify(layout),
     );
   } catch {
     // ignore quota errors
@@ -92,18 +101,10 @@ type ThreeColumnLayoutProps = {
   className?: string;
 };
 
-function isPanelCollapsed(size: number | undefined): boolean {
-  return (size ?? 0) < 1;
-}
-
-function syncCollapsedFromLayout(
-  layout: Layout,
-  setLeft: (v: boolean) => void,
-  setRight: (v: boolean) => void,
-) {
-  setLeft(isPanelCollapsed(layout.left));
-  setRight(isPanelCollapsed(layout.right));
-}
+const TOGGLE_BTN =
+  "absolute top-2 z-20 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60";
+const TOGGLE_BTN_FLOAT =
+  "absolute top-2 z-20 rounded-md border border-white/[0.08] bg-black/40 p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70";
 
 export function ThreeColumnLayout({
   layoutId,
@@ -112,191 +113,243 @@ export function ThreeColumnLayout({
   right,
   className,
 }: ThreeColumnLayoutProps) {
-  const leftPanelRef = usePanelRef();
-  const rightPanelRef = usePanelRef();
-  const [defaultLayout] = useState<Layout>(() => {
-    if (typeof window === "undefined") {
-      return DEFAULT_LAYOUT;
-    }
-    return readStoredLayout(layoutId) ?? DEFAULT_LAYOUT;
-  });
-  const [leftCollapsed, setLeftCollapsed] = useState(() =>
-    isPanelCollapsed(defaultLayout.left),
-  );
-  const [rightCollapsed, setRightCollapsed] = useState(() =>
-    isPanelCollapsed(defaultLayout.right),
-  );
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  const [leftPct, setLeftPct] = useState(DEFAULT_LEFT);
+  const [rightPct, setRightPct] = useState(DEFAULT_RIGHT);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  // Live refs so the global pointer listeners never read stale state.
+  const leftPctRef = useRef(leftPct);
+  const rightPctRef = useRef(rightPct);
+  const leftColRef = useRef(leftCollapsed);
+  const rightColRef = useRef(rightCollapsed);
+  leftPctRef.current = leftPct;
+  rightPctRef.current = rightPct;
+  leftColRef.current = leftCollapsed;
+  rightColRef.current = rightCollapsed;
+
+  const dragRef = useRef<{
+    side: "left" | "right";
+    startX: number;
+    startPct: number;
+    width: number;
+  } | null>(null);
+
+  // Hydrate from storage after mount. First client render matches SSR
+  // (defaults), so there is no hydration mismatch.
   useEffect(() => {
-    syncCollapsedFromLayout(
-      defaultLayout,
-      setLeftCollapsed,
-      setRightCollapsed,
-    );
-    const frame = requestAnimationFrame(() => {
-      const leftPanel = leftPanelRef.current;
-      const rightPanel = rightPanelRef.current;
-      let resetLayout = false;
-      if (leftPanel?.isCollapsed()) {
-        leftPanel.expand();
-        resetLayout = true;
-      }
-      if (rightPanel?.isCollapsed()) {
-        rightPanel.expand();
-        resetLayout = true;
-      }
-      if (resetLayout) {
-        writeStoredLayout(layoutId, DEFAULT_LAYOUT);
-      }
-      setLeftCollapsed(leftPanel?.isCollapsed() ?? false);
-      setRightCollapsed(rightPanel?.isCollapsed() ?? false);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [defaultLayout, layoutId, leftPanelRef, rightPanelRef]);
+    const stored = readStored(layoutId);
+    if (stored) {
+      setLeftPct(stored.left);
+      setRightPct(stored.right);
+      setLeftCollapsed(stored.leftCollapsed);
+      setRightCollapsed(stored.rightCollapsed);
+    }
+    setHydrated(true);
+  }, [layoutId]);
 
-  const handleLayoutChanged = useCallback(
-    (layout: Layout) => {
-      const left = layout.left ?? 0;
-      const right = layout.right ?? 0;
-      const center = layout.center ?? 0;
-      syncCollapsedFromLayout(layout, setLeftCollapsed, setRightCollapsed);
-      if (left < 1 || right < 1) {
-        return;
-      }
-      const normalized: Layout =
-        left < 25 || right < 25 || center > 70
-          ? DEFAULT_LAYOUT
-          : {
-              left: Math.max(left, 25),
-              center: Math.min(Math.max(center, 20), 50),
-              right: Math.max(right, 25),
-            };
-      writeStoredLayout(layoutId, normalized);
+  const persist = useCallback(
+    (override?: Partial<StoredLayout>) => {
+      writeStored(layoutId, {
+        left: leftPctRef.current,
+        right: rightPctRef.current,
+        leftCollapsed: leftColRef.current,
+        rightCollapsed: rightColRef.current,
+        ...override,
+      });
     },
     [layoutId],
   );
 
-  const toggleLeft = useCallback(() => {
-    const panel = leftPanelRef.current;
-    if (!panel) {
+  const handlePointerMove = useCallback((event: PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag) {
       return;
     }
-    if (panel.isCollapsed()) {
-      panel.expand();
+    const deltaPct = ((event.clientX - drag.startX) / drag.width) * 100;
+    if (drag.side === "left") {
+      const otherRight = rightColRef.current ? 0 : rightPctRef.current;
+      const maxByCenter = 100 - otherRight - CENTER_MIN;
+      setLeftPct(
+        clamp(drag.startPct + deltaPct, LEFT_MIN, Math.min(LEFT_MAX, maxByCenter)),
+      );
     } else {
-      panel.collapse();
+      const otherLeft = leftColRef.current ? 0 : leftPctRef.current;
+      const maxByCenter = 100 - otherLeft - CENTER_MIN;
+      setRightPct(
+        clamp(
+          drag.startPct - deltaPct,
+          RIGHT_MIN,
+          Math.min(RIGHT_MAX, maxByCenter),
+        ),
+      );
     }
-  }, [leftPanelRef]);
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    if (!dragRef.current) {
+      return;
+    }
+    dragRef.current = null;
+    setDragging(false);
+    window.removeEventListener("pointermove", handlePointerMove);
+    window.removeEventListener("pointerup", handlePointerUp);
+    document.body.style.removeProperty("cursor");
+    document.body.style.removeProperty("user-select");
+    persist();
+  }, [handlePointerMove, persist]);
+
+  const startDrag = useCallback(
+    (side: "left" | "right", event: ReactPointerEvent) => {
+      event.preventDefault();
+      const width = containerRef.current?.getBoundingClientRect().width ?? 1;
+      dragRef.current = {
+        side,
+        startX: event.clientX,
+        startPct: side === "left" ? leftPctRef.current : rightPctRef.current,
+        width,
+      };
+      setDragging(true);
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [handlePointerMove, handlePointerUp],
+  );
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [handlePointerMove, handlePointerUp]);
+
+  const toggleLeft = useCallback(() => {
+    setLeftCollapsed((prev) => {
+      const next = !prev;
+      leftColRef.current = next;
+      persist({ leftCollapsed: next });
+      return next;
+    });
+  }, [persist]);
 
   const toggleRight = useCallback(() => {
-    const panel = rightPanelRef.current;
-    if (!panel) {
-      return;
-    }
-    if (panel.isCollapsed()) {
-      panel.expand();
-    } else {
-      panel.collapse();
-    }
-  }, [rightPanelRef]);
+    setRightCollapsed((prev) => {
+      const next = !prev;
+      rightColRef.current = next;
+      persist({ rightCollapsed: next });
+      return next;
+    });
+  }, [persist]);
+
+  const transition = hydrated && !dragging ? "transition-[flex-basis] duration-150" : "";
 
   return (
-    <Group
-      className={cn("flex h-full min-h-0 w-full min-w-0 flex-1", className)}
-      defaultLayout={defaultLayout}
-      id={layoutId}
-      onLayoutChanged={handleLayoutChanged}
-      orientation="horizontal"
+    <div
+      className={cn("flex h-full min-h-0 w-full min-w-0", className)}
+      ref={containerRef}
     >
-      <Panel
-        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
-        collapsedSize={0}
-        collapsible
-        defaultSize={25}
-        id="left"
-        maxSize={40}
-        minSize={25}
-        onResize={() => {
-          setLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false);
-        }}
-        panelRef={leftPanelRef}
+      {/* Left rail */}
+      <div
+        className={cn(
+          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden",
+          transition,
+          leftCollapsed && "pointer-events-none",
+        )}
+        style={{ flexBasis: leftCollapsed ? "0%" : `${leftPct}%` }}
       >
-        {!leftCollapsed ? (
+        {!leftCollapsed && (
           <button
             aria-label="Hide left panel"
-            className="absolute top-2 right-1.5 z-10 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            className={cn(TOGGLE_BTN, "right-1.5")}
             onClick={toggleLeft}
             type="button"
           >
             <PanelLeftCloseIcon className="h-3.5 w-3.5" />
           </button>
-        ) : null}
+        )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {left}
         </div>
-      </Panel>
+      </div>
 
-      <Separator className="w-px bg-white/[0.06] transition-colors hover:bg-white/[0.12]" />
+      {/* Left divider */}
+      {!leftCollapsed && (
+        <div
+          aria-orientation="vertical"
+          className="group relative z-10 w-px shrink-0 cursor-col-resize bg-white/[0.06] transition-colors hover:bg-white/[0.12]"
+          onPointerDown={(e) => startDrag("left", e)}
+          role="separator"
+        >
+          <span className="absolute inset-y-0 -left-1.5 -right-1.5 block" />
+        </div>
+      )}
 
-      <Panel
-        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
-        id="center"
-        minSize={20}
-      >
-        {leftCollapsed ? (
+      {/* Center */}
+      <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {leftCollapsed && (
           <button
             aria-label="Show left panel"
-            className="absolute top-2 left-1.5 z-10 rounded-md border border-white/[0.08] bg-black/40 p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70"
+            className={cn(TOGGLE_BTN_FLOAT, "left-1.5")}
             onClick={toggleLeft}
             type="button"
           >
             <PanelLeftOpenIcon className="h-3.5 w-3.5" />
           </button>
-        ) : null}
-        {rightCollapsed ? (
+        )}
+        {rightCollapsed && (
           <button
             aria-label="Show right panel"
-            className="absolute top-2 right-1.5 z-10 rounded-md border border-white/[0.08] bg-black/40 p-1 text-white/45 hover:bg-white/[0.06] hover:text-white/70"
+            className={cn(TOGGLE_BTN_FLOAT, "right-1.5")}
             onClick={toggleRight}
             type="button"
           >
             <PanelRightOpenIcon className="h-3.5 w-3.5" />
           </button>
-        ) : null}
-        <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
-          {center}
+        )}
+        {center}
+      </div>
+
+      {/* Right divider */}
+      {!rightCollapsed && (
+        <div
+          aria-orientation="vertical"
+          className="group relative z-10 w-px shrink-0 cursor-col-resize bg-white/[0.06] transition-colors hover:bg-white/[0.12]"
+          onPointerDown={(e) => startDrag("right", e)}
+          role="separator"
+        >
+          <span className="absolute inset-y-0 -left-1.5 -right-1.5 block" />
         </div>
-      </Panel>
+      )}
 
-      <Separator className="w-px bg-white/[0.06] transition-colors hover:bg-white/[0.12]" />
-
-      <Panel
-        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
-        collapsedSize={0}
-        collapsible
-        defaultSize={25}
-        id="right"
-        maxSize={40}
-        minSize={25}
-        onResize={() => {
-          setRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false);
-        }}
-        panelRef={rightPanelRef}
+      {/* Right rail */}
+      <div
+        className={cn(
+          "relative flex min-h-0 shrink-0 grow-0 flex-col overflow-hidden",
+          transition,
+          rightCollapsed && "pointer-events-none",
+        )}
+        style={{ flexBasis: rightCollapsed ? "0%" : `${rightPct}%` }}
       >
-        {!rightCollapsed ? (
+        {!rightCollapsed && (
           <button
             aria-label="Hide right panel"
-            className="absolute top-2 left-1.5 z-10 rounded-md p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/60"
+            className={cn(TOGGLE_BTN, "left-1.5")}
             onClick={toggleRight}
             type="button"
           >
             <PanelRightCloseIcon className="h-3.5 w-3.5" />
           </button>
-        ) : null}
+        )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {right}
         </div>
-      </Panel>
-    </Group>
+      </div>
+    </div>
   );
 }
