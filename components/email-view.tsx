@@ -12,7 +12,6 @@ import {
   InboxIcon,
   LayoutDashboardIcon,
   Loader2Icon,
-  MailIcon,
   MailOpenIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -185,12 +184,10 @@ export function EmailView({
   const [agentDraftLoading, setAgentDraftLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
-  const [originalMessage, setOriginalMessage] = useState<EmailMessage | null>(
-    null,
-  );
   const [newStreamName, setNewStreamName] = useState("");
   const [assigningStream, setAssigningStream] = useState(false);
   const [mobileContextOpen, setMobileContextOpen] = useState(false);
+  const [bodyView, setBodyView] = useState<"readable" | "raw">("readable");
 
   const listRef = useRef<HTMLDivElement>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
@@ -641,6 +638,7 @@ export function EmailView({
     const ac = new AbortController();
     setReplyBody("");
     setSendError(null);
+    setBodyView("readable");
     loadContext(detail, ac.signal).catch(() => undefined);
     return () => ac.abort();
   }, [detail?.thread.id, detail, loadContext]);
@@ -1134,6 +1132,28 @@ export function EmailView({
                     {detail.thread.participants.join(" · ")}
                   </p>
                 </div>
+                <div className="flex shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.02] p-0.5">
+                  {(["readable", "raw"] as const).map((mode) => (
+                    <button
+                      className={cn(
+                        "rounded-md px-2 py-1 text-[10px] capitalize transition-colors",
+                        bodyView === mode
+                          ? "bg-white/[0.08] text-white/75"
+                          : "text-white/35 hover:text-white/55",
+                      )}
+                      key={mode}
+                      onClick={() => setBodyView(mode)}
+                      title={
+                        mode === "readable"
+                          ? "Cleaned, readable view"
+                          : "Raw original message"
+                      }
+                      type="button"
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
                 <button
                   className="shrink-0 rounded-md border border-white/[0.08] px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.04] lg:hidden"
                   onClick={() => setMobileContextOpen(true)}
@@ -1199,7 +1219,7 @@ export function EmailView({
                             </span>
                           </div>
 
-                          {msg.aiSummary ? (
+                          {bodyView === "readable" && msg.aiSummary ? (
                             <div className="mb-2 space-y-1 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2 text-[10px]">
                               {msg.aiSummary.previousContext ? (
                                 <p>
@@ -1235,20 +1255,17 @@ export function EmailView({
                             </div>
                           ) : null}
 
-                          <div className="whitespace-pre-wrap text-[12px] leading-relaxed">
-                            {msg.body || "(empty message)"}
+                          <div
+                            className={cn(
+                              "whitespace-pre-wrap text-[12px] leading-relaxed",
+                              bodyView === "raw" &&
+                                "font-mono text-[11px] text-white/55",
+                            )}
+                          >
+                            {bodyView === "raw"
+                              ? (msg.bodyOriginal ?? msg.body ?? "(empty message)")
+                              : msg.body || "(empty message)"}
                           </div>
-
-                          {msg.bodyOriginal ? (
-                            <button
-                              className="mt-2 inline-flex items-center gap-1 text-[10px] text-white/35 hover:text-white/55"
-                              onClick={() => setOriginalMessage(msg)}
-                              type="button"
-                            >
-                              <MailIcon className="h-3 w-3" />
-                              View original
-                            </button>
-                          ) : null}
                         </div>
                       </div>
                     );
@@ -1577,34 +1594,6 @@ export function EmailView({
           {rightRailContent}
         </aside>
       </div>
-
-      {originalMessage ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOriginalMessage(null);
-          }}
-          role="presentation"
-        >
-          <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-white/10 bg-[#0a0a0a] p-5 shadow-xl">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="font-semibold text-sm text-white/85">
-                Original message
-              </h3>
-              <button
-                className="rounded p-1 text-white/40 hover:bg-white/[0.06] hover:text-white/70"
-                onClick={() => setOriginalMessage(null)}
-                type="button"
-              >
-                <XIcon className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="whitespace-pre-wrap text-[12px] text-white/60 leading-relaxed">
-              {originalMessage.bodyOriginal ?? originalMessage.body}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

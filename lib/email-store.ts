@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   displaySender,
   extractSenderEmail,
+  readableEmailBody,
   stripEmailBody,
 } from "@/lib/email-body";
 import {
@@ -94,7 +95,9 @@ function rowToMessage(row: DbMessageRow): EmailMessage {
     to: parseStringArray(row.to_emails),
     cc: parseStringArray(row.cc_emails),
     subject: row.subject ?? "(No subject)",
-    body: row.body_plain,
+    // Re-derive the readable view from raw on every read so the latest cleaner
+    // applies even to messages synced under an older version. Raw is preserved.
+    body: readableEmailBody(row.body_original, row.body_plain),
     bodyHtml: null,
     bodyOriginal: row.body_original,
     date: row.sent_at,
