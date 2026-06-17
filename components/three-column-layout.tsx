@@ -24,7 +24,7 @@ const DEFAULT_LAYOUT: Layout = {
   right: 25,
 };
 
-const LAYOUT_VERSION = 2; // bump when constraints change to force reset
+const LAYOUT_VERSION = 3; // bump when constraints change to force reset
 
 function readStoredLayout(layoutId: string): Layout | undefined {
   if (typeof window === "undefined") {
@@ -32,9 +32,10 @@ function readStoredLayout(layoutId: string): Layout | undefined {
   }
   try {
     const versionKey = `${STORAGE_PREFIX}version`;
-    const stored = window.localStorage.getItem(versionKey);
-    if (stored !== String(LAYOUT_VERSION)) {
-      window.localStorage.removeItem(`${STORAGE_PREFIX}${layoutId}`);
+    if (window.localStorage.getItem(versionKey) !== String(LAYOUT_VERSION)) {
+      Object.keys(window.localStorage)
+        .filter((k) => k.startsWith(STORAGE_PREFIX) && k !== versionKey)
+        .forEach((k) => window.localStorage.removeItem(k));
       window.localStorage.setItem(versionKey, String(LAYOUT_VERSION));
       return undefined;
     }

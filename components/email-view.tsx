@@ -1110,7 +1110,7 @@ export function EmailView({
   );
 
   const centerColumnContent = (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden [contain:layout_style]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {selectedId && detail && !detailLoading && !detailError ? (
             <div className="shrink-0 border-white/[0.06] border-b px-4 py-3 md:px-5">
               <div className="flex items-start gap-2">
