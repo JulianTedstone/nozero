@@ -24,11 +24,20 @@ const DEFAULT_LAYOUT: Layout = {
   right: 25,
 };
 
+const LAYOUT_VERSION = 2; // bump when constraints change to force reset
+
 function readStoredLayout(layoutId: string): Layout | undefined {
   if (typeof window === "undefined") {
     return undefined;
   }
   try {
+    const versionKey = `${STORAGE_PREFIX}version`;
+    const stored = window.localStorage.getItem(versionKey);
+    if (stored !== String(LAYOUT_VERSION)) {
+      window.localStorage.removeItem(`${STORAGE_PREFIX}${layoutId}`);
+      window.localStorage.setItem(versionKey, String(LAYOUT_VERSION));
+      return undefined;
+    }
     const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${layoutId}`);
     if (!raw) {
       return undefined;
@@ -43,10 +52,10 @@ function readStoredLayout(layoutId: string): Layout | undefined {
       const left = parsed.left;
       const right = parsed.right;
       if (
-        center > 68 ||
+        center > 70 ||
         center < 20 ||
-        left < 15 ||
-        right < 15 ||
+        left < 25 ||
+        right < 25 ||
         left + right + center < 99 ||
         left + right + center > 101
       ) {
@@ -154,12 +163,12 @@ export function ThreeColumnLayout({
         return;
       }
       const normalized: Layout =
-        left < 15 || right < 15 || center > 68
+        left < 25 || right < 25 || center > 70
           ? DEFAULT_LAYOUT
           : {
-              left: Math.max(left, 18),
-              center: Math.min(Math.max(center, 34), 64),
-              right: Math.max(right, 18),
+              left: Math.max(left, 25),
+              center: Math.min(Math.max(center, 20), 50),
+              right: Math.max(right, 25),
             };
       writeStoredLayout(layoutId, normalized);
     },
@@ -204,8 +213,8 @@ export function ThreeColumnLayout({
         collapsible
         defaultSize={25}
         id="left"
-        maxSize={33}
-        minSize={18}
+        maxSize={40}
+        minSize={25}
         onResize={() => {
           setLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false);
         }}
@@ -231,7 +240,7 @@ export function ThreeColumnLayout({
       <Panel
         className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
         id="center"
-        minSize={34}
+        minSize={20}
       >
         {leftCollapsed ? (
           <button
@@ -266,8 +275,8 @@ export function ThreeColumnLayout({
         collapsible
         defaultSize={25}
         id="right"
-        maxSize={33}
-        minSize={18}
+        maxSize={40}
+        minSize={25}
         onResize={() => {
           setRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false);
         }}
