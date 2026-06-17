@@ -7,7 +7,13 @@ import {
   FilePlusIcon,
   SaveIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { CollapsibleSidebarSection } from "@/components/collapsible-sidebar-section";
 import {
   type EventContextNavigation,
@@ -188,16 +194,54 @@ export function ContextView({
   const [connected, setConnected] = useState<ConnectedBundle | null>(null);
   const [connectedLoading, setConnectedLoading] = useState(false);
 
+  // Repo-backed file tree (real GitHub files), keyed by repo full name.
+  const [repoTrees, setRepoTrees] = useState<Record<string, string[]>>({});
+  const [treeLoading, setTreeLoading] = useState<Record<string, boolean>>({});
+  const [treeError, setTreeError] = useState<Record<string, string | null>>({});
+  const [fileSha, setFileSha] = useState<string | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  // Paths added in-session that don't exist in the repo yet (commit on save).
+  const [newPaths, setNewPaths] = useState<Set<string>>(() => new Set());
+
+  const loadRepoTree = useCallback(
+    async (repoFullName: string, force = false) => {
+      if (!force && repoTrees[repoFullName]) {
+        return;
+      }
+      setTreeLoading((prev) => ({ ...prev, [repoFullName]: true }));
+      setTreeError((prev) => ({ ...prev, [repoFullName]: null }));
+      try {
+        const res = await fetch(
+          `/api/context/repo/tree?repo=${encodeURIComponent(repoFullName)}`,
+        );
+        const data = await res.json();
+        if (res.ok) {
+          setRepoTrees((prev) => ({
+            ...prev,
+            [repoFullName]: (data.paths as string[]) ?? [],
+          }));
+        } else {
+          setTreeError((prev) => ({
+            ...prev,
+            [repoFullName]: data.error ?? "Could not load files",
+          }));
+        }
+      } catch {
+        setTreeError((prev) => ({
+          ...prev,
+          [repoFullName]: "Could not load files",
+        }));
+      } finally {
+        setTreeLoading((prev) => ({ ...prev, [repoFullName]: false }));
+      }
+    },
+    [repoTrees],
+  );
+
   const streams = useMemo(() => {
     const fromWorkspace = Object.keys(workspace?.streams ?? {});
     return [...new Set([...bindingStreams, ...fromWorkspace])];
   }, [bindingStreams, workspace?.streams]);
-
-  const selectedFiles = useMemo(
-    () =>
-      selectedStream ? (workspace?.streams[selectedStream]?.files ?? []) : [],
-    [selectedStream, workspace?.streams]
-  );
 
   const selectedSummary = selectedStream
     ? (connected?.summary ??
@@ -289,60 +333,95 @@ export function ContextView({
   }, [activePath, selectedRepo, selectedStream]);
 
   useEffect(() => {
-    const file = selectedFiles.find((entry) => entry.path === activePath);
-    if (file) {
-      setEditorValue(file.content);
-      setDirty(false);
-      setSaveError(null);
-    } else if (!activePath && selectedFiles[0]) {
-      setActivePath(selectedFiles[0].path);
-    } else if (!file && activePath) {
-      setActivePath(null);
-      setEditorValue("");
-      setDirty(false);
+    if (selectedRepo) {
+      void loadRepoTree(selectedRepo);
     }
-  }, [activePath, selectedFiles]);
+  }, [selectedRepo, loadRepoTree]);
 
-  const addFile = async (path: string) => {
-    if (!(selectedStream && path.trim())) {
+  useEffect(() => {
+    if (!(activePath && selectedRepo)) {
+      setEditorValue("");
+      setFileSha(null);
+      setDirty(false);
       return;
     }
+    // A path added this session that isn't committed yet — start blank.
+    if (newPaths.has(`${selectedRepo}::${activePath}`)) {
+      return;
+    }
+    const controller = new AbortController();
+    setFileLoading(true);
+    setSaveError(null);
+    fetch(
+      `/api/context/repo/file?repo=${encodeURIComponent(selectedRepo)}&path=${encodeURIComponent(activePath)}`,
+      { signal: controller.signal },
+    )
+      .then(async (res) => ({ ok: res.ok, data: await res.json() }))
+      .then(({ ok, data }) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (ok) {
+          setEditorValue(data.content ?? "");
+          setFileSha(data.sha ?? null);
+          setDirty(false);
+        } else {
+          setSaveError(data.error ?? "Could not load file");
+          setEditorValue("");
+          setFileSha(null);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setFileLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [activePath, selectedRepo, newPaths]);
+
+  const addFile = (path: string) => {
     const trimmedPath = path.trim();
-    const res = await fetch("/api/context/workspace", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        stream: selectedStream,
-        path: trimmedPath,
-        content: "",
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setSaveError(data.error ?? "Could not create file");
+    if (!(selectedRepo && trimmedPath)) {
       return;
     }
-    setWorkspace(data.workspace);
-    setOpenStreams((prev) => ({ ...prev, [selectedStream]: true }));
+    const key = `${selectedRepo}::${trimmedPath}`;
+    setNewPaths((prev) => new Set(prev).add(key));
+    setRepoTrees((prev) => {
+      const current = prev[selectedRepo] ?? [];
+      if (current.includes(trimmedPath)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [selectedRepo]: [...current, trimmedPath].sort((a, b) =>
+          a.localeCompare(b),
+        ),
+      };
+    });
     setActivePath(trimmedPath);
+    setFileSha(null);
+    setEditorValue("");
+    setDirty(true);
+    setSaveError(null);
     setNewFilePath("");
   };
 
   const saveFile = async () => {
-    if (!(selectedStream && activePath)) {
+    if (!(selectedRepo && activePath)) {
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch("/api/context/workspace", {
+      const res = await fetch("/api/context/repo/file", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          stream: selectedStream,
+          repo: selectedRepo,
           path: activePath,
           content: editorValue,
-          summary: workspace?.streams[selectedStream]?.summary ?? undefined,
+          sha: fileSha,
         }),
       });
       const data = await res.json();
@@ -350,8 +429,13 @@ export function ContextView({
         setSaveError(data.error ?? "Save failed");
         return;
       }
-      setWorkspace(data.workspace);
+      setFileSha(data.sha ?? null);
       setDirty(false);
+      setNewPaths((prev) => {
+        const next = new Set(prev);
+        next.delete(`${selectedRepo}::${activePath}`);
+        return next;
+      });
     } finally {
       setSaving(false);
     }
@@ -385,8 +469,6 @@ export function ContextView({
           const selected = selectedStream === stream;
           const expanded = openStreams[stream] ?? selected;
           const streamRepos = reposForStream(stream, bindings);
-          const files = workspace?.streams[stream]?.files ?? [];
-          const fileTree = buildFileTree(files.map((file) => file.path));
           return (
             <div className="mb-1 rounded-lg" key={stream}>
               <button
@@ -419,6 +501,11 @@ export function ContextView({
                     const repoExpanded = openRepos[key] ?? selected;
                     const repoSelected =
                       selected && selectedRepo === repo.fullName;
+                    const repoFileTree = buildFileTree(
+                      repoTrees[repo.fullName] ?? [],
+                    );
+                    const isTreeLoading = treeLoading[repo.fullName];
+                    const repoTreeError = treeError[repo.fullName];
                     return (
                       <div key={key}>
                         <button
@@ -435,6 +522,7 @@ export function ContextView({
                               ...prev,
                               [key]: !repoExpanded,
                             }));
+                            void loadRepoTree(repo.fullName);
                           }}
                           type="button"
                         >
@@ -447,12 +535,25 @@ export function ContextView({
                         </button>
                         {repoExpanded ? (
                           <div className="mt-0.5 ml-2 space-y-0.5 border-white/[0.06] border-l pl-2">
+                            {isTreeLoading && repoFileTree.length === 0 ? (
+                              <p className="px-2 py-1 text-[10px] text-white/30">
+                                Loading files…
+                              </p>
+                            ) : repoTreeError ? (
+                              <p className="px-2 py-1 text-[10px] text-amber-400/70">
+                                {repoTreeError}
+                              </p>
+                            ) : repoFileTree.length === 0 ? (
+                              <p className="px-2 py-1 text-[10px] text-white/25">
+                                No files yet.
+                              </p>
+                            ) : null}
                             <FileTreeList
                               activePath={
                                 selected && repoSelected ? activePath : null
                               }
                               depth={0}
-                              nodes={fileTree}
+                              nodes={repoFileTree}
                               onSelectFile={(path) => {
                                 setSelectedStream(stream);
                                 setSelectedRepo(repo.fullName);
@@ -520,12 +621,12 @@ export function ContextView({
       <div className="flex shrink-0 items-center justify-between gap-2 border-white/[0.06] border-b px-3 py-2">
         <p className="min-w-0 truncate font-mono text-[11px] text-white/55">
           {activePath
-            ? `${selectedRepo?.split("/")[1] ?? selectedStream ?? ""}/${activePath}`
+            ? `${selectedRepo?.split("/")[1] ?? selectedStream ?? ""}/${activePath}${fileLoading ? " · loading…" : ""}`
             : "Select a file"}
         </p>
         <button
           className="inline-flex shrink-0 items-center gap-1 rounded border border-white/[0.08] px-2 py-1 text-[10px] text-white/60 hover:bg-white/[0.05] disabled:opacity-50"
-          disabled={!(dirty && activePath && selectedStream) || saving}
+          disabled={!(dirty && activePath && selectedRepo) || saving}
           onClick={() => {
             saveFile().catch(() => undefined);
           }}
