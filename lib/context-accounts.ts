@@ -137,7 +137,9 @@ export function githubRepoUrl(fullName: string): string {
 
 /** Connected context-message repos shown under each Flightdeck stream in the UI tree. */
 const STREAM_CONNECTED_REPOS: Record<string, string[]> = {
-  "npt-nopilot": ["context-message-nopilot", "context-message-ted"],
+  // context-message-ted is personal-only and deliberately kept out of the
+  // professional/public npt-nopilot stream (that's context-message-nopilot).
+  "npt-nopilot": ["context-message-nopilot"],
   "npt-flightdeck": ["context-message-nopilot"],
   "npt-360": ["context-message-360"],
   "npt-job-search": ["context-message-ted"],
