@@ -123,6 +123,10 @@ interface ModernSettingsFormProps {
   connectedAccountId?: string;
   connectedEmail?: string;
   oauthError?: string;
+  krispConnected?: boolean;
+  krispUpdatedAt?: string;
+  krispJustConnected?: boolean;
+  krispError?: string;
   gmailWarning?: boolean;
   googleAccountLinkConfigured?: boolean;
   triggerSync?: boolean;
@@ -493,6 +497,10 @@ export function ModernSettingsForm({
   connectedAccountId,
   connectedEmail,
   oauthError,
+  krispConnected,
+  krispUpdatedAt,
+  krispJustConnected,
+  krispError,
   gmailWarning,
   googleAccountLinkConfigured = true,
   triggerSync,
@@ -2416,16 +2424,69 @@ export function ModernSettingsForm({
               </div>
 
               <div className="liquid-glass-subtle rounded-2xl p-4">
-                <p className="mb-1 font-medium text-xs text-foreground">Krisp</p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="font-medium text-xs text-foreground">Krisp</p>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium text-[9px]",
+                      krispConnected
+                        ? "bg-emerald-500/15 text-emerald-500"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        krispConnected
+                          ? "bg-emerald-500"
+                          : "bg-muted-foreground/50",
+                      )}
+                    />
+                    {krispConnected ? "Connected" : "Not connected"}
+                  </span>
+                </div>
                 <p className="mb-3 text-[10px] leading-relaxed text-muted-foreground">
                   Connect Krisp for meeting transcripts and action items in Context.
+                  {krispConnected && krispUpdatedAt
+                    ? ` Linked ${new Date(krispUpdatedAt).toLocaleDateString()}.`
+                    : ""}
                 </p>
-                <a
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-accent transition-colors"
-                  href="/api/accounts/krisp/connect"
-                >
-                  Connect Krisp
-                </a>
+                {krispError ? (
+                  <p className="mb-2 text-[10px] text-destructive">
+                    Krisp connection failed: {krispError.replace(/_/g, " ")}.
+                  </p>
+                ) : null}
+                {krispJustConnected && !krispError ? (
+                  <p className="mb-2 text-[10px] text-emerald-500">
+                    Krisp connected successfully.
+                  </p>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <a
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[11px] text-foreground/80 hover:bg-accent transition-colors"
+                    href="/api/accounts/krisp/connect"
+                  >
+                    {krispConnected ? "Reconnect" : "Connect Krisp"}
+                  </a>
+                  {krispConnected ? (
+                    <button
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                      onClick={async () => {
+                        try {
+                          await fetch("/api/accounts/krisp/disconnect", {
+                            method: "POST",
+                          });
+                        } finally {
+                          window.location.href =
+                            "/settings?section=connections";
+                        }
+                      }}
+                      type="button"
+                    >
+                      Disconnect
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               <AccountCodesSettings

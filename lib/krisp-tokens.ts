@@ -67,3 +67,18 @@ export async function saveKrispTokens(
     })
     .eq("id", userId);
 }
+
+export async function clearKrispTokens(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("profiles")
+    .select("preferences")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const prefs = (data?.preferences ?? {}) as Record<string, unknown>;
+  const { krispTokens: _drop, ...rest } = prefs;
+  await admin.from("profiles").update({ preferences: rest }).eq("id", userId);
+}

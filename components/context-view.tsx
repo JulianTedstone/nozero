@@ -5,6 +5,9 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   FilePlusIcon,
+  InboxIcon,
+  MessageSquareIcon,
+  PackageIcon,
   SaveIcon,
 } from "lucide-react";
 import {
@@ -15,6 +18,10 @@ import {
   useState,
 } from "react";
 import { CollapsibleSidebarSection } from "@/components/collapsible-sidebar-section";
+import {
+  ConversationDetail,
+  ConversationRelated,
+} from "@/components/conversation-detail";
 import {
   type EventContextNavigation,
   EventContextPanel,
@@ -29,6 +36,13 @@ import { cn } from "@/lib/utils";
 import type { CalendarEvent } from "@/types/calendar";
 import type { ConnectedBundle } from "@/types/context-connected";
 import type { ContextFocus } from "@/types/context-focus";
+import type {
+  IngestAction,
+  IngestConversation,
+  IngestGroups,
+  IngestItemSummary,
+  IngestSection,
+} from "@/types/ingest";
 
 type FileTreeNode =
   | { kind: "folder"; name: string; path: string; children: FileTreeNode[] }
@@ -203,6 +217,21 @@ export function ContextView({
   // Paths added in-session that don't exist in the repo yet (commit on save).
   const [newPaths, setNewPaths] = useState<Set<string>>(() => new Set());
 
+  // Ingest inbox (Conversations / Messaging / Drops) — routed pipeline output.
+  const [ingestGroups, setIngestGroups] = useState<IngestGroups | null>(null);
+  const [ingestOpen, setIngestOpen] = useState<Record<IngestSection, boolean>>({
+    conversations: true,
+    messaging: false,
+    drops: false,
+  });
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    string | null
+  >(null);
+  const [conversation, setConversation] = useState<IngestConversation | null>(
+    null,
+  );
+  const [conversationLoading, setConversationLoading] = useState(false);
+
   const loadRepoTree = useCallback(
     async (repoFullName: string, force = false) => {
       if (!force && repoTrees[repoFullName]) {
@@ -236,6 +265,88 @@ export function ContextView({
       }
     },
     [repoTrees],
+  );
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/context/ingest")
+      .then((r) => r.json())
+      .then((d) => {
+        if (active) setIngestGroups((d.groups as IngestGroups) ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const markIngestReadLocal = useCallback((id: string) => {
+    setIngestGroups((prev) => {
+      if (!prev) return prev;
+      const mark = (items: IngestItemSummary[]) =>
+        items.map((it) => (it.id === id ? { ...it, unread: false } : it));
+      return {
+        conversations: mark(prev.conversations),
+        messaging: mark(prev.messaging),
+        drops: mark(prev.drops),
+      };
+    });
+  }, []);
+
+  const openConversation = useCallback(
+    async (item: IngestItemSummary) => {
+      setSelectedConversationId(item.id);
+      setActivePath(null);
+      setConversation(null);
+      setConversationLoading(true);
+      try {
+        const res = await fetch(
+          `/api/context/ingest?repo=${encodeURIComponent(item.repo)}&path=${encodeURIComponent(item.path)}`,
+        );
+        const d = await res.json();
+        setConversation((d.conversation as IngestConversation) ?? null);
+      } catch {
+        setConversation(null);
+      } finally {
+        setConversationLoading(false);
+      }
+      if (item.unread) {
+        markIngestReadLocal(item.id);
+        fetch("/api/context/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.id, read: true }),
+        }).catch(() => undefined);
+      }
+    },
+    [markIngestReadLocal],
+  );
+
+  const turnIntoTask = useCallback(
+    async (action: IngestAction): Promise<boolean> => {
+      if (!conversation?.defaultStream) return false;
+      try {
+        const res = await fetch("/api/flightdeck/capture", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: action.text,
+            stream: conversation.defaultStream,
+            owner: action.owner,
+            body:
+              `From conversation: ${conversation.title}\n` +
+              (action.due ? `Due: ${action.due}\n` : "") +
+              `Participants: ${conversation.participants
+                .map((p) => p.name)
+                .join(", ")}`,
+          }),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    },
+    [conversation],
   );
 
   const streams = useMemo(() => {
@@ -458,6 +569,32 @@ export function ContextView({
     );
   }
 
+  const ingestSections: Array<{
+    key: IngestSection;
+    label: string;
+    items: IngestItemSummary[];
+    icon: typeof InboxIcon;
+  }> = [
+    {
+      key: "conversations",
+      label: "Conversations",
+      items: ingestGroups?.conversations ?? [],
+      icon: MessageSquareIcon,
+    },
+    {
+      key: "messaging",
+      label: "Messaging",
+      items: ingestGroups?.messaging ?? [],
+      icon: InboxIcon,
+    },
+    {
+      key: "drops",
+      label: "Drops",
+      items: ingestGroups?.drops ?? [],
+      icon: PackageIcon,
+    },
+  ];
+
   const streamsTree = (
     <>
       {tabBar ? (
@@ -564,6 +701,7 @@ export function ContextView({
                                 setSelectedStream(stream);
                                 setSelectedRepo(repo.fullName);
                                 setActivePath(path);
+                                setSelectedConversationId(null);
                               }}
                               onToggleFolder={(path) =>
                                 setOpenFolders((prev) => ({
@@ -613,6 +751,106 @@ export function ContextView({
             </div>
           );
         })}
+        <div className="mt-3 border-line border-t pt-2">
+          <div className="flex items-center gap-1.5 px-2 pb-1">
+            <InboxIcon className="h-3 w-3 text-ink-subtle" />
+            <h2 className="font-semibold text-[10px] text-ink-subtle uppercase tracking-wider">
+              Ingest
+            </h2>
+          </div>
+          {ingestSections.map((section) => {
+            const open = ingestOpen[section.key];
+            const unread = section.items.filter((i) => i.unread).length;
+            const SectionIcon = section.icon;
+            return (
+              <div className="mb-1" key={section.key}>
+                <button
+                  className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] text-ink-muted hover:bg-accent"
+                  onClick={() =>
+                    setIngestOpen((prev) => ({
+                      ...prev,
+                      [section.key]: !prev[section.key],
+                    }))
+                  }
+                  type="button"
+                >
+                  <span className="flex items-center gap-1.5">
+                    {open ? (
+                      <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <SectionIcon className="h-3 w-3 shrink-0 text-ink-subtle" />
+                    {section.label}
+                  </span>
+                  {unread > 0 ? (
+                    <span className="rounded-full bg-primary/15 px-1.5 font-medium text-[9px] text-primary">
+                      {unread}
+                    </span>
+                  ) : section.items.length > 0 ? (
+                    <span className="text-[9px] text-ink-subtle">
+                      {section.items.length}
+                    </span>
+                  ) : null}
+                </button>
+                {open ? (
+                  <div className="mt-1 ml-2 space-y-0.5 border-line border-l pl-2">
+                    {section.items.length === 0 ? (
+                      <p className="px-2 py-1 text-[10px] text-ink-subtle">
+                        Nothing yet.
+                      </p>
+                    ) : (
+                      section.items.map((item) => {
+                        const selected = selectedConversationId === item.id;
+                        const clickable = item.section === "conversations";
+                        return (
+                          <button
+                            className={cn(
+                              "block w-full rounded px-2 py-1 text-left text-[10px]",
+                              selected
+                                ? "bg-accent text-ink"
+                                : "text-ink-muted hover:bg-surface-sunk",
+                              !clickable && "cursor-default",
+                            )}
+                            disabled={!clickable}
+                            key={item.id}
+                            onClick={() => {
+                              if (clickable) openConversation(item);
+                            }}
+                            type="button"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "h-1.5 w-1.5 shrink-0 rounded-full",
+                                  item.unread ? "bg-primary" : "bg-transparent",
+                                )}
+                              />
+                              <span className="min-w-0 flex-1 truncate">
+                                <span
+                                  className={cn(
+                                    item.unread && "font-medium text-ink",
+                                  )}
+                                >
+                                  {item.title}
+                                </span>
+                              </span>
+                              {item.date ? (
+                                <span className="shrink-0 text-[9px] text-ink-subtle">
+                                  {item.date.slice(8, 10)}/{item.date.slice(5, 7)}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
       {sidebarFooter ? (
         <div className="shrink-0 border-line border-t p-3">
@@ -780,7 +1018,17 @@ export function ContextView({
   return (
     <div className="flex h-full min-h-0 flex-col px-4 pt-3 pb-4 md:px-6 md:pt-4">
       <ThreeColumnLayout
-        center={editorPanel}
+        center={
+          selectedConversationId ? (
+            <ConversationDetail
+              conversation={conversation}
+              loading={conversationLoading}
+              onTurnIntoTask={turnIntoTask}
+            />
+          ) : (
+            editorPanel
+          )
+        }
         className="min-h-0 flex-1"
         layoutId="context"
         left={
@@ -788,7 +1036,13 @@ export function ContextView({
             {streamsTree}
           </div>
         }
-        right={connectedRail}
+        right={
+          selectedConversationId ? (
+            <ConversationRelated conversation={conversation} />
+          ) : (
+            connectedRail
+          )
+        }
       />
     </div>
   );

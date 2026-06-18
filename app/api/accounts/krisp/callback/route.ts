@@ -1,16 +1,18 @@
 import { createHmac } from "crypto";
 import { NextResponse } from "next/server";
-import { getKrispRedirectUri } from "@/lib/oauth-redirect";
+import { getKrispRedirectUri, getPublicOrigin } from "@/lib/oauth-redirect";
 import { saveKrispTokens } from "@/lib/krisp-tokens";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  const settingsUrl = `${origin}/settings?section=connections`;
+  // Use the public origin, not new URL(request.url).origin — behind the host's
+  // reverse proxy the latter is localhost, which would bounce the user there.
+  const settingsUrl = `${getPublicOrigin(request)}/settings?section=connections`;
 
   if (error || !code || !state) {
     return NextResponse.redirect(
