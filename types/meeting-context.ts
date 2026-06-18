@@ -7,7 +7,7 @@ export interface ContextPerson {
   company: string | null;
   somaContactId: string | null;
   somaCompanyId: string | null;
-  source: "attendee" | "stakeholder" | "soma";
+  source: "attendee" | "stakeholder" | "soma" | "local";
 }
 
 export interface ContextCompany {

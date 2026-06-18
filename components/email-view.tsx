@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
+  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ExternalLinkIcon,
@@ -19,6 +20,7 @@ import {
   SearchIcon,
   SendIcon,
   SparklesIcon,
+  UserPlusIcon,
   XIcon,
 } from "lucide-react";
 import {
@@ -32,6 +34,13 @@ import {
 import { CollapsibleSidebarSection } from "@/components/collapsible-sidebar-section";
 import { ThreeColumnLayout } from "@/components/three-column-layout";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   readAllEmailThreads,
   readEmailAccounts,
@@ -51,7 +60,9 @@ import type {
   EmailThreadContext,
   EmailThreadDetail,
   EmailThreadListItem,
+  SuggestedTask,
 } from "@/types/email";
+import type { ContextPerson } from "@/types/meeting-context";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -104,32 +115,43 @@ function ContextSection({
   children,
   empty,
   isEmpty,
+  action,
 }: {
   title: string;
   defaultOpen?: boolean;
   children?: React.ReactNode;
   empty?: string;
   isEmpty?: boolean;
+  action?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface-sunk">
-      <button
-        className="flex w-full items-center justify-between px-3 py-2 text-left"
-        onClick={() => setOpen((v) => !v)}
-        type="button"
-      >
-        <h3 className="eyebrow text-[10px]">
-          {title}
-        </h3>
-        <ChevronDownIcon
-          className={cn(
-            "h-3 w-3 text-ink-subtle transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
+      <div className="flex w-full items-center justify-between gap-2 px-3 py-2">
+        <button
+          className="flex flex-1 items-center text-left"
+          onClick={() => setOpen((v) => !v)}
+          type="button"
+        >
+          <h3 className="eyebrow text-[10px]">{title}</h3>
+        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {action}
+          <button
+            aria-label={open ? "Collapse" : "Expand"}
+            onClick={() => setOpen((v) => !v)}
+            type="button"
+          >
+            <ChevronDownIcon
+              className={cn(
+                "h-3 w-3 text-ink-subtle transition-transform",
+                open && "rotate-180",
+              )}
+            />
+          </button>
+        </div>
+      </div>
       {open ? (
         <div className="px-3 py-2.5 text-[11px] text-ink-muted">
           {isEmpty ? (
@@ -189,10 +211,40 @@ export function EmailView({
   const [mobileContextOpen, setMobileContextOpen] = useState(false);
   const [bodyView, setBodyView] = useState<"readable" | "raw">("readable");
 
+  // Thread-panel: Context refresh, suggested tasks, and the quick dialogs.
+  const [contextRefreshing, setContextRefreshing] = useState(false);
+  const [dismissedTasks, setDismissedTasks] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [acceptedTasks, setAcceptedTasks] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [taskBusy, setTaskBusy] = useState(false);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const [viewContact, setViewContact] = useState<ContextPerson | null>(null);
+  const [newContactDraft, setNewContactDraft] = useState<{
+    email: string;
+    name: string;
+    name2: string;
+    title: string;
+    company: string;
+  } | null>(null);
+  const [taskDraft, setTaskDraft] = useState<{
+    title: string;
+    body: string;
+    stream: string;
+  } | null>(null);
+
   const listRef = useRef<HTMLDivElement>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const nextCursorRef = useRef<string | null>(null);
   const threadAccountRef = useRef<string | null>(null);
+  // Live mirrors so loadContext (deps []) reads the latest without re-binding.
+  const boardStreamsRef = useRef<string[]>([]);
+  boardStreamsRef.current = boardStreams;
+  const contextRef = useRef<EmailThreadContext | null>(null);
+  contextRef.current = context;
 
   const refreshLastSyncedAt = useCallback(async () => {
     if (!userId) return;
@@ -481,16 +533,23 @@ export function EmailView({
     async (thread: EmailThreadDetail, signal?: AbortSignal) => {
       setContextLoading(true);
       try {
-        const last = thread.messages.at(-1);
+        const recent = thread.messages.slice(-4);
+        const bodyExcerpt = recent.length
+          ? recent
+              .map((m) => `${m.from || "Unknown"}:\n${(m.body || "").slice(0, 1200)}`)
+              .join("\n\n---\n\n")
+          : (thread.thread.snippet ?? "");
         const res = await fetch("/api/email/context", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             subject: thread.thread.subject,
             participants: thread.thread.participants,
-            bodyExcerpt: last?.body ?? thread.thread.snippet,
+            bodyExcerpt,
             threadIntent: thread.thread.threadIntent,
             streams: thread.thread.streams,
+            availableStreams: boardStreamsRef.current,
+            existingTasks: (contextRef.current?.tasks ?? []).map((t) => t.title),
           }),
           signal,
         });
@@ -573,6 +632,165 @@ export function EmailView({
       }
     } finally {
       setAssigningStream(false);
+    }
+  };
+
+  // ── Thread-panel actions ───────────────────────────────────────────────
+  const refreshContext = () => {
+    if (!detail) return;
+    setContextRefreshing(true);
+    setPanelError(null);
+    setDismissedTasks(new Set());
+    setAcceptedTasks(new Set());
+    loadContext(detail)
+      .catch(() => undefined)
+      .finally(() => setContextRefreshing(false));
+  };
+
+  const captureFlightdeckTask = async (input: {
+    title: string;
+    body?: string;
+    stream: string;
+  }): Promise<boolean> => {
+    const res = await fetch("/api/flightdeck/capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: input.title,
+        body: input.body || undefined,
+        stream: input.stream,
+      }),
+    });
+    const data = (await res.json()) as { ok?: boolean; ref?: string; error?: string };
+    if (!res.ok) {
+      setPanelError(data.error ?? "Could not create the task.");
+      return false;
+    }
+    // Optimistically add it to the connected/related tasks.
+    setContext((c) =>
+      c
+        ? {
+            ...c,
+            tasks: [
+              {
+                id: data.ref ?? input.title,
+                title: input.title,
+                status: "todo",
+                stream: input.stream,
+                url: null,
+                source: "flightdeck" as const,
+              },
+              ...c.tasks,
+            ],
+          }
+        : c,
+    );
+    return true;
+  };
+
+  const acceptSuggestion = async (task: SuggestedTask) => {
+    setPanelError(null);
+    const stream =
+      task.stream || detail?.thread.streams[0] || boardStreams[0] || "";
+    if (!stream) {
+      setPanelError("Assign a Flightdeck stream to this thread first.");
+      return;
+    }
+    setTaskBusy(true);
+    try {
+      const ok = await captureFlightdeckTask({
+        title: task.title,
+        body: task.rationale ?? undefined,
+        stream,
+      });
+      if (ok) {
+        setAcceptedTasks((prev) => new Set(prev).add(task.title));
+      }
+    } finally {
+      setTaskBusy(false);
+    }
+  };
+
+  const draftSuggestion = (task: SuggestedTask) => {
+    setPanelError(null);
+    setTaskDraft({
+      title: task.title,
+      body: task.rationale ?? "",
+      stream: task.stream || detail?.thread.streams[0] || boardStreams[0] || "",
+    });
+  };
+
+  const dismissSuggestion = (task: SuggestedTask) => {
+    setDismissedTasks((prev) => new Set(prev).add(task.title));
+  };
+
+  const openAddContact = (person: ContextPerson) => {
+    setPanelError(null);
+    setNewContactDraft({
+      email: person.email,
+      name: person.name ?? "",
+      name2: "",
+      title: person.role ?? "",
+      company: person.company ?? "",
+    });
+  };
+
+  const saveContact = async () => {
+    if (!newContactDraft) return;
+    const fullName = [newContactDraft.name.trim(), newContactDraft.name2.trim()]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    setContactBusy(true);
+    setPanelError(null);
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: newContactDraft.email.trim(),
+          name: fullName || null,
+          name2: newContactDraft.name2.trim() || null,
+          title: newContactDraft.title.trim() || null,
+          company: newContactDraft.company.trim() || null,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setPanelError(data.error ?? "Could not save the contact.");
+        return;
+      }
+      setNewContactDraft(null);
+      if (detail) {
+        loadContext(detail).catch(() => undefined);
+      }
+    } finally {
+      setContactBusy(false);
+    }
+  };
+
+  const submitTaskDraft = async () => {
+    if (!taskDraft) return;
+    const title = taskDraft.title.trim();
+    const stream = taskDraft.stream.trim();
+    if (!(title && stream)) {
+      setPanelError("A title and a Flightdeck stream are required.");
+      return;
+    }
+    setTaskBusy(true);
+    setPanelError(null);
+    try {
+      const ok = await captureFlightdeckTask({
+        title,
+        body: taskDraft.body.trim() || undefined,
+        stream,
+      });
+      if (ok) {
+        setAcceptedTasks((prev) => new Set(prev).add(title));
+        setTaskDraft(null);
+      }
+    } finally {
+      setTaskBusy(false);
     }
   };
 
@@ -1378,6 +1596,14 @@ export function EmailView({
     </div>
   );
 
+  const digest = context?.digest ?? null;
+  const hasDigest = Boolean(
+    digest && (digest.topic || digest.development || digest.state),
+  );
+  const visibleSuggestions = (context?.suggestedTasks ?? []).filter(
+    (t) => !(dismissedTasks.has(t.title) || acceptedTasks.has(t.title)),
+  );
+
   const rightRailContent = (
     <>
           {contextLoading && !context ? (
@@ -1387,31 +1613,165 @@ export function EmailView({
             </div>
           ) : !detail ? null : (
             <div className="space-y-3">
-              <ContextSection title="Thread purpose">
-                <p className="text-ink-muted leading-relaxed">
-                  {detail.thread.threadIntent ??
-                    context?.threadIntent ??
-                    context?.summary.text ??
-                    "No intent captured yet."}
-                </p>
+              <ContextSection
+                action={
+                  <button
+                    aria-label="Refresh context"
+                    className="rounded-md p-1 text-ink-subtle transition-colors hover:bg-accent hover:text-ink disabled:opacity-50"
+                    disabled={contextRefreshing}
+                    onClick={refreshContext}
+                    title="Recompute summary and suggest tasks"
+                    type="button"
+                  >
+                    <RefreshCwIcon
+                      className={cn(
+                        "h-3 w-3",
+                        contextRefreshing && "animate-spin",
+                      )}
+                    />
+                  </button>
+                }
+                title="Thread"
+              >
+                {hasDigest && digest ? (
+                  <dl className="space-y-2">
+                    {(
+                      [
+                        ["Topic", digest.topic],
+                        ["People", digest.participants],
+                        ["Development", digest.development],
+                        ["Current state", digest.state],
+                      ] as const
+                    )
+                      .filter(([, v]) => Boolean(v))
+                      .map(([label, value]) => (
+                        <div key={label}>
+                          <dt className="eyebrow text-[9px]">{label}</dt>
+                          <dd className="mt-0.5 text-ink-muted leading-relaxed">
+                            {value}
+                          </dd>
+                        </div>
+                      ))}
+                  </dl>
+                ) : (
+                  <p className="text-ink-muted leading-relaxed">
+                    {detail.thread.threadIntent ??
+                      context?.threadIntent ??
+                      context?.summary.text ??
+                      "No summary yet — hit refresh to compute one."}
+                  </p>
+                )}
+
+                {visibleSuggestions.length > 0 ? (
+                  <div className="mt-3 border-line border-t pt-3">
+                    <p className="eyebrow mb-2 text-[9px]">Suggested tasks</p>
+                    <ul className="space-y-2">
+                      {visibleSuggestions.map((task) => (
+                        <li
+                          className="rounded-lg border border-line bg-surface p-2"
+                          key={task.title}
+                        >
+                          <p className="text-[11px] text-ink leading-snug">
+                            {task.title}
+                          </p>
+                          {task.rationale ? (
+                            <p className="mt-0.5 text-[10px] text-ink-subtle leading-relaxed">
+                              {task.rationale}
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <button
+                              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                              disabled={taskBusy}
+                              onClick={() => acceptSuggestion(task)}
+                              type="button"
+                            >
+                              <CheckIcon className="h-3 w-3" />
+                              Accept
+                            </button>
+                            <button
+                              className="rounded-md border border-line px-2 py-1 text-[10px] text-ink-muted hover:bg-accent"
+                              onClick={() => draftSuggestion(task)}
+                              type="button"
+                            >
+                              Draft
+                            </button>
+                            <button
+                              aria-label="Dismiss"
+                              className="ml-auto rounded-md p-1 text-ink-subtle hover:bg-accent hover:text-ink"
+                              onClick={() => dismissSuggestion(task)}
+                              type="button"
+                            >
+                              <XIcon className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {panelError ? (
+                  <p className="mt-2 text-[10px] text-destructive">{panelError}</p>
+                ) : null}
               </ContextSection>
 
               <ContextSection
-                empty="No contacts resolved."
+                empty="No participants resolved."
                 isEmpty={(context?.people.length ?? 0) === 0}
                 title="Participants"
               >
-                <ul className="space-y-2">
-                  {(context?.people ?? []).map((p) => (
-                    <li key={p.email}>
-                      <p className="font-medium text-ink">
-                        {p.name ?? p.email}
-                      </p>
-                      {p.company ? (
-                        <p className="text-[10px] text-ink-subtle">{p.company}</p>
-                      ) : null}
-                    </li>
-                  ))}
+                <ul className="space-y-2.5">
+                  {(context?.people ?? []).map((p) => {
+                    const known =
+                      p.somaContactId != null ||
+                      p.source === "soma" ||
+                      p.source === "local";
+                    return (
+                      <li
+                        className="flex items-start justify-between gap-2"
+                        key={p.email}
+                      >
+                        <div className="min-w-0">
+                          {known ? (
+                            <>
+                              <p className="truncate font-medium text-ink">
+                                {p.name ?? p.email}
+                              </p>
+                              {p.role || p.company ? (
+                                <p className="truncate text-[10px] text-ink-subtle">
+                                  {[p.role, p.company]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="truncate text-ink-muted">{p.email}</p>
+                          )}
+                        </div>
+                        {known ? (
+                          <button
+                            aria-label="View contact"
+                            className="shrink-0 rounded-md p-1 text-ink-subtle hover:bg-accent hover:text-ink"
+                            onClick={() => setViewContact(p)}
+                            type="button"
+                          >
+                            <EyeIcon className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            aria-label="Add contact"
+                            className="shrink-0 rounded-md p-1 text-ink-subtle hover:bg-accent hover:text-ink"
+                            onClick={() => openAddContact(p)}
+                            type="button"
+                          >
+                            <UserPlusIcon className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </ContextSection>
 
@@ -1422,17 +1782,20 @@ export function EmailView({
               >
                 <ul className="space-y-2">
                   {(context?.companies ?? []).map((c) => (
-                    <li key={c.id ?? c.name}>
-                      <p className="font-medium text-ink">{c.name}</p>
+                    <li
+                      className="flex items-center justify-between gap-2"
+                      key={c.id ?? c.name}
+                    >
+                      <p className="truncate font-medium text-ink">{c.name}</p>
                       {c.somaUrl ? (
                         <a
-                          className="inline-flex items-center gap-1 text-[10px] text-ink-subtle hover:text-ink-muted"
+                          aria-label="Open company"
+                          className="shrink-0 rounded-md p-1 text-ink-subtle hover:bg-accent hover:text-ink"
                           href={c.somaUrl}
                           rel="noreferrer"
                           target="_blank"
                         >
-                          Open in Soma
-                          <ExternalLinkIcon className="h-2.5 w-2.5" />
+                          <ExternalLinkIcon className="h-3.5 w-3.5" />
                         </a>
                       ) : null}
                     </li>
@@ -1440,22 +1803,23 @@ export function EmailView({
                 </ul>
               </ContextSection>
 
-              <ContextSection
-                empty="No streams assigned."
-                isEmpty={(detail.thread.streams.length ?? 0) === 0}
-                title="Flightdeck streams"
-              >
-                <ul className="mb-2 space-y-1">
-                  {detail.thread.streams.map((s) => (
-                    <li
-                      className="flex items-center gap-1.5 text-ink-muted"
-                      key={s}
-                    >
-                      <LayoutDashboardIcon className="h-3 w-3 text-ink-subtle" />
-                      {s}
-                    </li>
-                  ))}
-                </ul>
+              <ContextSection title="Flightdeck">
+                <p className="eyebrow mb-1.5 text-[9px]">Streams</p>
+                {detail.thread.streams.length > 0 ? (
+                  <ul className="mb-2 space-y-1">
+                    {detail.thread.streams.map((s) => (
+                      <li
+                        className="flex items-center gap-1.5 text-ink-muted"
+                        key={s}
+                      >
+                        <LayoutDashboardIcon className="h-3 w-3 text-ink-subtle" />
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mb-2 text-ink-subtle">No streams assigned.</p>
+                )}
                 <div className="flex flex-wrap gap-1">
                   {boardStreams
                     .filter((s) => !detail.thread.streams.includes(s))
@@ -1489,36 +1853,46 @@ export function EmailView({
                     Create
                   </button>
                 </div>
-              </ContextSection>
 
-              <ContextSection
-                empty={
-                  context?.errors.flightdeck ??
-                  "No Flightdeck tasks matched this thread."
-                }
-                isEmpty={(context?.tasks.length ?? 0) === 0}
-                title="Related tasks"
-              >
-                <ul className="space-y-2">
-                  {(context?.tasks ?? []).map((t) => (
-                    <li key={t.id}>
-                      <div className="flex items-start gap-1.5">
-                        <LayoutDashboardIcon className="mt-0.5 h-3 w-3 shrink-0 text-ink-subtle" />
-                        <div className="min-w-0">
-                          <p className="truncate text-ink-muted">{t.title}</p>
-                          <p className="text-[10px] text-ink-subtle">
-                            {[t.status, t.stream].filter(Boolean).join(" · ")}
-                          </p>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-3 border-line border-t pt-3">
+                  <p className="eyebrow mb-1.5 text-[9px]">Connected tasks</p>
+                  {(context?.tasks.length ?? 0) > 0 ? (
+                    <ul className="space-y-2">
+                      {(context?.tasks ?? []).map((t) => (
+                        <li key={t.id}>
+                          <div className="flex items-start gap-1.5">
+                            <LayoutDashboardIcon className="mt-0.5 h-3 w-3 shrink-0 text-ink-subtle" />
+                            <div className="min-w-0">
+                              <p className="truncate text-ink-muted">
+                                {t.title}
+                              </p>
+                              <p className="text-[10px] text-ink-subtle">
+                                {[t.status, t.stream].filter(Boolean).join(" · ")}
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-ink-subtle">
+                      {context?.errors.flightdeck ??
+                        "No tasks connected to this thread."}
+                    </p>
+                  )}
+                </div>
               </ContextSection>
             </div>
           )}
     </>
   );
+
+  const dlgInput =
+    "h-9 w-full rounded-lg border border-line bg-surface-sunk px-3 text-[12px] text-ink outline-none placeholder:text-ink-subtle focus-visible:ring-2 focus-visible:ring-active";
+  const dlgCancel =
+    "rounded-lg border border-line px-3 py-1.5 text-[12px] text-ink-muted transition-colors hover:bg-accent";
+  const dlgPrimary =
+    "rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50";
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1594,6 +1968,228 @@ export function EmailView({
           {rightRailContent}
         </aside>
       </div>
+
+      {/* Quick Contact View */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setViewContact(null);
+        }}
+        open={Boolean(viewContact)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="title-serif text-base">
+              {viewContact?.name ?? viewContact?.email ?? "Contact"}
+            </DialogTitle>
+          </DialogHeader>
+          {viewContact ? (
+            <dl className="space-y-2.5 text-[12px]">
+              {viewContact.role ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="eyebrow text-[9px]">Title</dt>
+                  <dd className="text-right text-ink">{viewContact.role}</dd>
+                </div>
+              ) : null}
+              {viewContact.company ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="eyebrow text-[9px]">Company</dt>
+                  <dd className="text-right text-ink">{viewContact.company}</dd>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-3">
+                <dt className="eyebrow text-[9px]">Email</dt>
+                <dd className="truncate text-right text-ink">
+                  {viewContact.email}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="eyebrow text-[9px]">Source</dt>
+                <dd className="text-right text-ink-muted">
+                  {viewContact.somaContactId
+                    ? "Soma CRM"
+                    : viewContact.source === "local"
+                      ? "Added in nozero"
+                      : "—"}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick New Contact */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setNewContactDraft(null);
+        }}
+        open={Boolean(newContactDraft)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="title-serif text-base">
+              New contact
+            </DialogTitle>
+          </DialogHeader>
+          {newContactDraft ? (
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  className={dlgInput}
+                  onChange={(e) =>
+                    setNewContactDraft({
+                      ...newContactDraft,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="First name"
+                  value={newContactDraft.name}
+                />
+                <input
+                  className={dlgInput}
+                  onChange={(e) =>
+                    setNewContactDraft({
+                      ...newContactDraft,
+                      name2: e.target.value,
+                    })
+                  }
+                  placeholder="Surname"
+                  value={newContactDraft.name2}
+                />
+              </div>
+              <input
+                className={dlgInput}
+                onChange={(e) =>
+                  setNewContactDraft({
+                    ...newContactDraft,
+                    title: e.target.value,
+                  })
+                }
+                placeholder="Job title"
+                value={newContactDraft.title}
+              />
+              <input
+                className={dlgInput}
+                onChange={(e) =>
+                  setNewContactDraft({
+                    ...newContactDraft,
+                    company: e.target.value,
+                  })
+                }
+                placeholder="Company"
+                value={newContactDraft.company}
+              />
+              <input
+                className={dlgInput}
+                onChange={(e) =>
+                  setNewContactDraft({
+                    ...newContactDraft,
+                    email: e.target.value,
+                  })
+                }
+                placeholder="Email"
+                value={newContactDraft.email}
+              />
+              {panelError ? (
+                <p className="text-[10px] text-destructive">{panelError}</p>
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <button
+              className={dlgCancel}
+              onClick={() => setNewContactDraft(null)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className={dlgPrimary}
+              disabled={contactBusy || !newContactDraft?.email.trim()}
+              onClick={() => {
+                saveContact().catch(() => undefined);
+              }}
+              type="button"
+            >
+              {contactBusy ? "Saving…" : "Save contact"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick New Task */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setTaskDraft(null);
+        }}
+        open={Boolean(taskDraft)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="title-serif text-base">New task</DialogTitle>
+          </DialogHeader>
+          {taskDraft ? (
+            <div className="space-y-2.5">
+              <input
+                className={dlgInput}
+                onChange={(e) =>
+                  setTaskDraft({ ...taskDraft, title: e.target.value })
+                }
+                placeholder="Task title"
+                value={taskDraft.title}
+              />
+              <textarea
+                className={cn(dlgInput, "h-auto py-2 leading-relaxed")}
+                onChange={(e) =>
+                  setTaskDraft({ ...taskDraft, body: e.target.value })
+                }
+                placeholder="Details (optional)"
+                rows={3}
+                value={taskDraft.body}
+              />
+              <input
+                className={dlgInput}
+                list="email-board-streams"
+                onChange={(e) =>
+                  setTaskDraft({ ...taskDraft, stream: e.target.value })
+                }
+                placeholder="Flightdeck stream"
+                value={taskDraft.stream}
+              />
+              <datalist id="email-board-streams">
+                {boardStreams.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+              {panelError ? (
+                <p className="text-[10px] text-destructive">{panelError}</p>
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <button
+              className={dlgCancel}
+              onClick={() => setTaskDraft(null)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className={dlgPrimary}
+              disabled={
+                taskBusy ||
+                !taskDraft?.title.trim() ||
+                !taskDraft?.stream.trim()
+              }
+              onClick={() => {
+                submitTaskDraft().catch(() => undefined);
+              }}
+              type="button"
+            >
+              {taskBusy ? "Creating…" : "Create task"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

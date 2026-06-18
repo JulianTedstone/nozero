@@ -54,6 +54,21 @@ export interface EmailThreadDetail {
   messages: EmailMessage[];
 }
 
+/** Structured thread digest produced by Context refresh. */
+export interface ThreadDigest {
+  topic: string | null;
+  participants: string | null;
+  development: string | null;
+  state: string | null;
+}
+
+/** A task the digest suggests creating off the back of the thread. */
+export interface SuggestedTask {
+  title: string;
+  rationale: string | null;
+  stream: string | null;
+}
+
 export interface EmailThreadContext {
   subject: string;
   threadIntent: string | null;
@@ -66,6 +81,8 @@ export interface EmailThreadContext {
     text: string | null;
     sources: Array<"email" | "crm">;
   };
+  digest?: ThreadDigest | null;
+  suggestedTasks?: SuggestedTask[];
   errors: Partial<Record<"soma" | "flightdeck" | "summary", string>>;
 }
 
