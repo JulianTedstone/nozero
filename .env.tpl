@@ -47,6 +47,12 @@ KRISP_MCP_REDIRECT_URI=op://nopilot.nozero/ihs3cc6wsiqdzqaexoe7ap2xai/KRISP_MCP_
 # http://localhost:3000/api/accounts/krisp/callback
 # http://localhost:3001/api/accounts/krisp/callback
 
+# Krisp "Note generated" webhook receiver — POST /api/webhooks/krisp commits notes
+# to context-ingest/incoming. Set to the signing secret / token Krisp sends (accepts
+# an HMAC-SHA256 `sha256=` signature header OR a static Authorization bearer).
+# Point Krisp's webhook at https://zero.nopilot.co/api/webhooks/krisp
+KRISP_WEBHOOK_SECRET=op://nopilot.nozero/ihs3cc6wsiqdzqaexoe7ap2xai/KRISP_WEBHOOK_SECRET
+
 # Ctx / gbrain MCP gateway — per-actor bearer tokens (Tower pattern)
 # Service principal for nozero server: nopilot.agents.GBRAIN_CTX_TOKEN / nozero
 # Agents (pierre, bertrand, …): same item, field = actor id — see AGENTS.md
