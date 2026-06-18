@@ -4,13 +4,9 @@ import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { searchFlightdeckTasks } from "@/lib/flightdeck-client";
-import { getLocalContacts } from "@/lib/local-contacts";
+import { resolveCrmContext } from "@/lib/crm-mirror";
 import { getOpenRouterModel } from "@/lib/openrouter";
-import {
-  fetchContactByEmail,
-  resolveCompaniesForPeople,
-  searchSomaDeals,
-} from "@/lib/soma-client";
+import { searchSomaDeals } from "@/lib/soma-client";
 import type {
   EmailThreadContext,
   SuggestedTask,
@@ -172,31 +168,13 @@ export async function POST(request: Request) {
 
   await Promise.allSettled([
     (async () => {
-      // CRM resolution, then merge any locally-added contacts on top.
-      const [people, localContacts] = await Promise.all([
-        Promise.all(participants.map((email) => fetchContactByEmail(email))),
-        getLocalContacts(user.id),
-      ]);
-      for (let i = 0; i < participants.length; i++) {
-        const resolved = people[i];
-        if (resolved) {
-          context.people[i] = resolved;
-          continue;
-        }
-        const local = localContacts[participants[i]];
-        if (local) {
-          context.people[i] = {
-            email: participants[i],
-            name: local.name,
-            role: local.title,
-            company: local.company,
-            somaContactId: null,
-            somaCompanyId: null,
-            source: "local",
-          };
-        }
-      }
-      context.companies = await resolveCompaniesForPeople(context.people);
+      // Mirror-first, fail-safe resolution: serves the nozero mirror + local
+      // store immediately and only enriches from aqua when the link is live.
+      const { people, companies } = await resolveCrmContext(user.id, participants);
+      context.people = people;
+      context.companies = companies;
+      // Deals are a best-effort search; the client already returns [] on a
+      // down link, so a failure here never affects the response.
       context.deals = await searchSomaDeals(subject, 8);
       context.summary.sources.push("crm");
     })(),
