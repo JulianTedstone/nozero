@@ -1,6 +1,5 @@
 import "server-only";
 
-import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
 import { getEvents } from "@/lib/calendar";
@@ -12,7 +11,7 @@ import {
 import { ctxSummaryForMeeting } from "@/lib/ctx-gateway";
 import { searchFlightdeckTasks } from "@/lib/flightdeck-client";
 import { krispContextForMeeting } from "@/lib/krisp-mcp-client";
-import { getOpenRouterModel } from "@/lib/openrouter";
+import { oneMinComplete } from "@/lib/onemin";
 import {
   fetchContactByEmail,
   resolveCompaniesForPeople,
@@ -61,8 +60,6 @@ async function buildMeetingBrief(input: {
   actionPoints: string[];
   recommendations: string[];
 } | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
-
   const peopleLine = input.people
     .map((p) => `${p.name ?? p.email}${p.company ? ` (${p.company})` : ""}`)
     .join(", ");
@@ -85,11 +82,8 @@ Transcript (use only if present and relevant): ${input.transcript?.slice(0, 4000
 If transcript is missing or unrelated, base summary on title, participants, and notes only.`;
 
   try {
-    const { text } = await generateText({
-      model: getOpenRouterModel(),
-      prompt,
-      maxTokens: 600,
-    });
+    const text = await oneMinComplete(prompt);
+    if (!text) return null;
     const trimmed = text.trim();
     const jsonStart = trimmed.indexOf("{");
     const jsonEnd = trimmed.lastIndexOf("}");

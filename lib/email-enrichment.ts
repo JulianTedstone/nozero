@@ -1,7 +1,6 @@
 import "server-only";
 
-import { generateText } from "ai";
-import { getOpenRouterModel } from "@/lib/openrouter";
+import { oneMinComplete } from "@/lib/onemin";
 
 export interface MessageAiSummary {
   previousContext: string | null;
@@ -15,8 +14,6 @@ export async function summarizeThread(input: {
   participants: string[];
   snippet?: string | null;
 }): Promise<string | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
-
   const prompt = `Write a one-sentence summary (max 25 words) of this email thread for a listing view.
 
 Subject: ${input.subject}
@@ -26,11 +23,8 @@ Preview: ${input.snippet?.slice(0, 300) ?? "none"}
 Return plain text only.`;
 
   try {
-    const { text } = await generateText({
-      model: getOpenRouterModel(),
-      prompt,
-      maxTokens: 80,
-    });
+    const text = await oneMinComplete(prompt);
+    if (!text) return null;
     return text.trim() || null;
   } catch {
     return null;
@@ -43,8 +37,6 @@ export async function summarizeMessage(input: {
   bodyPlain: string;
   priorMessages?: string[];
 }): Promise<MessageAiSummary | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
-
   const prior =
     input.priorMessages?.slice(-3).join("\n---\n") || "None (first message)";
 
@@ -63,11 +55,8 @@ Message body:
 ${input.bodyPlain.slice(0, 3500)}`;
 
   try {
-    const { text } = await generateText({
-      model: getOpenRouterModel(),
-      prompt,
-      maxTokens: 400,
-    });
+    const text = await oneMinComplete(prompt);
+    if (!text) return null;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]) as MessageAiSummary;
@@ -88,8 +77,6 @@ export async function inferThreadIntent(input: {
   participants: string[];
   summaries: string[];
 }): Promise<string | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
-
   const prompt = `In one sentence, state the original purpose and intent of this email thread.
 
 Subject: ${input.subject}
@@ -100,11 +87,8 @@ ${input.summaries.slice(0, 5).join("\n")}
 Return plain text only.`;
 
   try {
-    const { text } = await generateText({
-      model: getOpenRouterModel(),
-      prompt,
-      maxTokens: 100,
-    });
+    const text = await oneMinComplete(prompt);
+    if (!text) return null;
     return text.trim() || null;
   } catch {
     return null;
@@ -116,8 +100,6 @@ export async function draftReplyForThread(input: {
   persona?: string;
   threadMessages: Array<{ from: string; body: string; isMine?: boolean }>;
 }): Promise<string | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
-
   const transcript = input.threadMessages
     .slice(-6)
     .map((m) => `${m.from}${m.isMine ? " (me)" : ""}:\n${m.body.slice(0, 1200)}`)
@@ -134,11 +116,8 @@ Thread:
 ${transcript || "(empty thread)"}`;
 
   try {
-    const { text } = await generateText({
-      model: getOpenRouterModel(),
-      prompt,
-      maxTokens: 600,
-    });
+    const text = await oneMinComplete(prompt);
+    if (!text) return null;
     return text.trim() || null;
   } catch {
     return null;

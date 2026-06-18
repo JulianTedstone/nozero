@@ -1,11 +1,10 @@
 import "server-only";
 
-import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
-import { searchFlightdeckTasks } from "@/lib/flightdeck-client";
 import { resolveCrmContext } from "@/lib/crm-mirror";
-import { getOpenRouterModel } from "@/lib/openrouter";
+import { searchFlightdeckTasks } from "@/lib/flightdeck-client";
+import { oneMinComplete } from "@/lib/onemin";
 import { searchSomaDeals } from "@/lib/soma-client";
 import type {
   EmailThreadContext,
@@ -57,10 +56,6 @@ async function buildDigest(input: {
   existingTasks: string[];
   streams: string[];
 }): Promise<{ digest: ThreadDigest | null; suggestedTasks: SuggestedTask[] }> {
-  if (!process.env.OPENROUTER_API_KEY) {
-    return { digest: null, suggestedTasks: [] };
-  }
-
   const prompt = `You are briefing a busy operator on an email thread.
 
 Subject: ${input.subject}
@@ -86,11 +81,10 @@ Return ONLY a JSON object, no prose, with exactly this shape:
 Suggest 0-4 tasks that are genuinely actionable and not already covered by the existing related tasks. If nothing is actionable, use an empty array.`;
 
   try {
-    const { text } = await generateText({
-      model: getOpenRouterModel(),
-      prompt,
-      maxTokens: 600,
-    });
+    const text = await oneMinComplete(prompt);
+    if (!text) {
+      return { digest: null, suggestedTasks: [] };
+    }
     const parsed = extractJson(text) as Record<string, unknown> | null;
     if (!parsed) {
       return { digest: null, suggestedTasks: [] };
