@@ -151,3 +151,28 @@ export async function putRepoFile(input: {
   const data = (await res.json()) as { content?: { sha?: string } };
   return { sha: data.content?.sha ?? "" };
 }
+
+export async function deleteRepoFile(input: {
+  fullName: string;
+  path: string;
+  sha: string;
+  message?: string;
+  ref?: string;
+}): Promise<void> {
+  const { owner, name } = assertAllowedRepo(input.fullName);
+  const body: Record<string, unknown> = {
+    message: input.message?.trim() || `nozero: remove ${input.path}`,
+    sha: input.sha,
+  };
+  if (input.ref) {
+    body.branch = input.ref;
+  }
+  const res = await gh(
+    `/repos/${owner}/${name}/contents/${encodePath(input.path)}`,
+    { method: "DELETE", body: JSON.stringify(body) },
+  );
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`Delete failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+}

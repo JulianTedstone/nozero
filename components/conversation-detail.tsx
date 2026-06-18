@@ -24,6 +24,65 @@ function fmtDate(date: string | null): string {
   return Number.isNaN(d.getTime()) ? date : format(d, "EEE d MMM yyyy");
 }
 
+// Destination scopes (mirror context-schema/routing/rules.yaml routes).
+const SLUG_OPTIONS: Array<{ slug: string; label: string; dest: string }> = [
+  { slug: "coh", label: "Coherence", dest: "context-message-coh/conversations" },
+  { slug: "360", label: "360 · Bere Lucent", dest: "context-message-360/strategy/conversations" },
+  { slug: "pod", label: "Podcast", dest: "context-message-coh/messaging/lead-generation/podcast/guests" },
+  { slug: "ted", label: "Personal", dest: "context-profiles/ted/personal/conversations" },
+];
+
+function RoutingBar({
+  conversation,
+  onRoute,
+  routeBusy,
+}: {
+  conversation: IngestConversation;
+  onRoute: (slug: string) => Promise<boolean>;
+  routeBusy: string | null;
+}) {
+  return (
+    <div className="shrink-0 border-line border-b bg-surface-sunk/40 px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-semibold text-[9px] text-ink-subtle uppercase tracking-wider">
+          Route to
+        </span>
+        {SLUG_OPTIONS.map((opt) => {
+          const proposed = conversation.proposedSlug === opt.slug;
+          const busy = routeBusy === opt.slug;
+          return (
+            <button
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] transition-colors disabled:opacity-50",
+                proposed
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-line text-ink-muted hover:bg-accent hover:text-ink",
+              )}
+              disabled={routeBusy !== null}
+              key={opt.slug}
+              onClick={() => onRoute(opt.slug)}
+              title={opt.dest}
+              type="button"
+            >
+              {busy ? (
+                <Loader2Icon className="h-3 w-3 animate-spin" />
+              ) : proposed ? (
+                <CheckIcon className="h-3 w-3" />
+              ) : null}
+              {opt.label}
+              {proposed ? " · proposed" : ""}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-[9px] text-ink-subtle">
+        Approve the proposed scope, or pick another to re-route — corrections
+        train the shared rules. Destination: {conversation.proposedRoute ?? "—"}
+      </p>
+    </div>
+  );
+}
+
 function channelLabel(channel: string): string {
   return channel.charAt(0).toUpperCase() + channel.slice(1);
 }
@@ -214,10 +273,14 @@ export function ConversationDetail({
   conversation,
   loading,
   onTurnIntoTask,
+  onRoute,
+  routeBusy = null,
 }: {
   conversation: IngestConversation | null;
   loading: boolean;
   onTurnIntoTask: (action: IngestAction) => Promise<boolean>;
+  onRoute?: (slug: string) => Promise<boolean>;
+  routeBusy?: string | null;
 }) {
   const [actions, setActions] = useState<IngestAction[]>(
     conversation?.actions ?? [],
@@ -282,6 +345,14 @@ export function ConversationDetail({
           </div>
         ) : null}
       </header>
+
+      {conversation.pending && onRoute ? (
+        <RoutingBar
+          conversation={conversation}
+          onRoute={onRoute}
+          routeBusy={routeBusy}
+        />
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {conversation.participants.length > 0 ? (

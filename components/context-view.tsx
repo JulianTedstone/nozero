@@ -231,6 +231,7 @@ export function ContextView({
     null,
   );
   const [conversationLoading, setConversationLoading] = useState(false);
+  const [routeBusy, setRouteBusy] = useState<string | null>(null);
 
   const loadRepoTree = useCallback(
     async (repoFullName: string, force = false) => {
@@ -344,6 +345,34 @@ export function ContextView({
         return res.ok;
       } catch {
         return false;
+      }
+    },
+    [conversation],
+  );
+
+  const routeConversation = useCallback(
+    async (slug: string): Promise<boolean> => {
+      if (!conversation?.pending) return false;
+      setRouteBusy(slug);
+      try {
+        const res = await fetch("/api/context/ingest/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: conversation.path, slug }),
+        });
+        if (!res.ok) return false;
+        // Routed out of staging — drop it from the inbox, return to the editor.
+        setSelectedConversationId(null);
+        setConversation(null);
+        fetch("/api/context/ingest")
+          .then((r) => r.json())
+          .then((d) => setIngestGroups((d.groups as IngestGroups) ?? null))
+          .catch(() => undefined);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        setRouteBusy(null);
       }
     },
     [conversation],
@@ -835,6 +864,11 @@ export function ContextView({
                                   {item.title}
                                 </span>
                               </span>
+                              {item.pending && item.proposedSlug ? (
+                                <span className="shrink-0 rounded bg-primary/15 px-1 font-medium text-[8px] text-primary uppercase">
+                                  {item.proposedSlug}
+                                </span>
+                              ) : null}
                               {item.date ? (
                                 <span className="shrink-0 text-[9px] text-ink-subtle">
                                   {item.date.slice(8, 10)}/{item.date.slice(5, 7)}
@@ -1023,7 +1057,9 @@ export function ContextView({
             <ConversationDetail
               conversation={conversation}
               loading={conversationLoading}
+              onRoute={routeConversation}
               onTurnIntoTask={turnIntoTask}
+              routeBusy={routeBusy}
             />
           ) : (
             editorPanel

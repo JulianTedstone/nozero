@@ -10,6 +10,10 @@ export interface IngestItemSummary {
   participantsLabel: string;
   date: string | null; // ISO date when derivable from the filename
   unread: boolean;
+  // Routing gate: pending items sit in context-ingest/incoming awaiting approval.
+  pending?: boolean;
+  proposedSlug?: string;
+  proposedRoute?: string; // destination repo path for the proposed slug
 }
 
 export interface IngestGroups {
@@ -55,4 +59,11 @@ export interface IngestConversation {
   unread: boolean;
   /** Stream used as the default target when turning an action into a task. */
   defaultStream: string | null;
+  // Pipeline-native fields + routing gate.
+  meetingId?: string;
+  calendarTitle?: string;
+  slug?: string;
+  pending?: boolean;
+  proposedSlug?: string;
+  proposedRoute?: string;
 }

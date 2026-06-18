@@ -5,6 +5,7 @@ import { inferBindingsForEmail } from "@/lib/context-accounts";
 import {
   getIngestConversation,
   listIngestForRepos,
+  listPendingIngest,
   setIngestRead,
 } from "@/lib/ingest";
 
@@ -50,9 +51,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ conversation });
   }
 
-  // Inbox groups. Fail-safe: listIngestForRepos never throws.
+  // Inbox groups. Pending (staged, awaiting approval) lead the conversations
+  // list. Fail-safe: neither lister throws.
   const repos = await reposForUser(user.id, user.email);
-  const groups = await listIngestForRepos(user.id, repos);
+  const [groups, pending] = await Promise.all([
+    listIngestForRepos(user.id, repos),
+    listPendingIngest(user.id),
+  ]);
+  groups.conversations = [...pending, ...groups.conversations];
   return NextResponse.json({ groups, repos });
 }
 
