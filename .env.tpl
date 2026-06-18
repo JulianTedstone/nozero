@@ -15,9 +15,9 @@ NOZERO_SESSION_SECRET=op://nopilot.nozero/pkp7cojblupjcprt7z224i7hsy/NOZERO_SESS
 GOOGLE_CLIENT_ID=op://nopilot.nozero/nopilot.nozero.GOOGLE_CLIENT_ID/GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=op://nopilot.nozero/nopilot.nozero.GOOGLE_CLIENT_SECRET/GOOGLE_CLIENT_SECRET
 
-# AI
-OPENROUTER_API_KEY=op://nopilot.nozero/eaftr5nss5u3grp37gdusfvll4/OPENROUTER_API_KEY
-OPENROUTER_MODEL=x-ai/grok-4.1-fast
+# AI — 1min.ai is nozero's LLM provider (digest, summaries, meeting brief, chat agent)
+NOZERO_ONEMINAI_API_KEY=op://nopilot.nozero/nopilot.nozero.ONEMINAI_API_KEY/NOZERO_ONEMINAI_API_KEY
+# NOZERO_ONEMIN_MODEL=gpt-4o-mini   # optional override (default: gpt-4o-mini)
 
 # Soma (email threads, contacts, meeting context) — canonical: nopilot.nozero.SOMA_ACCESS
 NOZERO_SOMA_ANANSI_URL=op://nopilot.nozero/izytzzjl3indhcnyp4ektrb6sq/NOZERO_SOMA_ANANSI_URL
