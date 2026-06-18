@@ -654,12 +654,14 @@ export async function routeIngestItem(opts: {
   userId: string;
   path: string;
   slug: string;
+  /** Explicit "repo/subfolder" destination (stream routing); overrides the slug route. */
+  destRepoPath?: string;
   correction?: { field: RoutingField; op: RoutingOp; value: string };
 }): Promise<RouteResult> {
   const config = await loadRoutingConfig();
-  const routePath = routePathForSlug(opts.slug, config);
+  const routePath = opts.destRepoPath ?? routePathForSlug(opts.slug, config);
   if (!routePath) {
-    return { ok: false, error: `No destination configured for slug "${opts.slug}"` };
+    return { ok: false, error: `No destination configured for "${opts.slug}"` };
   }
 
   let staged: { content: string; sha: string };

@@ -43,6 +43,7 @@ import type {
   IngestItemSummary,
   IngestSection,
 } from "@/types/ingest";
+import type { StreamBinding } from "@/types/streams";
 
 type FileTreeNode =
   | { kind: "folder"; name: string; path: string; children: FileTreeNode[] }
@@ -231,7 +232,10 @@ export function ContextView({
     null,
   );
   const [conversationLoading, setConversationLoading] = useState(false);
-  const [routeBusy, setRouteBusy] = useState<string | null>(null);
+  const [routeBusy, setRouteBusy] = useState(false);
+  const [streamBindings, setStreamBindings] = useState<StreamBinding[]>([]);
+  const [contextRepos, setContextRepos] = useState<string[]>([]);
+  const [routeStream, setRouteStream] = useState<string | null>(null);
 
   const loadRepoTree = useCallback(
     async (repoFullName: string, force = false) => {
@@ -281,6 +285,37 @@ export function ContextView({
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    fetch("/api/context/streams")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!active) return;
+        setStreamBindings((d.streams as StreamBinding[]) ?? []);
+        setContextRepos((d.repos as string[]) ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Default the stream to the one matching the proposed route; keep an explicit
+  // pick. openConversation resets to null first, so a new conversation re-defaults.
+  useEffect(() => {
+    if (!conversation?.pending) {
+      setRouteStream(null);
+      return;
+    }
+    setRouteStream((prev) => {
+      if (prev && streamBindings.some((s) => s.name === prev)) return prev;
+      const match = streamBindings.find(
+        (s) => `${s.repo}/${s.path}` === conversation.proposedRoute,
+      );
+      return match?.name ?? null;
+    });
+  }, [conversation, streamBindings]);
+
   const markIngestReadLocal = useCallback((id: string) => {
     setIngestGroups((prev) => {
       if (!prev) return prev;
@@ -299,6 +334,7 @@ export function ContextView({
       setSelectedConversationId(item.id);
       setActivePath(null);
       setConversation(null);
+      setRouteStream(null);
       setConversationLoading(true);
       try {
         const res = await fetch(
@@ -325,14 +361,15 @@ export function ContextView({
 
   const turnIntoTask = useCallback(
     async (action: IngestAction): Promise<boolean> => {
-      if (!conversation?.defaultStream) return false;
+      const stream = routeStream ?? conversation?.defaultStream;
+      if (!conversation || !stream) return false;
       try {
         const res = await fetch("/api/flightdeck/capture", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: action.text,
-            stream: conversation.defaultStream,
+            stream,
             owner: action.owner,
             body:
               `From conversation: ${conversation.title}\n` +
@@ -347,36 +384,56 @@ export function ContextView({
         return false;
       }
     },
-    [conversation],
+    [conversation, routeStream],
   );
 
-  const routeConversation = useCallback(
-    async (slug: string): Promise<boolean> => {
-      if (!conversation?.pending) return false;
-      setRouteBusy(slug);
+  const createStream = useCallback(
+    async (binding: StreamBinding): Promise<boolean> => {
       try {
-        const res = await fetch("/api/context/ingest/approve", {
+        const res = await fetch("/api/context/streams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: conversation.path, slug }),
+          body: JSON.stringify(binding),
         });
+        const d = await res.json().catch(() => ({}));
         if (!res.ok) return false;
-        // Routed out of staging — drop it from the inbox, return to the editor.
-        setSelectedConversationId(null);
-        setConversation(null);
-        fetch("/api/context/ingest")
-          .then((r) => r.json())
-          .then((d) => setIngestGroups((d.groups as IngestGroups) ?? null))
-          .catch(() => undefined);
+        setStreamBindings((d.streams as StreamBinding[]) ?? []);
+        setRouteStream(binding.name);
         return true;
       } catch {
         return false;
-      } finally {
-        setRouteBusy(null);
       }
     },
-    [conversation],
+    [],
   );
+
+  const routeConversation = useCallback(async (): Promise<boolean> => {
+    if (!conversation?.pending || !routeStream) return false;
+    setRouteBusy(true);
+    try {
+      const res = await fetch("/api/context/ingest/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: conversation.path,
+          stream: routeStream,
+        }),
+      });
+      if (!res.ok) return false;
+      // Filed out of staging — drop it from the inbox, return to the editor.
+      setSelectedConversationId(null);
+      setConversation(null);
+      fetch("/api/context/ingest")
+        .then((r) => r.json())
+        .then((d) => setIngestGroups((d.groups as IngestGroups) ?? null))
+        .catch(() => undefined);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setRouteBusy(false);
+    }
+  }, [conversation, routeStream]);
 
   const streams = useMemo(() => {
     const fromWorkspace = Object.keys(workspace?.streams ?? {});
@@ -1057,9 +1114,14 @@ export function ContextView({
             <ConversationDetail
               conversation={conversation}
               loading={conversationLoading}
+              onCreateStream={createStream}
               onRoute={routeConversation}
+              onSelectStream={setRouteStream}
               onTurnIntoTask={turnIntoTask}
+              repos={contextRepos}
               routeBusy={routeBusy}
+              selectedStream={routeStream}
+              streams={streamBindings}
             />
           ) : (
             editorPanel

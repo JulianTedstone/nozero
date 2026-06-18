@@ -15,72 +15,15 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CollapsibleSidebarSection } from "@/components/collapsible-sidebar-section";
+import { StreamRouter } from "@/components/stream-router";
 import { cn } from "@/lib/utils";
 import type { IngestAction, IngestConversation } from "@/types/ingest";
+import type { StreamBinding } from "@/types/streams";
 
 function fmtDate(date: string | null): string {
   if (!date) return "";
   const d = new Date(date);
   return Number.isNaN(d.getTime()) ? date : format(d, "EEE d MMM yyyy");
-}
-
-// Destination scopes (mirror context-schema/routing/rules.yaml routes).
-const SLUG_OPTIONS: Array<{ slug: string; label: string; dest: string }> = [
-  { slug: "coh", label: "Coherence", dest: "context-message-coh/conversations" },
-  { slug: "360", label: "360 · Bere Lucent", dest: "context-message-360/strategy/conversations" },
-  { slug: "pod", label: "Podcast", dest: "context-message-coh/messaging/lead-generation/podcast/guests" },
-  { slug: "ted", label: "Personal", dest: "context-profiles/ted/personal/conversations" },
-];
-
-function RoutingBar({
-  conversation,
-  onRoute,
-  routeBusy,
-}: {
-  conversation: IngestConversation;
-  onRoute: (slug: string) => Promise<boolean>;
-  routeBusy: string | null;
-}) {
-  return (
-    <div className="shrink-0 border-line border-b bg-surface-sunk/40 px-4 py-2.5">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 font-semibold text-[9px] text-ink-subtle uppercase tracking-wider">
-          Route to
-        </span>
-        {SLUG_OPTIONS.map((opt) => {
-          const proposed = conversation.proposedSlug === opt.slug;
-          const busy = routeBusy === opt.slug;
-          return (
-            <button
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] transition-colors disabled:opacity-50",
-                proposed
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-line text-ink-muted hover:bg-accent hover:text-ink",
-              )}
-              disabled={routeBusy !== null}
-              key={opt.slug}
-              onClick={() => onRoute(opt.slug)}
-              title={opt.dest}
-              type="button"
-            >
-              {busy ? (
-                <Loader2Icon className="h-3 w-3 animate-spin" />
-              ) : proposed ? (
-                <CheckIcon className="h-3 w-3" />
-              ) : null}
-              {opt.label}
-              {proposed ? " · proposed" : ""}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-1.5 text-[9px] text-ink-subtle">
-        Approve the proposed scope, or pick another to re-route — corrections
-        train the shared rules. Destination: {conversation.proposedRoute ?? "—"}
-      </p>
-    </div>
-  );
 }
 
 function channelLabel(channel: string): string {
@@ -141,11 +84,13 @@ function ActionRow({
   onChange,
   onDelete,
   onTask,
+  taskDisabled = false,
 }: {
   action: IngestAction;
   onChange: (next: IngestAction) => void;
   onDelete: () => void;
   onTask: () => Promise<boolean>;
+  taskDisabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(action);
@@ -228,14 +173,18 @@ function ActionRow({
                 ? "text-emerald-500"
                 : "text-ink-muted hover:bg-accent hover:text-ink",
             )}
-            disabled={busy || done}
+            disabled={busy || done || taskDisabled}
             onClick={async () => {
               setBusy(true);
               const ok = await onTask();
               setBusy(false);
               if (ok) setDone(true);
             }}
-            title="Create a Flightdeck task"
+            title={
+              taskDisabled
+                ? "Select a stream first"
+                : "Create a Flightdeck task"
+            }
             type="button"
           >
             {busy ? (
@@ -273,14 +222,24 @@ export function ConversationDetail({
   conversation,
   loading,
   onTurnIntoTask,
+  streams,
+  repos,
+  selectedStream,
+  onSelectStream,
+  onCreateStream,
   onRoute,
-  routeBusy = null,
+  routeBusy = false,
 }: {
   conversation: IngestConversation | null;
   loading: boolean;
   onTurnIntoTask: (action: IngestAction) => Promise<boolean>;
-  onRoute?: (slug: string) => Promise<boolean>;
-  routeBusy?: string | null;
+  streams: StreamBinding[];
+  repos: string[];
+  selectedStream: string | null;
+  onSelectStream: (name: string | null) => void;
+  onCreateStream: (binding: StreamBinding) => Promise<boolean>;
+  onRoute?: () => Promise<boolean>;
+  routeBusy?: boolean;
 }) {
   const [actions, setActions] = useState<IngestAction[]>(
     conversation?.actions ?? [],
@@ -347,10 +306,14 @@ export function ConversationDetail({
       </header>
 
       {conversation.pending && onRoute ? (
-        <RoutingBar
-          conversation={conversation}
+        <StreamRouter
+          onChange={onSelectStream}
+          onCreate={onCreateStream}
           onRoute={onRoute}
+          repos={repos}
           routeBusy={routeBusy}
+          streams={streams}
+          value={selectedStream}
         />
       ) : null}
 
@@ -373,9 +336,15 @@ export function ConversationDetail({
             <h2 className="mb-2 font-semibold text-[10px] text-ink-subtle uppercase tracking-wider">
               Summary
             </h2>
-            <p className="whitespace-pre-wrap text-[12px] text-ink-muted leading-relaxed">
-              {conversation.summary}
-            </p>
+            <div className="space-y-2 text-[12px] text-ink-muted leading-relaxed">
+              {conversation.summary
+                .split("\n")
+                .map((para) => para.trim())
+                .filter(Boolean)
+                .map((para, i) => (
+                  <p key={`${i}-${para.slice(0, 16)}`}>{para}</p>
+                ))}
+            </div>
           </section>
         ) : null}
 
@@ -383,6 +352,11 @@ export function ConversationDetail({
           <h2 className="mb-2 font-semibold text-[10px] text-ink-subtle uppercase tracking-wider">
             Actions
           </h2>
+          {actions.length > 0 && conversation.pending && !selectedStream ? (
+            <p className="mb-2 text-[10px] text-ink-subtle">
+              Select a stream above to enable “→ Task”.
+            </p>
+          ) : null}
           {actions.length === 0 ? (
             <p className="text-[11px] text-ink-subtle">No actions captured.</p>
           ) : (
@@ -402,6 +376,7 @@ export function ConversationDetail({
                         setActions((prev) => prev.filter((_, j) => j !== i))
                       }
                       onTask={() => onTurnIntoTask(action)}
+                      taskDisabled={conversation.pending && !selectedStream}
                     />
                   ))}
                 </tbody>
