@@ -1,4 +1,4 @@
-import { stepCountIs, streamText, tool } from "ai";
+import { tool } from "ai";
 import { z } from "zod";
 import { calendarTools } from "@/lib/ai-tools";
 import {
@@ -7,14 +7,11 @@ import {
   syncUpdatedEventToGoogle,
 } from "@/lib/calendar-google-sync-server";
 import { getCurrentAuthUser } from "@/lib/auth-server";
-import {
-  getOpenRouterModel,
-  getOpenRouterProviderOptions,
-} from "@/lib/openrouter";
+import { type AgentSseEvent, runOneMinAgent } from "@/lib/onemin-agent";
 import { getSystemPrompt } from "@/lib/system-prompts";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 type ChatHistoryMessage = {
   role: "user" | "assistant";
@@ -74,65 +71,6 @@ function sanitizeMessages(messages: ChatHistoryMessage[]) {
   return messages
     .filter((message) => message.content.trim().length > 0)
     .slice(-20);
-}
-
-function getLatestUserMessage(messages: ChatHistoryMessage[]) {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === "user") {
-      return messages[index].content;
-    }
-  }
-
-  return "";
-}
-
-function isCreateEventIntent(message: string) {
-  const normalized = message.toLowerCase();
-
-  if (
-    /(delete|remove|cancel|reschedule|move|edit|update)\b/.test(normalized)
-  ) {
-    return false;
-  }
-
-  return /(create|add|schedule|book|put\b.*calendar|make\b.*event)\b/.test(
-    normalized
-  );
-}
-
-function hasSuccessfulConflictCheck(
-  steps: Array<{
-    toolResults: Array<{ toolName: string; output: unknown }>;
-  }>
-) {
-  const latestConflictCheck = steps
-    .flatMap((step) => step.toolResults)
-    .reverse()
-    .find((result) => result.toolName === "checkForConflicts");
-
-  if (!latestConflictCheck) {
-    return false;
-  }
-
-  const output = latestConflictCheck.output;
-
-  return Boolean(
-    output &&
-      typeof output === "object" &&
-      "hasConflict" in output &&
-      output.hasConflict === false
-  );
-}
-
-function hasToolResult(
-  steps: Array<{
-    toolResults: Array<{ toolName: string }>;
-  }>,
-  toolName: string
-) {
-  return steps.some((step) =>
-    step.toolResults.some((result) => result.toolName === toolName)
-  );
 }
 
 function eventsOverlap(
@@ -566,9 +504,6 @@ export async function POST(req: Request) {
           ? [{ role: "user", content: body.message }]
           : [])
     );
-    const latestUserMessage = getLatestUserMessage(history);
-    const createIntent = isCreateEventIntent(latestUserMessage);
-
     if (history.length === 0) {
       return Response.json(
         { error: "A message is required." },
@@ -576,99 +511,35 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = streamText({
-      model: getOpenRouterModel(),
-      providerOptions: getOpenRouterProviderOptions(user.id),
-      system: getSystemPrompt("calendar", body.timezone, body.currentDate),
-      messages: history,
-      tools,
-      toolChoice: "auto",
-      prepareStep: async ({ steps }) => {
-        if (
-          createIntent &&
-          hasSuccessfulConflictCheck(steps) &&
-          !hasToolResult(steps, "createEvent")
-        ) {
-          return {
-            activeTools: ["createEvent"],
-            toolChoice: { type: "tool", toolName: "createEvent" } as const,
-          };
-        }
-
-        return undefined;
-      },
-      // AI SDK v6 defaults to stepCountIs(1), which ends after a single tool call
-      // with no follow-up text. Allow multiple steps so the model can call tools
-      // and then summarize results for the user.
-      stopWhen: stepCountIs(10),
-      maxOutputTokens: 1600,
-      temperature: 0.2,
-      experimental_context: {
-        userId: user.id,
-      },
-    });
-
     const encoder = new TextEncoder();
-    let didMutateCalendar = false;
-
     const stream = new ReadableStream({
       async start(controller) {
+        const send = (event: AgentSseEvent) =>
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+          );
         try {
-          for await (const part of result.fullStream) {
-            switch (part.type) {
-              case "text-delta":
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({
-                      type: "text",
-                      text: part.text,
-                    })}\n\n`
-                  )
-                );
-                break;
-              case "tool-result":
-                if (
-                  part.toolName === "createEvent" ||
-                  part.toolName === "updateEvent" ||
-                  part.toolName === "deleteEvent"
-                ) {
-                  didMutateCalendar = true;
-                }
-
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({
-                      type: "tool-result",
-                      toolName: part.toolName,
-                    })}\n\n`
-                  )
-                );
-                break;
-              case "error":
-                throw part.error;
-            }
-          }
-
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "done",
-                didMutateCalendar,
-              })}\n\n`
-            )
-          );
-          controller.close();
+          await runOneMinAgent({
+            system: getSystemPrompt(
+              "calendar",
+              body.timezone,
+              body.currentDate
+            ),
+            history,
+            tools,
+            userId: user.id,
+            mutatingTools: ["createEvent", "updateEvent", "deleteEvent"],
+            maxSteps: 6,
+            emit: send,
+          });
         } catch (error) {
-          console.error("[AI Chat] AI generation error:", error);
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "error",
-                message:
-                  "I'm having trouble processing your request. Please try again.",
-              })}\n\n`
-            )
-          );
+          console.error("[AI Chat] agent error:", error);
+          send({
+            type: "error",
+            message:
+              "I'm having trouble processing your request. Please try again.",
+          });
+        } finally {
           controller.close();
         }
       },
