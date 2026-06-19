@@ -36,6 +36,7 @@ create table if not exists madrigal.id_map (
   docket_assets jsonb not null default '[]'::jsonb,
   gmail_thread text,
   calendar_events jsonb not null default '[]'::jsonb,
+  meta jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

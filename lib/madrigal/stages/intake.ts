@@ -37,6 +37,7 @@ export async function runIntake(
     companySlug: input.companySlug,
     contextPath: rDir,
     companyPath: cDir,
+    meta: { applicationUrl: input.applicationUrl, jdUrl: input.jdUrl },
   });
 
   await upsertContextFile(

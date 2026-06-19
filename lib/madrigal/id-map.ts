@@ -38,6 +38,7 @@ type IdMapDbRow = {
   docket_assets: string[];
   gmail_thread: string | null;
   calendar_events: string[];
+  meta: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -58,6 +59,7 @@ const COLUMN_MAP: Record<string, string> = {
   docketAssets: "docket_assets",
   gmailThread: "gmail_thread",
   calendarEvents: "calendar_events",
+  meta: "meta",
 };
 
 function toRow(r: IdMapDbRow): IdMapRow {
@@ -78,6 +80,7 @@ function toRow(r: IdMapDbRow): IdMapRow {
     docketAssets: r.docket_assets ?? [],
     gmailThread: r.gmail_thread,
     calendarEvents: r.calendar_events ?? [],
+    meta: r.meta ?? {},
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
