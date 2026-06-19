@@ -744,7 +744,7 @@ export function ContextView({
             <div className="mb-1 rounded-lg" key={stream}>
               <button
                 className={cn(
-                  "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px]",
+                  "flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px]",
                   selected
                     ? "bg-accent text-ink"
                     : "text-ink-muted hover:bg-accent"
@@ -758,15 +758,15 @@ export function ContextView({
                 }}
                 type="button"
               >
-                <span className="truncate">{stream}</span>
                 {expanded ? (
                   <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
                 ) : (
                   <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
                 )}
+                <span className="truncate">{stream}</span>
               </button>
               {expanded ? (
-                <div className="mt-1 ml-2 space-y-1 border-line border-l pl-2">
+                <div className="mt-1 ml-3 space-y-1">
                   {streamRepos.map((repo) => {
                     const key = repoKeyFor(stream, repo.fullName);
                     const repoExpanded = openRepos[key] ?? selected;
@@ -781,7 +781,7 @@ export function ContextView({
                       <div key={key}>
                         <button
                           className={cn(
-                            "flex w-full items-center justify-between rounded px-2 py-1 text-left text-[10px]",
+                            "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[10px]",
                             repoSelected
                               ? "bg-accent text-ink"
                               : "text-ink-muted hover:bg-surface-sunk"
@@ -797,15 +797,15 @@ export function ContextView({
                           }}
                           type="button"
                         >
-                          <span className="truncate">{repo.name}</span>
                           {repoExpanded ? (
                             <ChevronDownIcon className="h-3 w-3 shrink-0" />
                           ) : (
                             <ChevronRightIcon className="h-3 w-3 shrink-0" />
                           )}
+                          <span className="truncate">{repo.name}</span>
                         </button>
                         {repoExpanded ? (
-                          <div className="mt-0.5 ml-2 space-y-0.5 border-line border-l pl-2">
+                          <div className="mt-0.5 ml-3 space-y-0.5">
                             {isTreeLoading && repoFileTree.length === 0 ? (
                               <p className="px-2 py-1 text-[10px] text-ink-subtle">
                                 Loading files…
@@ -922,7 +922,7 @@ export function ContextView({
                   ) : null}
                 </button>
                 {open ? (
-                  <div className="mt-1 ml-2 space-y-0.5 border-line border-l pl-2">
+                  <div className="mt-1 ml-3 space-y-0.5">
                     {section.items.length === 0 ? (
                       <p className="px-2 py-1 text-[10px] text-ink-subtle">
                         Nothing yet.
