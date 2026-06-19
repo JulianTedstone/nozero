@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRepoFile, putRepoFile } from "@/lib/github-content";
 import {
@@ -42,8 +43,22 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
   if (!verifyKrispWebhook(rawBody, request.headers, secret)) {
+    // Safe diagnostic: compare token HASHES (never the values) + payload shape.
+    const h = (s: string) =>
+      createHash("sha256").update(s).digest("hex").slice(0, 10);
+    const token = (request.headers.get("authorization") ?? "")
+      .replace(/^bearer\s+/i, "")
+      .trim();
+    let shape = "unparseable";
+    try {
+      const p = JSON.parse(rawBody) as Record<string, unknown>;
+      const m = (p.meeting ?? p.data ?? p) as Record<string, unknown>;
+      shape = `top=[${Object.keys(p).join(",")}] meeting=[${Object.keys(m).join(",")}]`;
+    } catch {
+      // body not JSON
+    }
     console.warn(
-      `[krisp-webhook] -> 401 (invalid signature) bodyLen=${rawBody.length}`,
+      `[krisp-webhook] -> 401 tokenHash=${h(token)}(len=${token.length}) secretHash=${h(secret)}(len=${secret.length}) ${shape}`,
     );
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
