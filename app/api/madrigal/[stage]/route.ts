@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import { runGate } from "@/lib/madrigal/stages/gate";
+import { runIntake } from "@/lib/madrigal/stages/intake";
+import { runResearch } from "@/lib/madrigal/stages/research";
+import { runScore } from "@/lib/madrigal/stages/score";
 import { eventEnvelopeSchema } from "@/lib/madrigal/types";
 
 export const runtime = "nodejs";
@@ -9,8 +13,9 @@ export const dynamic = "force-dynamic";
  * /api/madrigal/<stage>; this handler authenticates (shared secret), validates
  * the envelope, and dispatches.
  *
- * STUB: stage handlers are not yet implemented (Phase 1+). Returns 501 with the
- * accepted envelope echoed, so the bus wiring can be tested end-to-end now.
+ * intake/research/score/gate are implemented; adapt/spec/submit/verify/finalize/
+ * follow-up still return 501. Stages are re-entrant — Activepieces re-invokes
+ * until the body status is terminal (done/failed/applying/disqualified).
  */
 const STAGES = new Set<string>([
   "intake",
@@ -62,14 +67,49 @@ export async function POST(
     );
   }
 
-  // TODO(Phase 1+): dispatch parsed.data to the stage handler; advance state via setState().
-  return NextResponse.json(
-    {
-      ok: false,
-      stage,
-      status: "not_implemented",
-      role_uid: parsed.data.role_uid,
-    },
-    { status: 501 }
-  );
+  const { payload, role_uid } = parsed.data;
+
+  try {
+    switch (stage) {
+      case "intake": {
+        const result = await runIntake({
+          applicationUrl: String(payload.applicationUrl ?? ""),
+          companySlug: String(payload.companySlug ?? ""),
+          jdUrl: String(payload.jdUrl ?? ""),
+          roleSlug: String(payload.roleSlug ?? ""),
+          roleUid: role_uid,
+          title: String(payload.title ?? ""),
+        });
+        return NextResponse.json({ ok: true, stage, ...result });
+      }
+      case "research":
+        return NextResponse.json({
+          ok: true,
+          stage,
+          ...(await runResearch(role_uid)),
+        });
+      case "score":
+        return NextResponse.json({
+          ok: true,
+          stage,
+          ...(await runScore(role_uid)),
+        });
+      case "gate":
+        return NextResponse.json({
+          ok: true,
+          stage,
+          ...(await runGate(role_uid)),
+        });
+      default:
+        return NextResponse.json(
+          { error: `Stage not implemented: ${stage}`, stage },
+          { status: 501 }
+        );
+    }
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Stage failed", stage },
+      { status: 500 }
+    );
+  }
 }
