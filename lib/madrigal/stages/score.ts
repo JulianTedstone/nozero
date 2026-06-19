@@ -1,15 +1,13 @@
 import "server-only";
 
 import { getRepoFile } from "@/lib/github-content";
-import { getHermesRun, submitHermesRun } from "@/lib/hermes-client";
+import { hermesChat } from "@/lib/hermes-client";
 import { upsertContextFile } from "@/lib/madrigal/context-writer";
 import { getIdMap, upsertIdMap } from "@/lib/madrigal/id-map";
 
 const MADRIGAL_REPO = "juliantedstone/context-message-madrigal";
 
 export type ScoreOutcome =
-  | { status: "submitted"; runId: string }
-  | { status: "running"; runId: string }
   | { fitScore: number; status: "done" }
   | { status: "failed" }
   | { reason: string; status: "skipped" };
@@ -60,70 +58,47 @@ function parseScore(
 }
 
 /**
- * Score stage — re-entrant (same submit→poll pattern as research). Loads the
- * role's research.md, asks hermes for a rubric-weighted fit score as strict
- * JSON, then writes fit_score to the id-map + a score note to context. The
- * caller re-invokes until `done`/`failed`.
+ * Score stage — synchronous. Loads the role's research.md, asks hermes for a
+ * rubric-weighted fit score as strict JSON in one chat turn, then writes
+ * fit_score to the id-map + a score note to context.
  */
 export async function runScore(roleUid: string): Promise<ScoreOutcome> {
   const row = await getIdMap(roleUid);
   if (!row) {
     return { reason: "unknown role", status: "skipped" };
   }
-  const meta = row.meta as { scoreRunId?: string };
   const dir = row.contextPath ?? "";
 
-  if (!meta.scoreRunId) {
-    let research = "";
-    try {
-      research = (await getRepoFile(MADRIGAL_REPO, `${dir}/research.md`))
-        .content;
-    } catch {
-      // No research yet — score on the role alone (degraded).
-    }
-    const runId = await submitHermesRun({
-      instructions: SCORE_INSTRUCTIONS,
-      task: buildScoreTask({
-        company: row.companySlug ?? "",
-        research,
-        title: row.title ?? "",
-      }),
-    });
-    if (!runId) {
-      return { reason: "hermes unavailable", status: "skipped" };
-    }
-    await upsertIdMap({ meta: { ...row.meta, scoreRunId: runId }, roleUid });
-    return { runId, status: "submitted" };
+  let research = "";
+  try {
+    research = (await getRepoFile(MADRIGAL_REPO, `${dir}/research.md`)).content;
+  } catch {
+    // No research yet — score on the role alone (degraded).
   }
 
-  const run = await getHermesRun(meta.scoreRunId);
-  if (!run) {
-    return { runId: meta.scoreRunId, status: "running" };
+  const answer = await hermesChat({
+    instructions: SCORE_INSTRUCTIONS,
+    message: buildScoreTask({
+      company: row.companySlug ?? "",
+      research,
+      title: row.title ?? "",
+    }),
+  });
+  if (!answer) {
+    return { reason: "hermes unavailable", status: "skipped" };
   }
-  if (run.status === "completed" && run.output) {
-    const parsed = parseScore(run.output);
-    await upsertIdMap({
-      fitScore: parsed?.fitScore ?? null,
-      meta: { ...row.meta, scoreRunId: undefined },
-      roleUid,
-    });
-    if (parsed && dir) {
-      await upsertContextFile(
-        `${dir}/score.md`,
-        `---\nrole_uid: ${roleUid}\nkind: score\nfit_score: ${parsed.fitScore}\n---\n\n${parsed.rationale}\n`,
-        `madrigal: score ${roleUid} = ${parsed.fitScore}`
-      );
-    }
-    return parsed
-      ? { fitScore: parsed.fitScore, status: "done" }
-      : { status: "failed" };
-  }
-  if (run.status === "failed" || run.status === "cancelled") {
-    await upsertIdMap({
-      meta: { ...row.meta, scoreRunId: undefined },
-      roleUid,
-    });
+  const parsed = parseScore(answer);
+  if (!parsed) {
     return { status: "failed" };
   }
-  return { runId: meta.scoreRunId, status: "running" };
+
+  await upsertIdMap({ fitScore: parsed.fitScore, roleUid });
+  if (dir) {
+    await upsertContextFile(
+      `${dir}/score.md`,
+      `---\nrole_uid: ${roleUid}\nkind: score\nfit_score: ${parsed.fitScore}\n---\n\n${parsed.rationale}\n`,
+      `madrigal: score ${roleUid} = ${parsed.fitScore}`
+    );
+  }
+  return { fitScore: parsed.fitScore, status: "done" };
 }

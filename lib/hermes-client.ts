@@ -1,125 +1,120 @@
 import "server-only";
 
 /**
- * Hermes agent HTTP client. Hermes runs the intelligent pipeline stages
- * (research, scoring) through its async run API — POST a task, poll the run_id.
- * Internally hermes uses its own toolsets + agent_dispatch (research/browse), so
- * nozero only has to submit work and collect the result.
+ * Hermes client — talks to the running hermes-webui (the agent powering the
+ * bertrand stack on jupiter). Cookie-auth + synchronous session/chat:
+ *   POST /api/auth/login {password}        -> Set-Cookie: hermes_session=...
+ *   POST /api/sessions {workspace, model…}  -> { session: { session_id } }
+ *   POST /api/chat {session_id, message}     -> { answer }
  *
- * Fail-safe like nozero's other links: unconfigured/unreachable returns null;
- * the caller decides how to handle a missing result (retry / needs-human).
- *
- * Runs take minutes, so stages submit then poll (re-entrant) rather than waiting
- * inline. `runHermesTask` (submit + bounded wait) exists only for short tasks/tests.
+ * /api/chat is SYNCHRONOUS — it blocks until the agent replies (can be minutes).
+ * Fail-safe: unconfigured / unreachable / empty returns null; the caller treats
+ * a null result as "no result". Harden to streaming/async later.
  */
-const HERMES_URL = process.env.HERMES_API_URL || "http://localhost:8642";
-const POLL_INTERVAL_MS = 3000;
-const REQUEST_TIMEOUT_MS = 20_000;
-const DEFAULT_WAIT_MS = 180_000;
+const HERMES_URL = process.env.HERMES_API_URL || "http://127.0.0.1:8787";
+const AUTH_TIMEOUT_MS = 30_000;
+const CHAT_TIMEOUT_MS = 300_000;
 
-const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+const SESSION_BODY = {
+  model: "",
+  model_provider: "auto",
+  workspace: "/workspace",
+};
+
+// Session cookie cached across calls within the process.
+let cookie: string | null = null;
 
 export function hermesConfigured(): boolean {
-  return Boolean(process.env.HERMES_API_KEY);
+  return Boolean(process.env.HERMES_WEBUI_PASSWORD);
 }
 
-function headers(): Record<string, string> {
-  return {
-    Authorization: `Bearer ${process.env.HERMES_API_KEY ?? ""}`,
+async function post(
+  path: string,
+  body: unknown,
+  timeoutMs: number,
+  authed: boolean
+): Promise<Response | null> {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+  if (authed && cookie) {
+    headers.Cookie = `hermes_session=${cookie}`;
+  }
+  try {
+    return await fetch(`${HERMES_URL}${path}`, {
+      body: JSON.stringify(body),
+      headers,
+      method: "POST",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch {
+    return null;
+  }
 }
 
-export interface HermesRun {
-  error?: string;
-  output?: string;
-  runId: string;
-  status: string; // running | completed | failed | cancelled
+async function login(): Promise<boolean> {
+  const password = process.env.HERMES_WEBUI_PASSWORD;
+  if (!password) {
+    return false;
+  }
+  const res = await post(
+    "/api/auth/login",
+    { password },
+    AUTH_TIMEOUT_MS,
+    false
+  );
+  if (!res?.ok) {
+    return false;
+  }
+  const match = res.headers.get("set-cookie")?.match(/hermes_session=([^;]+)/);
+  if (match) {
+    cookie = match[1];
+    return true;
+  }
+  return false;
 }
 
-export function isTerminal(status: string): boolean {
-  return TERMINAL.has(status);
-}
-
-/** Submit an async run. Returns the run_id, or null if unconfigured/unreachable. */
-export async function submitHermesRun(input: {
-  task: string;
+/**
+ * One agent turn: ensure auth, open a session, send the message, return the
+ * `answer` text. Re-logs in once on a 401. Null on any failure / unconfigured.
+ */
+export async function hermesChat(input: {
+  message: string;
   instructions?: string;
-  sessionId?: string;
 }): Promise<string | null> {
   if (!hermesConfigured()) {
     return null;
   }
-  try {
-    const res = await fetch(`${HERMES_URL}/v1/runs`, {
-      body: JSON.stringify({
-        input: input.task,
-        instructions: input.instructions,
-        model: "hermes-agent",
-        session_id: input.sessionId,
-      }),
-      headers: headers(),
-      method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (res.status !== 202) {
-      return null;
-    }
-    const data = (await res.json()) as { run_id?: string };
-    return data.run_id ?? null;
-  } catch {
+  if (!(cookie || (await login()))) {
     return null;
   }
-}
 
-/** Fetch one run's current status/output. Null on unreachable. */
-export async function getHermesRun(runId: string): Promise<HermesRun | null> {
-  try {
-    const res = await fetch(
-      `${HERMES_URL}/v1/runs/${encodeURIComponent(runId)}`,
-      { headers: headers(), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }
-    );
-    if (!res.ok) {
-      return null;
-    }
-    const data = (await res.json()) as {
-      error?: string;
-      output?: string;
-      run_id?: string;
-      status?: string;
-    };
-    return {
-      error: data.error,
-      output: data.output,
-      runId: data.run_id ?? runId,
-      status: data.status ?? "running",
-    };
-  } catch {
+  let sres = await post("/api/sessions", SESSION_BODY, AUTH_TIMEOUT_MS, true);
+  if (sres?.status === 401 && (await login())) {
+    sres = await post("/api/sessions", SESSION_BODY, AUTH_TIMEOUT_MS, true);
+  }
+  if (!sres?.ok) {
     return null;
   }
-}
+  const sessionId = (
+    (await sres.json()) as { session?: { session_id?: string } }
+  ).session?.session_id;
+  if (!sessionId) {
+    return null;
+  }
 
-/**
- * Submit + bounded-wait for a terminal run. For SHORT tasks and tests only;
- * long stages submit then poll via the bus. Returns the terminal run, or null
- * on timeout / unreachable.
- */
-export async function runHermesTask(input: {
-  task: string;
-  instructions?: string;
-  waitMs?: number;
-}): Promise<HermesRun | null> {
-  const runId = await submitHermesRun(input);
-  if (!runId) {
+  const message = input.instructions
+    ? `${input.instructions}\n\n${input.message}`
+    : input.message;
+  const cres = await post(
+    "/api/chat",
+    { message, session_id: sessionId },
+    CHAT_TIMEOUT_MS,
+    true
+  );
+  if (!cres?.ok) {
     return null;
   }
-  const deadline = Date.now() + (input.waitMs ?? DEFAULT_WAIT_MS);
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    const run = await getHermesRun(runId);
-    if (run && isTerminal(run.status)) {
-      return run;
-    }
-  }
-  return null;
+  const answer = ((await cres.json()) as { answer?: string }).answer;
+  return typeof answer === "string" && answer.trim() ? answer.trim() : null;
 }
