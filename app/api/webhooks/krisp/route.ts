@@ -71,6 +71,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // TEMP diagnostic: log the payload SHAPE only (keys + types + array lengths,
+  // never values) so the normaliser can be mapped to Krisp's nested structure.
+  try {
+    const describe = (o: unknown, d = 4): string => {
+      if (o === null || o === undefined) return String(o);
+      if (Array.isArray(o)) {
+        return `[${o.length}]${o[0] !== undefined && d > 0 ? describe(o[0], d - 1) : ""}`;
+      }
+      if (typeof o === "object") {
+        if (d <= 0) return "{…}";
+        return `{${Object.entries(o as Record<string, unknown>)
+          .map(([k, v]) => `${k}:${describe(v, d - 1)}`)
+          .join(",")}}`;
+      }
+      return typeof o === "string" ? `str${(o as string).length}` : typeof o;
+    };
+    console.log(`[krisp-webhook] SHAPE ${describe(payload).slice(0, 1800)}`);
+  } catch {
+    // ignore
+  }
+
   const note = normalizeKrispPayload(payload);
   const filename = krispFilename(note);
   const path = `${INCOMING_DIR}/${filename}`;
