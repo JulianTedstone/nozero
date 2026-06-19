@@ -11,10 +11,13 @@ import {
   SaveIcon,
 } from "lucide-react";
 import {
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { CollapsibleSidebarSection } from "@/components/collapsible-sidebar-section";
@@ -85,6 +88,36 @@ function buildFileTree(paths: string[]): FileTreeNode[] {
 
 function repoKeyFor(stream: string, fullName: string): string {
   return `${stream}::${fullName}`;
+}
+
+/**
+ * useState that persists to localStorage. Loads after mount (not in the
+ * initializer) so server and first client render match — no hydration mismatch.
+ */
+function usePersistedState<T>(
+  key: string,
+  initial: T,
+): [T, Dispatch<SetStateAction<T>>] {
+  const [state, setState] = useState<T>(initial);
+  const ready = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw != null) setState(JSON.parse(raw) as T);
+    } catch {
+      // ignore corrupt/blocked storage
+    }
+    ready.current = true;
+  }, [key]);
+  useEffect(() => {
+    if (!ready.current) return;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(state));
+    } catch {
+      // ignore quota/private-mode errors
+    }
+  }, [key, state]);
+  return [state, setState];
 }
 
 function FileTreeList({
@@ -181,9 +214,16 @@ export function ContextView({
     bindingStreams[0] ?? null
   );
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
-  const [openStreams, setOpenStreams] = useState<Record<string, boolean>>({});
-  const [openRepos, setOpenRepos] = useState<Record<string, boolean>>({});
-  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const [openStreams, setOpenStreams] = usePersistedState<
+    Record<string, boolean>
+  >("nozero:ctx:openStreams", {});
+  const [openRepos, setOpenRepos] = usePersistedState<Record<string, boolean>>(
+    "nozero:ctx:openRepos",
+    {},
+  );
+  const [openFolders, setOpenFolders] = usePersistedState<
+    Record<string, boolean>
+  >("nozero:ctx:openFolders", {});
   const [workspace, setWorkspace] = useState<{
     streams: Record<
       string,
@@ -220,7 +260,9 @@ export function ContextView({
 
   // Ingest inbox (Conversations / Messaging / Drops) — routed pipeline output.
   const [ingestGroups, setIngestGroups] = useState<IngestGroups | null>(null);
-  const [ingestOpen, setIngestOpen] = useState<Record<IngestSection, boolean>>({
+  const [ingestOpen, setIngestOpen] = usePersistedState<
+    Record<IngestSection, boolean>
+  >("nozero:ctx:ingestOpen", {
     conversations: true,
     messaging: false,
     drops: false,

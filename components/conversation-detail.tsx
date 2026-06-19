@@ -13,7 +13,7 @@ import {
   UserIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { CollapsibleSidebarSection } from "@/components/collapsible-sidebar-section";
 import { StreamRouter } from "@/components/stream-router";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,66 @@ function fmtDate(date: string | null): string {
 
 function channelLabel(channel: string): string {
   return channel.charAt(0).toUpperCase() + channel.slice(1);
+}
+
+/** Render `**bold**` spans as actual bold, not literal markup. */
+function renderInlineBold(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
+    const m = part.match(/^\*\*([^*]+)\*\*$/);
+    return m ? (
+      <strong className="font-medium text-ink" key={`b-${i}`}>
+        {m[1]}
+      </strong>
+    ) : (
+      <span key={`t-${i}`}>{part}</span>
+    );
+  });
+}
+
+/** Parse a Krisp transcript into speaker turns and render them cleanly. */
+function TranscriptView({ text }: { text: string }) {
+  type Turn = { speaker: string | null; time: string | null; body: string[] };
+  const turns: Turn[] = [];
+  let cur: Turn | null = null;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    const speaker = line.match(/^\*\*(.+?)\*\*$/);
+    if (speaker) {
+      if (cur) turns.push(cur);
+      const [name, ...rest] = speaker[1].split("|");
+      cur = { speaker: name.trim(), time: rest.join("|").trim() || null, body: [] };
+    } else if (line) {
+      if (!cur) cur = { speaker: null, time: null, body: [] };
+      cur.body.push(line);
+    }
+  }
+  if (cur) turns.push(cur);
+
+  return (
+    <div className="space-y-3.5 rounded-xl border border-line bg-black/15 p-4">
+      {turns.map((turn, i) => (
+        <div key={`turn-${i}`}>
+          {turn.speaker ? (
+            <p className="mb-1 flex items-baseline gap-2">
+              <span className="font-semibold text-[11px] text-ink">
+                {turn.speaker}
+              </span>
+              {turn.time ? (
+                <span className="font-mono text-[9px] text-ink-subtle">
+                  {turn.time}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          <div className="space-y-1.5 text-[12px] text-ink-muted leading-relaxed">
+            {turn.body.map((para, j) => (
+              <p key={`p-${i}-${j}`}>{renderInlineBold(para)}</p>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ParticipantCard({ participant }: { participant: IngestConversation["participants"][number] }) {
@@ -390,9 +450,7 @@ export function ConversationDetail({
             Transcript
           </h2>
           {conversation.transcript ? (
-            <pre className="whitespace-pre-wrap break-words rounded-xl border border-line bg-black/20 p-3 font-mono text-[11px] text-ink-muted leading-relaxed">
-              {conversation.transcript}
-            </pre>
+            <TranscriptView text={conversation.transcript} />
           ) : (
             <p className="text-[11px] text-ink-subtle">No transcript.</p>
           )}

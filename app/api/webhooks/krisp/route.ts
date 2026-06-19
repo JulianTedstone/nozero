@@ -24,8 +24,16 @@ const INCOMING_DIR = "incoming";
  * 5xx on a transient commit failure so Krisp retries.
  */
 export async function POST(request: Request) {
+  // Observability: every delivery + outcome is logged to journald (aqua-nozero)
+  // so we can see exactly what Krisp sends and what we return.
+  const headerNames = [...request.headers.keys()].join(",");
+  console.log(
+    `[krisp-webhook] POST received: auth=${request.headers.has("authorization")} headers=[${headerNames}] ua="${request.headers.get("user-agent") ?? ""}"`,
+  );
+
   const secret = process.env.KRISP_WEBHOOK_SECRET?.trim();
   if (!secret) {
+    console.warn("[krisp-webhook] -> 503 (secret not configured)");
     return NextResponse.json(
       { error: "KRISP_WEBHOOK_SECRET not configured" },
       { status: 503 },
@@ -34,6 +42,9 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
   if (!verifyKrispWebhook(rawBody, request.headers, secret)) {
+    console.warn(
+      `[krisp-webhook] -> 401 (invalid signature) bodyLen=${rawBody.length}`,
+    );
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
@@ -41,6 +52,7 @@ export async function POST(request: Request) {
   try {
     payload = JSON.parse(rawBody);
   } catch {
+    console.warn("[krisp-webhook] -> 400 (invalid json)");
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -51,6 +63,7 @@ export async function POST(request: Request) {
   // Idempotent: a re-delivered note (same meeting_id) is a no-op.
   try {
     await getRepoFile(INGEST_REPO, path);
+    console.log(`[krisp-webhook] -> 200 (duplicate) id=${note.id}`);
     return NextResponse.json({ ok: true, id: note.id, duplicate: true });
   } catch {
     // not present (or unreachable) — proceed to write
@@ -65,9 +78,15 @@ export async function POST(request: Request) {
       content: markdown,
       message: `krisp: ingest "${note.title}" (${note.id})`,
     });
+    console.log(
+      `[krisp-webhook] -> 200 (committed) id=${note.id} path=${path} slug=${slug}`,
+    );
     return NextResponse.json({ ok: true, id: note.id, path, slug });
   } catch (err) {
     // 5xx so Krisp retries the delivery.
+    console.error(
+      `[krisp-webhook] -> 502 (commit failed): ${err instanceof Error ? err.message : String(err)}`,
+    );
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Commit failed" },
       { status: 502 },
