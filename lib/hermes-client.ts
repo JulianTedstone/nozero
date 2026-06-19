@@ -11,7 +11,7 @@ import "server-only";
  * Fail-safe: unconfigured / unreachable / empty returns null; the caller treats
  * a null result as "no result". Harden to streaming/async later.
  */
-const HERMES_URL = process.env.HERMES_API_URL || "http://127.0.0.1:8787";
+const HERMES_URL = process.env.NOZERO_HERMES_API_URL || "http://127.0.0.1:8787";
 const AUTH_TIMEOUT_MS = 30_000;
 const CHAT_TIMEOUT_MS = 300_000;
 
@@ -25,7 +25,7 @@ const SESSION_BODY = {
 let cookie: string | null = null;
 
 export function hermesConfigured(): boolean {
-  return Boolean(process.env.HERMES_WEBUI_PASSWORD);
+  return Boolean(process.env.NOZERO_HERMES_WEBUI_PASSWORD);
 }
 
 async function post(
@@ -53,7 +53,7 @@ async function post(
 }
 
 async function login(): Promise<boolean> {
-  const password = process.env.HERMES_WEBUI_PASSWORD;
+  const password = process.env.NOZERO_HERMES_WEBUI_PASSWORD;
   if (!password) {
     return false;
   }
