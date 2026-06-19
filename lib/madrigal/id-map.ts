@@ -1,16 +1,24 @@
 import "server-only";
 
+import { createClient } from "@supabase/supabase-js";
 import type {
   EventEnvelope,
   IdMapRow,
   MadrigalState,
 } from "@/lib/madrigal/types";
-import { createAdminClient } from "@/lib/supabase/admin";
 
-// madrigal lives in its own Postgres schema (see the init migration). The nozero
-// admin client defaults to the `nozero` schema, so switch per-call with .schema().
+// madrigal lives in its own Postgres schema. The shared admin client is generic-
+// typed to the generated `nozero` schema, so `.schema("madrigal")` on it is a type
+// error — use a dedicated, schema-scoped service-role client instead.
 function db() {
-  return createAdminClient().schema("madrigal");
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      db: { schema: "madrigal" },
+    }
+  );
 }
 
 type IdMapDbRow = {
