@@ -32,7 +32,7 @@ export function companyDir(companySlug: string): string {
 }
 
 // Build YAML frontmatter from ordered pairs (arrays preserve field order).
-function frontmatter(pairs: Array<[string, string]>): string {
+function frontmatter(pairs: [string, string][]): string {
   const body = pairs.map(([key, value]) => `${key}: ${value}`).join("\n");
   return `---\n${body}\n---\n`;
 }
