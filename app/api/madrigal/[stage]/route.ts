@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { runAdapt } from "@/lib/madrigal/stages/adapt";
+import { runFinalize } from "@/lib/madrigal/stages/finalize";
+import { runFollowUp } from "@/lib/madrigal/stages/follow-up";
 import { runGate } from "@/lib/madrigal/stages/gate";
 import { runIntake } from "@/lib/madrigal/stages/intake";
 import { runResearch } from "@/lib/madrigal/stages/research";
@@ -17,9 +19,9 @@ export const dynamic = "force-dynamic";
  * /api/madrigal/<stage>; this handler authenticates (shared secret), validates
  * the envelope, and dispatches.
  *
- * intake/research/score/gate/adapt/spec/submit/verify are implemented; finalize/
- * follow-up still return 501. Stages are re-entrant — Activepieces re-invokes
- * until the body status is terminal (done/failed/applying/disqualified).
+ * All stages intake → follow-up are implemented (the default 501 is now only for
+ * unknown stages). Stages are re-entrant — Activepieces re-invokes until the body
+ * status is terminal (done/failed/applying/disqualified).
  */
 const STAGES = new Set<string>([
   "intake",
@@ -128,6 +130,18 @@ export async function POST(
           ok: true,
           stage,
           ...(await runVerify(role_uid)),
+        });
+      case "finalize":
+        return NextResponse.json({
+          ok: true,
+          stage,
+          ...(await runFinalize(role_uid)),
+        });
+      case "follow-up":
+        return NextResponse.json({
+          ok: true,
+          stage,
+          ...(await runFollowUp(role_uid)),
         });
       default:
         return NextResponse.json(
