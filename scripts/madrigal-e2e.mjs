@@ -17,6 +17,8 @@
  * pass --loop to re-run pending stages a few times.
  */
 
+import { readFileSync } from "node:fs";
+
 const BASE = (process.env.NOZERO_BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
 const SECRET = process.env.MADRIGAL_WEBHOOK_SECRET || "";
 
@@ -25,14 +27,20 @@ function arg(name, fallback) {
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-const APPLICATION_URL = arg("application", "https://boards.greenhouse.io/example/jobs/000000");
-const JD_URL = arg("jd", "https://example.com/careers/head-of-product");
 const LOOP = process.argv.includes("--loop");
 
-const ROLE_UID = "madrigal-e2e-acme-head-of-product-2026";
-const COMPANY = "acme-e2e";
-const ROLE_SLUG = "head-of-product";
-const TITLE = "Head of Product";
+// Load a fixture (--fixture <path>) for a real role, else the default sample.
+const fx = (() => {
+  const p = arg("fixture", null);
+  return p ? JSON.parse(readFileSync(p, "utf8")) : {};
+})();
+
+const ROLE_UID = fx.roleUid || "madrigal-e2e-acme-head-of-product-2026";
+const COMPANY = fx.company || "acme-e2e";
+const ROLE_SLUG = fx.roleSlug || "head-of-product";
+const TITLE = fx.title || "Head of Product";
+const APPLICATION_URL = arg("application", fx.applicationUrl || "https://boards.greenhouse.io/example/jobs/000000");
+const JD_URL = arg("jd", fx.jdUrl || "https://example.com/careers/head-of-product");
 
 // Stage order with the payload each needs. Only intake carries the seed fields.
 const STAGES = [

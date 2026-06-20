@@ -1,0 +1,14 @@
+{
+  "roleUid": "madrigal-kong-solutions-engineer-test-2026",
+  "company": "kong-test",
+  "roleSlug": "solutions-engineer-specialist",
+  "title": "Solutions Engineering Specialist",
+  "applicationUrl": "https://konghq.com/careers",
+  "jdUrl": "local://scripts/fixtures/kong-solutions-engineer.jd.md",
+  "localJd": "scripts/fixtures/kong-solutions-engineer.jd.md",
+  "groundTruth": {
+    "coverLetter": "~/context/context-message-nopilot/profile/search/roles/role-solutions-engineer-specialist-kong/application-covering-letter.md",
+    "fitAssessment": "~/context/context-message-nopilot/profile/search/roles/role-solutions-engineer-specialist-kong/fit-assessment.md"
+  },
+  "note": "Local duplicate of a real role Ted applied for (Kong Inc., Solutions Engineering Specialist, Paris, captured 17/06/2026). The test role_uid and company-slug 'kong-test' keep it isolated from any live application. The JD is bundled (kong-solutions-engineer.jd.md) so the harness is repeatable and offline-capable. Ted's own cover letter + fit-assessment are the ground truth for judging the pipeline's adapt/score output."
+}
