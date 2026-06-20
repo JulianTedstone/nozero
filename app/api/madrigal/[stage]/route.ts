@@ -5,6 +5,8 @@ import { runIntake } from "@/lib/madrigal/stages/intake";
 import { runResearch } from "@/lib/madrigal/stages/research";
 import { runScore } from "@/lib/madrigal/stages/score";
 import { runSpec } from "@/lib/madrigal/stages/spec";
+import { runSubmit } from "@/lib/madrigal/stages/submit";
+import { runVerify } from "@/lib/madrigal/stages/verify";
 import { eventEnvelopeSchema } from "@/lib/madrigal/types";
 
 export const runtime = "nodejs";
@@ -15,7 +17,7 @@ export const dynamic = "force-dynamic";
  * /api/madrigal/<stage>; this handler authenticates (shared secret), validates
  * the envelope, and dispatches.
  *
- * intake/research/score/gate/adapt/spec are implemented; submit/verify/finalize/
+ * intake/research/score/gate/adapt/spec/submit/verify are implemented; finalize/
  * follow-up still return 501. Stages are re-entrant — Activepieces re-invokes
  * until the body status is terminal (done/failed/applying/disqualified).
  */
@@ -114,6 +116,18 @@ export async function POST(
           ok: true,
           stage,
           ...(await runSpec(role_uid)),
+        });
+      case "submit":
+        return NextResponse.json({
+          ok: true,
+          stage,
+          ...(await runSubmit(role_uid)),
+        });
+      case "verify":
+        return NextResponse.json({
+          ok: true,
+          stage,
+          ...(await runVerify(role_uid)),
         });
       default:
         return NextResponse.json(
