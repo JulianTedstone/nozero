@@ -21,6 +21,7 @@ const STAGES = new Set<string>([
   "intake",
   "research",
   "score",
+  "gate",
   "adapt",
   "spec",
   "submit",
