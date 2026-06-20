@@ -129,8 +129,8 @@ export function AccountCodeAssignSelect({
     }
   }
 
-  function handleSelectChange(next: string) {
-    if (next === NONE_VALUE) {
+  function handleSelectChange(next: string | null) {
+    if (next === null || next === NONE_VALUE) {
       onChange(undefined);
       return;
     }

@@ -20,7 +20,7 @@ interface AiPanelProps {
   userId?: string;
 }
 
-const spring = { type: "spring", stiffness: 300, damping: 30 };
+const spring = { type: "spring", stiffness: 300, damping: 30 } as const;
 
 type AssistantStreamPhase = "idle" | "waiting" | "text";
 

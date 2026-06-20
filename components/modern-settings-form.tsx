@@ -77,7 +77,7 @@ const formSchema = z.object({
   showWeekends: z.boolean(),
   showWeekNumbers: z.boolean(),
   defaultDuration: z.enum(["30", "60", "90"]),
-  timezone: z.string().default("UTC"),
+  timezone: z.string(),
 });
 
 type SettingsSection =
@@ -998,6 +998,7 @@ export function ModernSettingsForm({
   }
 
   async function saveEdit() {
+    if (editingId === null) return;
     const account = accounts.find((a) => a.id === editingId);
     if (!account) return;
 
