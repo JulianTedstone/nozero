@@ -104,8 +104,7 @@ const formSchema = z.object({
           .enum(["pending", "accepted", "declined", "needs-action"])
           .optional(),
       })
-    )
-    .default([]),
+    ),
   calendarId: z.string().optional(),
   location: z.string().optional(),
   conferenceUrl: z.string().optional(),
@@ -133,7 +132,7 @@ interface EventDetailPanelProps {
   sectionOrder?: EventDetailSectionId[];
 }
 
-const spring = { type: "spring", stiffness: 300, damping: 30 };
+const spring = { type: "spring", stiffness: 300, damping: 30 } as const;
 
 const glassRow =
   "liquid-glass-input flex h-10 min-h-10 min-w-0 shrink-0 items-center gap-3 rounded-xl px-3";
@@ -1018,6 +1017,9 @@ export function EventDetailPanel({
             <Select
               disabled={!isOrganizer && !isCreating}
               onValueChange={(email) => {
+                if (email === null) {
+                  return;
+                }
                 if (isCreating) {
                   setEventAccountEmail(email);
                   return;

@@ -149,7 +149,7 @@ export function AccountCodesSettings({
       <div className="space-y-2">
         <Label>Email account</Label>
         <Select
-          onValueChange={setSelectedAccount}
+          onValueChange={(value) => setSelectedAccount(value ?? "")}
           value={selectedAccount ?? undefined}
         >
           <SelectTrigger className="max-w-md">

@@ -852,7 +852,7 @@ export function ContextView({
                                 <button
                                   className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] text-ink-muted hover:bg-accent"
                                   onClick={() => {
-                                    addFile(newFilePath).catch(() => undefined);
+                                    addFile(newFilePath);
                                   }}
                                   type="button"
                                 >
