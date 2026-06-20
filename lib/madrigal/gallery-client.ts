@@ -1,28 +1,28 @@
 import "server-only";
 
 /**
- * Gallery WRITE client — the nopilot-co-www showcase surface (aqua-backed;
- * replaces the deprecated direct soma showcase calls). Used by the adapt stage
- * to publish per-application dockets (variant CV / cover letter) into the
- * `madrigal` gallery and grant the owner access.
+ * Gallery WRITE client — the nopilot-co-www showcase surface (aqua-backed).
+ * Targets nopilot-co-www ONLY; it has NO connection to soma (soma-services is
+ * deprecated — do not route through it). Used by the adapt stage to publish
+ * per-application dockets (variant CV / cover letter) into the `madrigal`
+ * gallery and grant the owner access.
  *
- * Derived contract (nopilot-co-www `src/app/api/showcase/*`):
+ * Contract (nopilot-co-www `src/app/api/showcase/*`):
  *   POST {base}/api/showcase/galleries        {title, hostEmail?, intro?}     -> {ok, code}
- *   POST {base}/api/showcase/{code}/assets     multipart: file | url           -> {ok, asset:{id}}
+ *   POST {base}/api/showcase/{code}/assets     {url} (or multipart file)       -> {ok, asset:{id}}
  *   POST {base}/api/showcase/{code}/grants     {email, scopes?, name?, title?} -> {ok, token, link}
  *
- * Auth (super-admin julian@nopilot.co): either a Supabase bearer JWT
- * (NOZERO_GALLERY_BEARER) or the service API-key fallback
- * (NOZERO_GALLERY_API_KEY + optional NOZERO_GALLERY_ACCOUNT -> X-Account-Id).
+ * Auth: nopilot-co-www super-admin (julian@nopilot.co) via a Supabase bearer JWT
+ * in NOZERO_GALLERY_BEARER. (Production should mint a short-lived super-admin JWT
+ * via Supabase sign-in — creds in 1Password — rather than a static token.)
  *
  * Fail-safe — DO NOT WEAKEN: every call returns a result object and NEVER throws
  * to the pipeline. The context-vault draft is the durable artefact; the gallery
  * publish is a best-effort layer on top.
  *
- * PENDING LIVE VERIFICATION (Flightdeck npt-madrigal #105): the exact base URL,
- * path prefix (www `/api/showcase` vs soma `/api/v1/showcase`), and auth mode
- * have not yet been exercised against a live gallery. Publishing is gated off by
- * default (config.docket.publish = false) until verified.
+ * PENDING LIVE VERIFICATION (Flightdeck npt-madrigal #105): base URL + auth not
+ * yet exercised against the live nopilot-co-www gallery. Publishing is gated off
+ * by default (config.docket.publish = false) until verified.
  */
 
 const BASE_URL = process.env.NOZERO_GALLERY_BASE_URL?.replace(/\/$/, "") ?? "";
@@ -33,26 +33,12 @@ export interface GalleryResult {
 }
 
 export function galleryConfigured(): boolean {
-  return Boolean(
-    BASE_URL &&
-      (process.env.NOZERO_GALLERY_BEARER || process.env.NOZERO_GALLERY_API_KEY)
-  );
+  return Boolean(BASE_URL && process.env.NOZERO_GALLERY_BEARER);
 }
 
 function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
   const bearer = process.env.NOZERO_GALLERY_BEARER;
-  const apiKey = process.env.NOZERO_GALLERY_API_KEY;
-  if (bearer) {
-    headers.Authorization = `Bearer ${bearer}`;
-  } else if (apiKey) {
-    headers["X-API-Key"] = apiKey;
-    const account = process.env.NOZERO_GALLERY_ACCOUNT;
-    if (account) {
-      headers["X-Account-Id"] = account;
-    }
-  }
-  return headers;
+  return bearer ? { Authorization: `Bearer ${bearer}` } : {};
 }
 
 async function postJson(

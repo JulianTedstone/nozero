@@ -8,8 +8,10 @@ import {
   ensureGallery,
   galleryConfigured,
   grantAccess,
+  uploadAssetByUrl,
 } from "@/lib/madrigal/gallery-client";
 import { getIdMap, setState, upsertIdMap } from "@/lib/madrigal/id-map";
+import { renderDocket, studioConfigured } from "@/lib/madrigal/studio-client";
 
 const MADRIGAL_REPO = "juliantedstone/context-message-madrigal";
 
@@ -88,17 +90,42 @@ export async function runAdapt(roleUid: string): Promise<AdaptOutcome> {
 
   const config = await loadMadrigalConfig();
   let published = false;
-  if (config.docket.publish && galleryConfigured()) {
+  // Publish path (OFF by default, #94): render each markdown draft to a branded
+  // PDF via the studio runner, upload the result to the `madrigal` gallery, and
+  // grant the owner. Every step is fail-safe — a failure leaves the draft intact.
+  if (config.docket.publish && galleryConfigured() && studioConfigured()) {
     const gallery = await ensureGallery({
       hostEmail: config.identity.galleryOwner,
       title: `${row.title ?? roleUid} — ${row.companySlug ?? ""}`.trim(),
     });
     if (gallery.ok && gallery.code) {
+      const drafts = [
+        { kind: "cover", markdown: coverLetter },
+        { kind: "cv", markdown: cvTailoring },
+      ] as const;
+      const docketAssets: string[] = [];
+      for (const draft of drafts) {
+        const rendered = await renderDocket({
+          kind: draft.kind,
+          markdown: draft.markdown,
+          roleUid,
+        });
+        if (rendered.ok && rendered.url) {
+          const upload = await uploadAssetByUrl(gallery.code, rendered.url);
+          if (upload.ok) {
+            docketAssets.push(rendered.url);
+          }
+        }
+      }
       await grantAccess({
         code: gallery.code,
         email: config.identity.galleryOwner,
       });
-      await upsertIdMap({ docketGalleryCode: gallery.code, roleUid });
+      await upsertIdMap({
+        docketAssets,
+        docketGalleryCode: gallery.code,
+        roleUid,
+      });
       published = true;
     }
   }
