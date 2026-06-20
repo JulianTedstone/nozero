@@ -5,6 +5,11 @@ import { getRepoFile } from "@/lib/github-content";
 const CONFIG_REPO = "juliantedstone/context-message-madrigal";
 
 export interface MadrigalConfig {
+  // Docket publishing is OFF by default: dockets are personal (Flightdeck #94),
+  // so adapt writes drafts to the context vault but does NOT publish to the
+  // gallery until this is explicitly flipped on (post burn-in, with a verified
+  // gallery base URL + super-admin auth).
+  docket: { publish: boolean };
   followUp: { cadenceDays: number[] };
   gate: { threshold: number };
   identity: {
@@ -29,6 +34,7 @@ export const DEFAULT_CONFIG: MadrigalConfig = {
     galleryCode: "madrigal",
   },
   gate: { threshold: 70 },
+  docket: { publish: false },
   submission: {
     autoSubmit: false,
     workerOrder: ["ats_template", "generic_playwright", "novel_human"],
