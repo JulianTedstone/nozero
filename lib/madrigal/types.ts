@@ -29,6 +29,7 @@ export interface IdMapRow {
   flightdeckItem: string | null;
   githubIssue: string | null;
   gmailThread: string | null;
+  meta: Record<string, unknown>;
   roleUid: string;
   state: MadrigalState;
   title: string | null;

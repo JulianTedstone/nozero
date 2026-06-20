@@ -1,16 +1,24 @@
 import "server-only";
 
+import { createClient } from "@supabase/supabase-js";
 import type {
   EventEnvelope,
   IdMapRow,
   MadrigalState,
 } from "@/lib/madrigal/types";
-import { createAdminClient } from "@/lib/supabase/admin";
 
-// madrigal lives in its own Postgres schema (see the init migration). The nozero
-// admin client defaults to the `nozero` schema, so switch per-call with .schema().
+// madrigal lives in its own Postgres schema. The shared admin client is generic-
+// typed to the generated `nozero` schema, so `.schema("madrigal")` on it is a type
+// error — use a dedicated, schema-scoped service-role client instead.
 function db() {
-  return createAdminClient().schema("madrigal");
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      db: { schema: "madrigal" },
+    }
+  );
 }
 
 type IdMapDbRow = {
@@ -30,6 +38,7 @@ type IdMapDbRow = {
   docket_assets: string[];
   gmail_thread: string | null;
   calendar_events: string[];
+  meta: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -50,6 +59,7 @@ const COLUMN_MAP: Record<string, string> = {
   docketAssets: "docket_assets",
   gmailThread: "gmail_thread",
   calendarEvents: "calendar_events",
+  meta: "meta",
 };
 
 function toRow(r: IdMapDbRow): IdMapRow {
@@ -70,6 +80,7 @@ function toRow(r: IdMapDbRow): IdMapRow {
     docketAssets: r.docket_assets ?? [],
     gmailThread: r.gmail_thread,
     calendarEvents: r.calendar_events ?? [],
+    meta: r.meta ?? {},
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

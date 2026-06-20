@@ -36,6 +36,7 @@ create table if not exists madrigal.id_map (
   docket_assets jsonb not null default '[]'::jsonb,
   gmail_thread text,
   calendar_events jsonb not null default '[]'::jsonb,
+  meta jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -66,3 +67,14 @@ alter table madrigal.id_map enable row level security;
 alter table madrigal.events enable row level security;
 revoke all on madrigal.id_map from anon, authenticated;
 revoke all on madrigal.events from anon, authenticated;
+
+-- Grant the service role the now-created tables/sequences. The earlier
+-- "on all tables" grant only covers tables that existed at that point, so the
+-- tables created above need their own grant (run after creation).
+grant select, insert, update, delete on all tables in schema madrigal to service_role;
+grant usage, select on all sequences in schema madrigal to service_role;
+
+-- NOTE: exposing `madrigal` to PostgREST is DB-specific (the schema list differs
+-- per project) and is therefore NOT done here. Per project, run once:
+--   alter role authenticator set pgrst.db_schemas = '<existing>, madrigal';
+--   notify pgrst, 'reload config';
