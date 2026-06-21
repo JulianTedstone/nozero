@@ -34,27 +34,53 @@ function buildScoreTask(input: {
 function parseScore(
   output: string
 ): { fitScore: number; rationale: string } | null {
-  try {
-    const match = output.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return null;
-    }
-    const obj = JSON.parse(match[0]) as {
-      fit_score?: unknown;
-      rationale?: unknown;
-    };
-    const value =
-      typeof obj.fit_score === "number" ? obj.fit_score : Number(obj.fit_score);
-    if (!Number.isFinite(value)) {
-      return null;
-    }
-    return {
-      fitScore: Math.round(value),
-      rationale: String(obj.rationale ?? ""),
-    };
-  } catch {
+  if (!output) {
     return null;
   }
+  // Strip markdown fences so ```json blocks / prose-wrapped output parse cleanly.
+  const cleaned = output.replace(/```(?:json)?/gi, " ");
+  // Try each balanced {...} candidate plus the greedy whole-span; prefer one
+  // carrying a finite fit_score (LLMs routinely wrap the JSON in prose).
+  const candidates = [...(cleaned.match(/\{[^{}]*\}/g) ?? [])];
+  const greedy = cleaned.match(/\{[\s\S]*\}/);
+  if (greedy) {
+    candidates.push(greedy[0]);
+  }
+  for (const candidate of candidates) {
+    try {
+      const obj = JSON.parse(candidate) as {
+        fit_score?: unknown;
+        rationale?: unknown;
+      };
+      const value =
+        typeof obj.fit_score === "number"
+          ? obj.fit_score
+          : Number(obj.fit_score);
+      if (Number.isFinite(value)) {
+        return {
+          fitScore: Math.round(value),
+          rationale: String(obj.rationale ?? ""),
+        };
+      }
+    } catch {
+      // not valid JSON — try the next candidate
+    }
+  }
+  // Last resort: pull a fit_score out of prose ("fit_score: 75", "fit score = 80").
+  const scoreMatch = cleaned.match(/fit[_\s-]?score["']?\s*[:=]\s*(\d{1,3})/i);
+  if (scoreMatch) {
+    const value = Number(scoreMatch[1]);
+    if (Number.isFinite(value)) {
+      const rationaleMatch = cleaned.match(
+        /rationale["']?\s*[:=]\s*["']?([^"'\n}]{0,400})/i
+      );
+      return {
+        fitScore: Math.round(value),
+        rationale: rationaleMatch ? rationaleMatch[1].trim() : "",
+      };
+    }
+  }
+  return null;
 }
 
 /**
@@ -76,18 +102,27 @@ export async function runScore(roleUid: string): Promise<ScoreOutcome> {
     // No research yet — score on the role alone (degraded).
   }
 
-  const answer = await hermesChat({
+  const task = buildScoreTask({
+    company: row.companySlug ?? "",
+    research,
+    title: row.title ?? "",
+  });
+  let answer = await hermesChat({
     instructions: SCORE_INSTRUCTIONS,
-    message: buildScoreTask({
-      company: row.companySlug ?? "",
-      research,
-      title: row.title ?? "",
-    }),
+    message: task,
   });
   if (!answer) {
     return { reason: "hermes unavailable", status: "skipped" };
   }
-  const parsed = parseScore(answer);
+  let parsed = parseScore(answer);
+  if (!parsed) {
+    // One stricter re-ask — JSON only, no prose/fences — before giving up.
+    answer = await hermesChat({
+      instructions: SCORE_INSTRUCTIONS,
+      message: `${task}\n\nReturn ONLY the JSON object on a single line: {"fit_score": <integer 0-100>, "rationale": "<text>"}. No prose, no code fences, nothing else.`,
+    });
+    parsed = answer ? parseScore(answer) : null;
+  }
   if (!parsed) {
     return { status: "failed" };
   }
