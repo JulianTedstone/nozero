@@ -64,3 +64,11 @@ NOZERO_CTX_API_KEY=op://nopilot.agents/iju5zrdkpmqz7y3yqp37d7zc54/nozero
 #   eval "$(bash scripts/supabase-db-url.sh --export)"
 #   psql "$SUPABASE_DB_URL" -f supabase/migrations/….sql
 #   bun run types:gen
+
+# --- madrigal pipeline (npt-madrigal) — added 2026-06-21 ---
+MADRIGAL_WEBHOOK_SECRET=op://nopilot.nozero/d4tea4ddudnulfm4zt4jbi7uii/MADRIGAL_WEBHOOK_SECRET
+NOZERO_HERMES_API_URL=http://hermes-webui:8787
+NOZERO_HERMES_WEBUI_PASSWORD=op://nopilot.nozero/klafaq3dghf5jd2qpdgs72sw3a/NOZERO_HERMES_WEBUI_PASSWORD
+# madrigal data home = gily (decision: npt/madrigal state on gily, not goak)
+MADRIGAL_SUPABASE_URL=https://gilyyzjsasyhrwterjor.supabase.co
+MADRIGAL_SUPABASE_SERVICE_ROLE_KEY=op://aqua.npt/t2unligxzny6hwkxmehua3lneu/SUPABASE_SECRET_KEY
