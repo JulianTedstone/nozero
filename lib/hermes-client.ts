@@ -89,9 +89,9 @@ export async function hermesChat(input: {
     return null;
   }
 
-  let sres = await post("/api/sessions", SESSION_BODY, AUTH_TIMEOUT_MS, true);
+  let sres = await post("/api/session/new", SESSION_BODY, AUTH_TIMEOUT_MS, true);
   if (sres?.status === 401 && (await login())) {
-    sres = await post("/api/sessions", SESSION_BODY, AUTH_TIMEOUT_MS, true);
+    sres = await post("/api/session/new", SESSION_BODY, AUTH_TIMEOUT_MS, true);
   }
   if (!sres?.ok) {
     return null;
